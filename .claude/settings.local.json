@@ -24,7 +24,11 @@
       "Bash(curl -s \"http://localhost:5173/src/gpu/passes/FlowRivers.ts\")",
       "Bash(curl -s \"http://localhost:5173/src/world/MacroMap.ts\")",
       "Bash(git commit -q -m 'Phase 1: hydrology — multigrid depression fill, flow accumulation, rivers, lake outlet *)",
-      "Bash(git commit -q -m 'Phase 1 complete: CDLOD tiles, far shell, PBR terrain material, biome+snow, gates *)"
+      "Bash(git commit -q -m 'Phase 1 complete: CDLOD tiles, far shell, PBR terrain material, biome+snow, gates *)",
+      "Bash(python3 -)",
+      "Bash(sed -n '163,170p' src/render/PostStack.ts)",
+      "Bash(awk 'NR==166' src/render/PostStack.ts)",
+      "Bash(git commit -q -m 'Phase 2 WIP: Hillaire atmosphere, sun/IBL, CSM+PCSS, post stack *)"
     ]
   }
 }

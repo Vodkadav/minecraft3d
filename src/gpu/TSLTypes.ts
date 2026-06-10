@@ -21,3 +21,10 @@ export type NM4 = Node<'mat4'>;
 
 /** anything a float slot accepts */
 export type F = NF | number;
+
+// @types/three types exp/log as float-only; WGSL builtins are component-wise.
+// Single deliberate cast point for vector transcendental math.
+import { exp as tslExp } from 'three/tsl';
+export function vexp3(v: NV3): NV3 {
+  return tslExp(v as unknown as NF) as unknown as NV3;
+}

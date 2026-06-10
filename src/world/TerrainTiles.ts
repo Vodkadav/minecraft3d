@@ -131,7 +131,7 @@ export class TerrainTiles {
     this.mesh = new InstancedMesh(patch, mat, MAX_TILES);
     this.mesh.frustumCulled = false;
     this.mesh.receiveShadow = true;
-    this.mesh.castShadow = false;
+    this.mesh.castShadow = true; // terrain self-shadowing (mountain shadows)
 
     // --- far shell -----------------------------------------------------------------
     const ring = new RingGeometry(WORLD_HALF * 0.952, FAR_RADIUS, 160, 42);

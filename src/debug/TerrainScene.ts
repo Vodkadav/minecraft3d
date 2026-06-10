@@ -7,10 +7,11 @@
  * ?alt=N puts the camera N meters above ground (ground-clamped spawn).
  */
 
-import { DirectionalLight, HemisphereLight } from 'three';
-import { mix, positionWorldDirection, smoothstep, vec3 } from 'three/tsl';
 import { Heightfield } from '../world/Heightfield';
 import { TerrainTiles } from '../world/TerrainTiles';
+import { PostStack } from '../render/PostStack';
+import { setupSunShadows } from '../render/ShadowSetup';
+import { SunSky } from '../sky/SunSky';
 import type { WorldContext } from './Scenes';
 
 export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
@@ -58,19 +59,29 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
     });
   }
 
-  // temporary Phase-1 lighting: warm sun + cool sky hemisphere + gradient sky
-  // (the real Hillaire atmosphere replaces all of this in Phase 2)
-  const sun = new DirectionalLight(0xfff1de, 3.4);
-  sun.position.set(-2600, 3400, 1400);
-  engine.scene.add(sun);
-  engine.scene.add(new HemisphereLight(0xbcd3ee, 0x474336, 0.85));
-  const horizon = vec3(0.74, 0.82, 0.92);
-  const zenith = vec3(0.22, 0.42, 0.75);
-  engine.scene.backgroundNode = mix(
-    horizon,
-    zenith,
-    smoothstep(-0.02, 0.5, positionWorldDirection.y),
-  );
+  // physical sky: Hillaire atmosphere + transmittance-tinted sun + sky IBL
+  ctx.progress(0.96, 'sky: baking atmosphere LUTs');
+  const sunSky = new SunSky(engine, params.timeOfDay);
+  await sunSky.init(engine.renderer);
+  (engine as unknown as { sunSky?: SunSky }).sunSky = sunSky;
+
+  // 4-cascade CSM + PCSS contact hardening
+  setupSunShadows(sunSky.sun, engine.camera);
+
+  // HDR post stack: aerial perspective, GTAO, TRAA, bloom, exposure, grade
+  ctx.progress(0.98, 'post: building pipeline');
+  const post = new PostStack(engine, sunSky.atmosphere, params.timeOfDay);
+  engine.post = post;
+
+  ctx.hooks.setTimeOfDay = (t: number) => {
+    void sunSky.setTimeOfDay(t);
+    post.setTimeOfDay(t);
+  };
+  window.addEventListener('keydown', (e) => {
+    if (e.code === 'BracketLeft' || e.code === 'BracketRight') {
+      post.setTimeOfDay(sunSky.timeOfDay);
+    }
+  });
 
   // camera: ground-clamped spawn (?alt=) or a default SE vista
   const q = new URLSearchParams(window.location.search);

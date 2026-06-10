@@ -27,6 +27,9 @@ export class Engine {
   /** wall-clock elapsed (sec) since start */
   elapsed = 0;
 
+  /** when set, the frame loop renders through this instead of renderer.render */
+  post: { render(): void; meter(renderer: WebGPURenderer): void } | null = null;
+
   private updateFns: UpdateFn[] = [];
   private lastT: number | null = null;
   private frameMsRing: number[] = [];
@@ -116,7 +119,12 @@ export class Engine {
 
     for (const fn of this.updateFns) fn(dt, this.worldTime);
 
-    this.renderer.render(this.scene, this.camera);
+    if (this.post) {
+      this.post.meter(this.renderer); // exposure feedback from last frame's pass
+      this.post.render();
+    } else {
+      this.renderer.render(this.scene, this.camera);
+    }
     this.collectStats(rawDt);
 
     if (this.settleWaiters.length > 0) {
