@@ -33,6 +33,7 @@ import type { WorldSeed } from '../core/Seed';
 import { bilerpFloatBuffer, uvToGrid } from '../gpu/BufferSample';
 import type { NF, NV2, NV3 } from '../gpu/TSLTypes';
 import { runErosion } from '../gpu/passes/Erosion';
+import { runFlowRivers, type FlowResult } from '../gpu/passes/FlowRivers';
 import {
   runHeightSynthesis,
   type FloatBuffer,
@@ -57,6 +58,10 @@ export class Heightfield {
   simWater: FloatBuffer | null = null;
   simSediment: FloatBuffer | null = null;
   simRes = 0;
+  /** hydrology outputs at sim res */
+  flow: FlowResult | null = null;
+  /** rgba16f at sim res: moisture, flowStrength, riverDepth, waterSurface W */
+  fieldsTex: StorageTexture | null = null;
 
   /** r32float height texture (nearest-sample / textureLoad only) */
   readonly heightTex: StorageTexture;
@@ -113,19 +118,59 @@ export class Heightfield {
       res: cfg.simRes,
       texel: WORLD_SIZE / cfg.simRes,
       iters: cfg.erosionIters,
-      onProgress: (d, t) =>
-        progress(0.1 + 0.55 * (d / t), `terrain: eroding ${d}/${t}`),
+      onProgress: (d, t) => progress(0.1 + 0.45 * (d / t), `terrain: eroding ${d}/${t}`),
     });
     hf.simWater = erosion.water;
     hf.simSediment = erosion.sediment;
     hf.simRes = cfg.simRes;
 
-    progress(0.68, 'terrain: composing eroded field');
+    // hydrology BEFORE compose: river carve must reach the full-res field
+    hf.flow = await runFlowRivers(renderer, erosion.eroded, erosion.water, {
+      res: cfg.simRes,
+      texel: WORLD_SIZE / cfg.simRes,
+      seed: seed.sub('hydrology'),
+      mp,
+      onProgress: (msg, frac) => progress(0.55 + frac * 0.12, msg),
+    });
+
+    progress(0.7, 'terrain: composing eroded field');
     await hf.composeEroded(renderer, synthSim.height, erosion.eroded);
 
-    progress(0.8, 'terrain: deriving maps');
+    progress(0.82, 'terrain: deriving maps');
     await hf.rebuildDerivedMaps(renderer);
+    await hf.buildFieldsTex(renderer);
     return hf;
+  }
+
+  /** pack sim-res hydrology fields into a filterable rgba16f texture */
+  private async buildFieldsTex(renderer: Renderer): Promise<void> {
+    const flow = this.flow;
+    if (!flow) return;
+    const res = this.simRes;
+    const tex = new StorageTexture(res, res);
+    tex.type = HalfFloatType;
+    tex.generateMipmaps = false;
+    const kernel = Fn(() => {
+      const i = instanceIndex;
+      If(i.greaterThanEqual(res * res), () => {
+        Return();
+      });
+      const x = i.mod(res);
+      const y = i.div(res);
+      textureStore(
+        tex,
+        uvec2(x.toUint(), y.toUint()),
+        vec4(
+          flow.moisture.element(i),
+          flow.flowStrength.element(i),
+          flow.riverDepth.element(i),
+          flow.waterSurface.element(i),
+        ),
+      ).toWriteOnly();
+    })().compute(res * res);
+    kernel.setName('fieldsTexPack');
+    await renderer.computeAsync(kernel);
+    this.fieldsTex = tex;
   }
 
   /**

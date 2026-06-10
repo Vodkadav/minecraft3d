@@ -7,7 +7,7 @@
 
 import { Mesh, PlaneGeometry } from 'three';
 import { MeshStandardNodeMaterial } from 'three/webgpu';
-import { clamp, dot, mix, normalize, positionLocal, smoothstep, vec3 } from 'three/tsl';
+import { clamp, dot, mix, normalize, positionLocal, smoothstep, texture, vec3 } from 'three/tsl';
 import { Heightfield } from '../world/Heightfield';
 import { LAKE_LEVEL, SNOWLINE_BASE, WORLD_SIZE } from '../world/WorldConst';
 import type { WorldContext } from './Scenes';
@@ -51,6 +51,26 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
   );
   col = mix(col, snow, snowT);
   col = mix(col, water, smoothstep(LAKE_LEVEL + 1.5, LAKE_LEVEL - 1.5, h));
+
+  // hydrology overlay: moisture darkening, rivers + lakes as water
+  const HYDRO_DIAG = new URLSearchParams(window.location.search).get('view') === 'hydro';
+  if (hf.fieldsTex) {
+    const f = texture(hf.fieldsTex, hf.uvFromWorld(wxz));
+    if (HYDRO_DIAG) {
+      // diagnostic: lake=red, river=blue, marsh=yellow, moisture=green tint
+      const lakeM = smoothstep(1.8, 2.4, f.a.sub(h));
+      const riverM = smoothstep(0.25, 0.6, f.z).mul(lakeM.oneMinus());
+      const marshM = smoothstep(0.5, 0.85, f.x).mul(lakeM.oneMinus()).mul(riverM.oneMinus());
+      col = mix(col.mul(0.4).add(f.x.mul(0.2)), vec3(0.9, 0.1, 0.1), lakeM);
+      col = mix(col, vec3(0.1, 0.25, 0.95), riverM);
+      col = mix(col, vec3(0.85, 0.8, 0.1), marshM.mul(0.7));
+    } else {
+      col = col.mul(f.x.mul(0.35).oneMinus()); // moisture darkens
+      const lake = smoothstep(1.7, 2.3, f.a.sub(h));
+      const river = smoothstep(0.25, 0.6, f.z);
+      col = mix(col, water, clamp(lake.add(river), 0, 1).mul(0.92));
+    }
+  }
 
   mat.colorNode = vec3(0, 0, 0);
   mat.emissiveNode = col.mul(light);

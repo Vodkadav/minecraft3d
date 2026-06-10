@@ -57,35 +57,45 @@ function jit(rng: Rng, base: [number, number], amount: number): [number, number]
 }
 
 export function makeMacroParams(seed: WorldSeed): MacroParams {
-  const rng = seed.rng('macro-layout');
-  const lakeC = jit(rng, [-1380, 1290], 130);
-  const off = (): [number, number] => [rng.range(-500, 500), rng.range(-500, 500)];
+  // separate streams per component: adding draws to one never re-rolls others
+  const rngAnchor = seed.rng('macro-anchors');
+  const rngValley = seed.rng('macro-valley');
+  const rngTrib = seed.rng('macro-trib');
+  const rngOff = seed.rng('macro-offsets');
+  const lakeC = jit(rngAnchor, [-1380, 1290], 130);
+  const off = (): [number, number] => [rngOff.range(-500, 500), rngOff.range(-500, 500)];
+  // the spline continues THROUGH the lake to the map edge: the lake needs an
+  // outlet river or it becomes a closed basin and floods the valley to its
+  // spill saddle (discovered the hard way)
   const valley: [number, number][] = [
-    jit(rng, [1520, -1530], 90),
-    jit(rng, [830, -770], 150),
-    jit(rng, [70, -70], 170),
-    jit(rng, [-630, 520], 150),
-    jit(rng, [-1120, 1000], 110),
+    jit(rngValley, [1520, -1530], 90),
+    jit(rngValley, [830, -770], 150),
+    jit(rngValley, [70, -70], 170),
+    jit(rngValley, [-630, 520], 150),
+    jit(rngValley, [-1120, 1000], 110),
     lakeC,
+    jit(rngValley, [-1840, 1700], 90),
+    [-2200, 2040],
   ];
-  const karstC = jit(rng, [640, 660], 140);
+  const karstC = jit(rngAnchor, [640, 660], 140);
   // tributary: from deep in the karst zone NW-ward to join the main valley
   const trib: [number, number][] = [
-    jit(rng, [karstC[0] + 360, karstC[1] + 290], 80),
-    jit(rng, [karstC[0] - 40, karstC[1] - 60], 90),
-    jit(rng, [karstC[0] - 420, karstC[1] - 330], 90),
+    jit(rngTrib, [karstC[0] + 360, karstC[1] + 290], 80),
+    jit(rngTrib, [karstC[0] - 40, karstC[1] - 60], 90),
+    jit(rngTrib, [karstC[0] - 420, karstC[1] - 330], 90),
     valley[3] as [number, number],
   ];
   return {
-    alpC: jit(rng, [1460, -1470], 150),
-    alpR: 1820 + rng.range(-120, 120),
+    alpC: jit(rngAnchor, [1460, -1470], 150),
+    alpR: 1820 + rngAnchor.range(-120, 120),
     lakeC,
-    lakeR: 600 + rng.range(-60, 60),
+    lakeR: 600 + rngAnchor.range(-60, 60),
     karstC,
-    karstR: 900 + rng.range(-80, 80),
-    karstRot: 0.35 + rng.range(-0.25, 0.25),
+    karstR: 900 + rngAnchor.range(-80, 80),
+    karstRot: 0.35 + rngAnchor.range(-0.25, 0.25),
     valley,
-    valleyFloors: [690, 468, 300, 212, 165, 138],
+    // lake sill ≈ 141 at the rim, outlet descends off-map
+    valleyFloors: [690, 468, 300, 212, 172, 141, 133, 120],
     valleyWidth: 360,
     trib,
     tribFloors: [318, 286, 246, 213],
@@ -145,6 +155,31 @@ function splineField(p: NV2, pts: [number, number][], floors: number[]): SplineF
   return { dist: bestD, floor: bestF };
 }
 
+export interface ValleyFields {
+  valleyDist: NF;
+  valleyFloor: NF;
+  tribDist: NF;
+  tribFloor: NF;
+}
+
+/** Just the carving-spline fields (shared by macroTerrain and the river pass). */
+export function valleyFields(p: NV2, mp: MacroParams): ValleyFields {
+  const o = mp.off;
+  const vWarpV = vec2(
+    mx_noise_float(p.div(290).add(vec2(o.warp[0], o.warp[1]))),
+    mx_noise_float(p.div(290).add(vec2(o.warp[1] + 53, o.warp[0] - 53))),
+  ).mul(85);
+  const pWarped = p.add(vWarpV);
+  const valley = splineField(pWarped, mp.valley, mp.valleyFloors);
+  const trib = splineField(pWarped, mp.trib, mp.tribFloors);
+  return {
+    valleyDist: valley.dist,
+    valleyFloor: valley.floor,
+    tribDist: trib.dist,
+    tribFloor: trib.floor,
+  };
+}
+
 export interface MacroNodes {
   /** pre-erosion terrain height (m) */
   height: NF;
@@ -193,16 +228,14 @@ export function macroTerrain(p: NV2, mp: MacroParams, detail: 'full' | 'far'): M
   );
   const tKarst = falloff(pkr.length(), mp.karstR);
 
-  // --- valley + tributary splines -------------------------------------------
-  const vWarp = mx_noise_float(p.div(240).add(vec2(o.warp[0], o.warp[1]))).mul(75);
-  const valley = splineField(p, mp.valley, mp.valleyFloors);
-  const valleyDist = max(0, valley.dist.add(vWarp));
-  const trib = splineField(p, mp.trib, mp.tribFloors);
-  const tribDist = max(0, trib.dist.add(vWarp.mul(0.6)));
+  // --- valley + tributary splines (position-warped; see valleyFields) --------
+  const vf = valleyFields(p, mp);
+  const valleyDist = vf.valleyDist;
+  const tribDist = vf.tribDist;
 
   // --- base + hills ----------------------------------------------------------
   // NOTE mx_noise/mx_fractal outputs are SIGNED (≈[-1,1]) — remap explicitly.
-  const hillsN = mx_fractal_noise_float(
+  const hillsRaw = mx_fractal_noise_float(
     p.div(1350).add(vec2(o.hills[0], o.hills[1])),
     full ? 5 : 4,
     2.1,
@@ -212,9 +245,12 @@ export function macroTerrain(p: NV2, mp: MacroParams, detail: 'full' | 'far'): M
     .mul(0.5)
     .add(0.5)
     .saturate();
+  // compress the lows (1−(1−n)^1.7): dales stay shallow → terrain drains
+  // instead of pooling in deep fBm bowls
+  const hillsN = hillsRaw.oneMinus().pow(1.7).oneMinus();
   const hillsMask = tAlp.oneMinus().mul(tKarst.mul(0.72).oneMinus());
   const base = float(192)
-    .add(hillsN.mul(150).mul(hillsMask))
+    .add(hillsN.mul(135).mul(hillsMask))
     .add(float(KARST_PLATEAU - 192).mul(tKarst))
     .sub(tLake.pow(1.5).mul(110));
 
@@ -290,22 +326,31 @@ export function macroTerrain(p: NV2, mp: MacroParams, detail: 'full' | 'far'): M
     h = h.add(outer.pow(1.5).mul(1750).mul(band).mul(gaps));
   }
 
+  // gentle monotonic tilt toward the valley spine so hill country drains
+  // (drainage-by-design: post-hoc erosion cannot carve 30 m through saddles)
+  h = h.add(min(valleyDist.mul(0.06), 95).mul(tAlp.oneMinus()).mul(tKarst.oneMinus()));
+
   // --- carve valley + tributary (U-profiles down to interpolated floors) ------
   // outer U-shape plus a narrower inner trench so the floor isn't an airstrip
   const uMain = pow(smoothstep(0, mp.valleyWidth, valleyDist), 2.2);
-  h = valley.floor.add(h.sub(valley.floor).mul(uMain));
-  const trench = smoothstep(120, 18, valleyDist).mul(16);
+  h = vf.valleyFloor.add(h.sub(vf.valleyFloor).mul(uMain));
+  // inner trench concentrates the river (floors are tuned so its bottom stays
+  // above lake level until the mouth); the trench fades across the lake so the
+  // outlet sill stays at the designed lake level
+  const trench = smoothstep(120, 18, valleyDist)
+    .mul(16)
+    .mul(smoothstep(0.5, 0.12, tLake));
   h = h.sub(trench);
   if (full) {
     const uTrib = pow(smoothstep(0, mp.tribWidth, tribDist), 1.6);
     const tribInfl = tKarst.pow(0.5); // tributary only carves inside/near karst
-    const carved = trib.floor.add(h.sub(trib.floor).mul(uTrib));
+    const carved = vf.tribFloor.add(h.sub(vf.tribFloor).mul(uTrib));
     h = carved.mul(tribInfl).add(h.mul(tribInfl.oneMinus()));
   }
 
-  // keep the lake basin genuinely below lake level
+  // keep the lake basin genuinely below lake level (tight to the basin core)
   const lakeBed = float(LAKE_LEVEL - 13);
-  h = h.sub(max(0, h.sub(lakeBed)).mul(tLake.pow(2.2).mul(0.92)));
+  h = h.sub(max(0, h.sub(lakeBed)).mul(tLake.pow(3.4).mul(0.95)));
 
   // --- hardness (erosion resistance + later: strata/talus behavior) -----------
   const strata = mx_noise_float(
@@ -330,7 +375,7 @@ export function macroTerrain(p: NV2, mp: MacroParams, detail: 'full' | 'far'): M
     tLake,
     valleyDist,
     tribDist,
-    valleyFloor: valley.floor,
+    valleyFloor: vf.valleyFloor,
     hardness,
   };
 }

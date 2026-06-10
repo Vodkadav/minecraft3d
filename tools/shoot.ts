@@ -69,6 +69,8 @@ async function main(): Promise<void> {
   if (preset) urlOpts.preset = preset;
   urlOpts.hud = args['hud'] === true || args['hud'] === '1';
   urlOpts.freeze = args['nofreeze'] !== true;
+  const view = str(args['view']);
+  if (view) urlOpts.extra = { ...(urlOpts.extra ?? {}), view };
   const url = laasUrl(urlOpts);
   console.log(`[shoot] ${url} → ${out}`);
 

@@ -20,7 +20,10 @@
       "Bash(git commit -q -m 'Phase 0: scaffold, WebGPU engine, Playwright harness, compare tool *)",
       "Bash(echo \"EXIT:$?\")",
       "Bash(echo \"EXIT-CODE:$?\")",
-      "Bash(git commit -q -m 'Phase 1 WIP: macro layout, 4096 synthesis, pipe-model erosion \\(tuned\\) *)"
+      "Bash(git commit -q -m 'Phase 1 WIP: macro layout, 4096 synthesis, pipe-model erosion \\(tuned\\) *)",
+      "Bash(curl -s \"http://localhost:5173/src/gpu/passes/FlowRivers.ts\")",
+      "Bash(curl -s \"http://localhost:5173/src/world/MacroMap.ts\")",
+      "Bash(git commit -q -m 'Phase 1: hydrology — multigrid depression fill, flow accumulation, rivers, lake outlet *)"
     ]
   }
 }
