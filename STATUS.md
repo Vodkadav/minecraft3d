@@ -186,11 +186,46 @@ cov 0.62), contact shadows (?ablate=contact to A/B), black facets root-caused to
   re-judge vs scene1, DELTA.md Phase-5 loop (top-10 → fix top 3), DEVIATIONS
   D-5 (cull granularity = instance, terrain-march occlusion in lieu of
   depth Hi-Z; canopy-shadow approximations), gate sheet → shots/phase-5/.
-- USER feedback open items: trunks "inside-out" report NOT reproduced after
-  normal-rotation fix + bark DoubleSide insurance (facedbg shows cards/grass
-  correct) — needs user confirmation; near-grass lushness re-check in their
-  session; perf 60–113 ms GPU at veg-heavy 1080p views (Phase 7 owns budget,
-  but watch).
+- 5×-detail workstream (user nanite mandate), remaining: terrain
+  micro-displacement on near tiles (verify vs skirts), moss/ground-cover
+  volume geometry, per-cluster LOD for hero rocks/trunks if 460 m
+  transitions still show.
+- **SHADOWS — OPEN BUG (top priority).** User sees NO cast shadows in their
+  live world session even when camera is STOPPED (post-reload, current
+  build). They describe "starts of shadows that then disappear". My headless
+  verification DOES show shadows (static cam, T 16.5: shots/wip/t-fullfix.png
+  + crop-bench.png — birch/conifer shadows + canopy dapple; gallery too).
+  PROVEN FIXED so far (do NOT revert): (1) sun.shadow.camera.near/far must be
+  set explicitly (near 1, far lightMargin+maxFar·2.2) — CSMShadowNode CLONES
+  sun.shadow per cascade and the DirectionalLight default far=500 <
+  lightMargin=700 left every cascade map EMPTY; (2) CSM lazy _init under
+  TRAA setViewOffset cached NaN cascade extents — ShadowSetup now re-runs
+  updateFrustums jitter-stripped until extents verify finite (probe-csm2
+  confirms finite at boot).
+  NEXT LEADS, in order: (a) **pcssFilter ignores inputs.depthLayer** — with
+  4 cascades in a depth ARRAY, texture(depthTexture, uv) may sample layer 0
+  for ALL cascades → only cascade-0-range (~0–80 m) shadows ever appear =
+  "starts of shadows then disappear" at distance. Check three's own PCSS/CSM
+  examples for the depthLayer call convention and re-test ?ablate=pcss NOW
+  (the earlier no-shadow pcss test predates the near/far fix — STALE
+  evidence). (b) Cloud-shadow gate (?ablate=cloudshadow) in the USER's
+  session — bake-timing/NaN could null direct sun exactly when the cloud
+  shadow map lands. (c) Reproduce user's interactive conditions: headed
+  browser, dpr 1.5, real key-flying — tools/probe-moving.ts is the start
+  (backward-glide edit uncommitted-tested). (d) Have the user A/B
+  ?ablate=pcss / cloudshadow / contact in THEIR session and report which
+  restores shadows.
+  Debug kit built this session: ?scene=shadowtest (plain/CSM × vanilla/
+  colorNode/positionNode/castShadowPositionNode casters — ALL cast on
+  0.184; sun flipped so shadows fall TOWARD camera), ?postmin=1 (+postmrt)
+  PostStack bisect, ?clsdbg=1 per-class flat colors, tools/probe-csm2
+  (extents before/after refresh), tools/probe-state (lights), DON'T re-debug
+  those layers.
+- NOON shadow contrast (after the open bug): probe GI re-lights shadowed
+  ground (probes bake unshadowed sun) → noon crown shadows wash. Balance:
+  attenuate GI in direct-shadow regions or add sun-visibility to probes.
+- USER feedback open items: perf 60–113 ms GPU at veg-heavy 1080p views
+  (Phase 7 owns budget, but watch).
 - KNOWN visual debts (carried): pine crown structure (Ph-4 #3); rock micro
   normals (#8); card grazing flatness (#5, hero ring will help); DELTA Ph-2
   #4 (2nd cloud layer, Ph 6), #10 (god rays, Ph 6); kettle ponds (Ph 6);
@@ -347,3 +382,22 @@ split view, ground-clamped camera helper, silhouette/tiling gate + DELTA.md.
   InstancedMesh) + geometry.setIndirect(attr, byteOffset) + instanceIndex
   reads via compact list; counts written by compute into the SAME
   IndirectStorageBufferAttribute via storage(); frustumCulled=false.
+- CSMShadowNode (three 0.184): cascade shadows CLONE light.shadow — set
+  sun.shadow.camera.near/far EXPLICITLY (defaults near .5/far 500 <
+  lightMargin → empty maps, no errors). Lazy _init samples the projection
+  at first material build (TRAA jitter/boot transients → NaN extents cached
+  forever); apps must call updateFrustums() after camera changes — we
+  refresh jitter-stripped + verify finite + resize hook (ShadowSetup).
+- Shadow-debug traps that burned hours: (1) judge shadow PRESENCE only with
+  the sun positioned so shadows fall TOWARD the camera (they hide behind
+  casters otherwise — false "doesn't cast" reads); (2) FlyCamera owns
+  orientation — debug scenes MUST set hooks.initialPose or every shot frames
+  the wrong spot; forward = (−sin yaw, 0, −cos yaw); (3) headless static
+  shots ≠ user's interactive session (DPR 1.5, window resizes, continuous
+  motion, TRAA history) — verify BOTH before declaring lighting fixed;
+  (4) ablate evidence goes STALE after upstream fixes — re-run the matrix.
+- vdata trick for artifact triage: ?clsdbg=1 flat-colors every veg class
+  (hue = cls·47°) — identified "dark slabs" as beech cards in minutes after
+  hours of wrong guesses (they were SPECULAR-washed cards: one flat normal
+  per card ⇒ uniform silver sheen at glancing sun; foliage cards must be
+  near-diffuse, roughness .92).
