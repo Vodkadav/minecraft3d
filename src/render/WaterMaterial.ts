@@ -262,10 +262,19 @@ export function waterMaterial(
   // sharp white stripes (user-reported). Two decorrelated scales multiply
   // into clumpy patches instead of bands.
   const foamUv = (off: NV2, s: number): NV2 => positionWorld.xz.sub(off).div(s * PERIOD_FBM);
+  // EVERY octave must live inside the two-phase blend: phase A's offset
+  // snaps to zero at its cycle wrap, and the blend only hides that for
+  // terms weighted by w2 — a detail octave pinned to offA alone snapped
+  // visibly once per cycle (user-reported "sharp stop in the loop").
   const fA = (texture(noiseA, foamUv(offA, 0.55)) as unknown as NV4).y;
   const fB = (texture(noiseA, foamUv(offB.mul(1.13), 0.55)) as unknown as NV4).y;
-  const fDetail = (texture(noiseA, foamUv(offA.mul(0.6), 0.21)) as unknown as NV4).y;
-  const fblend = mix(fA, fB, w2);
+  const dA = (texture(noiseA, foamUv(offA.mul(0.6), 0.21)) as unknown as NV4).y;
+  const dB = (texture(noiseA, foamUv(offB.mul(0.71), 0.21)) as unknown as NV4).y;
+  // renormalize the crossfade variance — averaging two uncorrelated fields
+  // flattens the pattern at blend midpoints and thresholded coverage pulses
+  const varNorm = w2.mul(w2).add(w2.oneMinus().mul(w2.oneMinus())).sqrt();
+  const fblend = mix(fA, fB, w2).sub(0.5).div(varNorm).add(0.5);
+  const fDetail = mix(dA, dB, w2).sub(0.5).div(varNorm).add(0.5);
   const foamPat = smoothstep(0.42, 0.85, fblend.mul(0.62).add(fDetail.mul(0.38)));
   const shoreFoam = smoothstep(0.16, 0.03, vDepth).mul(0.55);
   // rapids key on the DROP of the water surface along flow (a large calm
