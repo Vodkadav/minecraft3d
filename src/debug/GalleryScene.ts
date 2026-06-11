@@ -11,6 +11,7 @@ import {
   CanvasTexture,
   CircleGeometry,
   CylinderGeometry,
+  InstancedMesh,
   Mesh,
   PlaneGeometry,
   SRGBColorSpace,
@@ -24,11 +25,35 @@ import type { DataTexture } from 'three';
 import { bakeBarkTextures, type BarkTextures } from '../gpu/passes/BarkSynth';
 import { PostStack } from '../render/PostStack';
 import { setupSunShadows } from '../render/ShadowSetup';
-import { barkTexturedMaterial, foliageCardMaterial } from '../render/VegMaterials';
+import {
+  barkTexturedMaterial,
+  deadwoodMaterial,
+  flowerMaterial,
+  foliageCardMaterial,
+  rockMaterial,
+} from '../render/VegMaterials';
 import { SunSky } from '../sky/SunSky';
+import { buildLog, buildStump, type DecayState } from '../vegetation/Deadfall';
 import { captureFoliageAtlas } from '../vegetation/FoliageCards';
+import {
+  barkChipGeometry,
+  debrisMaterial,
+  grassPatch,
+  litterMaterial,
+  scatterInstances,
+  twigGeometry,
+} from '../vegetation/GroundCover';
+import { buildRock, type RockPreset } from '../vegetation/RockBuilder';
 import { TREE_SPECIES } from '../vegetation/Species';
 import { buildTree } from '../vegetation/TreeBuilder';
+import {
+  buildFern,
+  buildFlower,
+  buildShrub,
+  FERN_CAPTURE,
+  type FlowerKind,
+  UNDERSTORY_SPECIES,
+} from '../vegetation/Understory';
 import type { WorldContext } from './Scenes';
 
 const ROW_Z = { trees: 0, rocks: 40, ground: 70, dead: 100 } as const;
@@ -119,7 +144,7 @@ export async function buildGalleryScene(ctx: WorldContext): Promise<void> {
   // ---- foliage cluster atlases (captured once per species) -------------------
   ctx.progress(0.08, 'gallery: capturing foliage atlases');
   const atlases = new Map<string, DataTexture>();
-  for (const sp of TREE_SPECIES) {
+  for (const sp of [...TREE_SPECIES, ...UNDERSTORY_SPECIES, FERN_CAPTURE]) {
     if (!sp.foliage) continue;
     atlases.set(
       sp.id,
@@ -201,6 +226,213 @@ export async function buildGalleryScene(ctx: WorldContext): Promise<void> {
     x += groupGap;
   }
   engine.stats.counters['veg.tris'] = totalTris;
+
+  // ---- rock row ----------------------------------------------------------------
+  ctx.progress(0.9, 'gallery: carving rocks');
+  await new Promise((r) => setTimeout(r, 0));
+  let rockTris = 0;
+  const addRock = (
+    preset: RockPreset,
+    detail: number,
+    seedTag: string,
+    x: number,
+    z: number,
+    moss: number,
+    label?: string,
+  ): void => {
+    const rock = buildRock(preset, seed.rng(`rock/${preset}/${seedTag}`), detail);
+    rockTris += rock.stats.tris;
+    const m = new Mesh(rock.geometry, rockMaterial({ moss }));
+    // settle into the ground a bit
+    const bs = rock.geometry.boundingSphere;
+    m.position.set(x, bs ? bs.radius * 0.52 : 1, z);
+    m.rotation.y = seed.rng(`rockrot/${preset}/${seedTag}`).float() * Math.PI * 2;
+    m.castShadow = true;
+    m.receiveShadow = true;
+    engine.scene.add(m);
+    if (label) {
+      exhibit(x, z, label, `${(rock.stats.tris / 1000).toFixed(0)}k tris`);
+    }
+  };
+  const RZ = ROW_Z.rocks;
+  addRock('hero', 7, '0', -60, RZ, 0.35, 'Hero rock (tor)');
+  for (let i = 0; i < 3; i++) addRock('boulder', 5, String(i), -38 + i * 9, RZ, 0.45, i === 0 ? 'Boulders ×3' : undefined);
+  for (let i = 0; i < 3; i++) addRock('angular', 5, String(i), -8 + i * 8, RZ, 0.1, i === 0 ? 'Angular scree ×3' : undefined);
+  addRock('slab', 6, '0', 18, RZ, 0.2, 'Slab');
+  // cobble cluster
+  for (let i = 0; i < 14; i++) {
+    const r = seed.rng(`cob/${i}`);
+    addRock('cobble', 3, String(i), 28 + r.float() * 5 - 2.5, RZ + r.float() * 4 - 2, 0.12);
+  }
+  exhibit(28, RZ, 'Cobbles', 'water-rounded');
+  // rock wall: stacked slabs
+  for (let row = 0; row < 3; row++) {
+    for (let col = 0; col < 4; col++) {
+      const r = seed.rng(`wall/${row}/${col}`);
+      const rock = buildRock('slab', r.fork('s'), 5);
+      rockTris += rock.stats.tris;
+      const m = new Mesh(rock.geometry, rockMaterial({ moss: 0.3 }));
+      m.position.set(44 + col * 2.6 + (row % 2) * 1.2, 0.8 + row * 1.35, RZ + (r.float() - 0.5));
+      m.rotation.set((r.float() - 0.5) * 0.3, r.float() * 6.28, (r.float() - 0.5) * 0.3);
+      m.scale.setScalar(0.85 + r.float() * 0.4);
+      m.castShadow = true;
+      m.receiveShadow = true;
+      engine.scene.add(m);
+    }
+  }
+  exhibit(48, RZ, 'Rock wall', 'stacked slabs');
+  engine.stats.counters['rock.tris'] = rockTris;
+
+  // ---- ground row: grass, debris square, ferns, flowers, shrubs ---------------
+  ctx.progress(0.93, 'gallery: ground cover');
+  await new Promise((r) => setTimeout(r, 0));
+  const GZ = ROW_Z.ground;
+  {
+    // meadow squares
+    const small = grassPatch(seed.rng('grass/small'), 60_000, 6);
+    small.position.set(-62, 0, GZ);
+    engine.scene.add(small);
+    exhibit(-62, GZ + 4, 'Grass 6×6 m', '60k blades');
+    const meadow = grassPatch(seed.rng('grass/meadow'), 200_000, 13);
+    meadow.position.set(-44, 0, GZ);
+    engine.scene.add(meadow);
+    exhibit(-44, GZ + 7.5, 'Meadow 13×13 m', '200k blades');
+
+    // 2×2 m ground debris square
+    const sq = 2.4;
+    const cobbleGeo = buildRock('cobble', seed.rng('gc/cob'), 2).geometry;
+    const cobInst = new InstancedMesh(cobbleGeo, rockMaterial({ moss: 0.08 }), 70);
+    scatterInstances(cobInst, seed.rng('gc/cobs'), sq, 0.04, [0.5, 1.4], true);
+    cobInst.position.set(-26, 0.05, GZ);
+    engine.scene.add(cobInst);
+    const pebInst = new InstancedMesh(
+      buildRock('cobble', seed.rng('gc/peb'), 1).geometry,
+      rockMaterial({ moss: 0 }),
+      260,
+    );
+    scatterInstances(pebInst, seed.rng('gc/pebs'), sq, 0.02, [0.16, 0.5], true);
+    pebInst.position.set(-26, 0.03, GZ);
+    engine.scene.add(pebInst);
+    for (let v = 0; v < 3; v++) {
+      const tw = new InstancedMesh(
+        twigGeometry(seed.rng(`gc/twig${v}`)),
+        debrisMaterial('twig'),
+        36,
+      );
+      scatterInstances(tw, seed.rng(`gc/twigs${v}`), sq, 0.03, [0.6, 1.5], true);
+      tw.position.set(-26, 0.02, GZ);
+      engine.scene.add(tw);
+      const ch = new InstancedMesh(
+        barkChipGeometry(seed.rng(`gc/chip${v}`)),
+        debrisMaterial('chip'),
+        45,
+      );
+      scatterInstances(ch, seed.rng(`gc/chips${v}`), sq, 0.02, [0.5, 1.3], true);
+      ch.position.set(-26, 0.015, GZ);
+      engine.scene.add(ch);
+    }
+    // leaf litter: quads with the beech atlas, browned
+    const beechAtlas = atlases.get('beech');
+    if (beechAtlas) {
+      const litterGeo = new PlaneGeometry(0.16, 0.16);
+      litterGeo.rotateX(-Math.PI / 2);
+      // random tile uvs per instance need per-instance offset — bake 4 variants
+      for (let v = 0; v < 4; v++) {
+        const lg = litterGeo.clone();
+        const uvA = lg.getAttribute('uv');
+        for (let i = 0; i < uvA.count; i++) {
+          uvA.setXY(i, uvA.getX(i) * 0.5 + (v % 2) * 0.5, uvA.getY(i) * 0.5 + Math.floor(v / 2) * 0.5);
+        }
+        const li = new InstancedMesh(lg, litterMaterial(beechAtlas), 90);
+        scatterInstances(li, seed.rng(`gc/lit${v}`), sq, 0.05, [0.7, 1.8], true);
+        li.position.set(-26, 0.03, GZ);
+        engine.scene.add(li);
+      }
+    }
+    exhibit(-26, GZ + 2, 'Ground square 2.4 m', 'cobbles+twigs+chips+litter');
+
+    // ferns
+    const fernAtlas = atlases.get('fern');
+    if (fernAtlas) {
+      for (let i = 0; i < 3; i++) {
+        const fern = new Mesh(
+          buildFern(seed.rng(`fern/${i}`)),
+          foliageCardMaterial(fernAtlas, { color: FERN_CAPTURE.foliageColor }),
+        );
+        fern.position.set(-12 + i * 3, 0.02, GZ + (i % 2));
+        fern.castShadow = true;
+        fern.receiveShadow = true;
+        engine.scene.add(fern);
+      }
+      exhibit(-9, GZ + 2.5, 'Ferns ×3', 'frond rosettes');
+    }
+
+    // flower patches
+    const flowerKinds: { kind: FlowerKind; color: { r: number; g: number; b: number }; n: number; label: string }[] = [
+      { kind: 'umbel', color: { r: 0.75, g: 0.75, b: 0.7 }, n: 14, label: 'White umbel' },
+      { kind: 'bell', color: { r: 0.28, g: 0.14, b: 0.5 }, n: 14, label: 'Bellflower' },
+      { kind: 'daisy', color: { r: 0.85, g: 0.72, b: 0.12 }, n: 18, label: 'Yellow daisy' },
+    ];
+    let fx = 0;
+    for (const fk of flowerKinds) {
+      const rngF = seed.rng(`flower/${fk.kind}`);
+      for (let i = 0; i < fk.n; i++) {
+        const fl = new Mesh(buildFlower(fk.kind, rngF.fork(String(i))), flowerMaterial(fk.color));
+        fl.position.set(fx + (rngF.float() - 0.5) * 2.4, 0, GZ + (rngF.float() - 0.5) * 2.4);
+        fl.rotation.y = rngF.float() * 6.28;
+        fl.castShadow = true;
+        engine.scene.add(fl);
+      }
+      exhibit(fx, GZ + 2, fk.label, `×${fk.n}`);
+      fx += 7;
+    }
+
+    // shrubs ×3 (incl. pink flowering)
+    let sx = 26;
+    for (const sp of UNDERSTORY_SPECIES) {
+      const shrub = buildShrub(sp, seed.rng(`shrub/${sp.id}`));
+      const bm = new Mesh(shrub.bark, barkTexturedMaterial(barks.get(sp.barkLayer) as BarkTextures));
+      bm.position.set(sx, 0, GZ);
+      bm.castShadow = true;
+      bm.receiveShadow = true;
+      engine.scene.add(bm);
+      const at = atlases.get(sp.id);
+      if (shrub.foliage && at) {
+        const fm = new Mesh(shrub.foliage, foliageCardMaterial(at, { color: sp.foliageColor }));
+        fm.position.copy(bm.position);
+        fm.castShadow = true;
+        fm.receiveShadow = true;
+        engine.scene.add(fm);
+      }
+      exhibit(sx, GZ + 2.5, sp.label, 'multi-stem');
+      sx += 9;
+    }
+  }
+
+  // ---- dead row: logs (3 decay states), stumps --------------------------------
+  ctx.progress(0.95, 'gallery: deadfall');
+  const DZ = ROW_Z.dead;
+  const spruceBark = barks.get(0) as BarkTextures;
+  const decays: DecayState[] = ['fresh', 'mossy', 'rotten'];
+  for (let i = 0; i < decays.length; i++) {
+    const log = buildLog(seed.rng(`log/${i}`), decays[i] as DecayState);
+    const m = new Mesh(log.geometry, deadwoodMaterial(spruceBark));
+    m.position.set(-22 + i * 9, 0, DZ);
+    m.rotation.y = seed.rng(`logr/${i}`).float() * 6.28;
+    m.castShadow = true;
+    m.receiveShadow = true;
+    engine.scene.add(m);
+    exhibit(-22 + i * 9, DZ + 2.5, `Log (${decays[i]})`, `${log.length.toFixed(1)} m`);
+  }
+  for (let i = 0; i < 2; i++) {
+    const st = buildStump(seed.rng(`stump/${i}`));
+    const m = new Mesh(st.geometry, deadwoodMaterial(spruceBark));
+    m.position.set(8 + i * 6, 0, DZ);
+    m.castShadow = true;
+    m.receiveShadow = true;
+    engine.scene.add(m);
+  }
+  exhibit(11, DZ + 2.5, 'Stumps ×2', 'root flare, jagged top');
 
   // ---- post stack (no clouds in the gallery) ----------------------------------
   ctx.progress(0.95, 'gallery: post pipeline');

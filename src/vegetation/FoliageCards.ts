@@ -26,7 +26,7 @@ import {
   Vector3,
 } from 'three';
 import { MeshStandardNodeMaterial, type Renderer } from 'three/webgpu';
-import { attribute, mix, smoothstep, sqrt, uv, vec3 } from 'three/tsl';
+import { attribute, float, mix, smoothstep, sqrt, uv, vec3 } from 'three/tsl';
 import type { Rng } from '../core/Seed';
 import type { NF, NV2, NV4 } from '../gpu/TSLTypes';
 import { buildLeaf, buildNeedleSpray } from './LeafMesh';
@@ -125,10 +125,20 @@ function captureMaterial(sp: SpeciesParams): MeshStandardNodeMaterial {
     .mul(mix(vec3(1), vec3(0.72, 0.95, 1.2), k.negate().clamp(0, 1)));
   const midrib = smoothstep(0.0, 0.05, u.x.sub(0.5).abs()) as unknown as NF;
   const tipLight = mix(0.92, 1.18, u.y) as unknown as NF;
-  const albedo = warmed
+  let albedo = warmed
     .mul(d.w)
     .mul(midrib.mul(0.18).add(0.82))
     .mul(tipLight);
+  if (sp.blossom) {
+    // leaves whose hue jitter exceeds the blossom threshold become flowers
+    const bl = sp.blossom;
+    const isBlossom = d.x.greaterThan(1 - bl.frac * 2).select(float(1), float(0));
+    albedo = mix(
+      albedo,
+      vec3(bl.r, bl.g, bl.b).mul(mix(0.75, 1.15, u.y)).mul(d.w.mul(0.4).add(0.6)),
+      isBlossom,
+    );
+  }
   mat.colorNode = vec3(0);
   // sqrt-encode for 8-bit storage (decoded by squaring in the card material)
   mat.emissiveNode = sqrt(albedo.clamp(0, 1) as unknown as NF) as unknown as ReturnType<typeof vec3>;

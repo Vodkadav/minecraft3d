@@ -118,6 +118,8 @@ export interface SpeciesParams {
   barkRepeats: number;
   /** base foliage albedo + per-instance hue swing */
   foliageColor: { r: number; g: number; b: number; hueVar: number };
+  /** flowering: a fraction of capture leaves become blossom-colored */
+  blossom?: { r: number; g: number; b: number; frac: number };
   /** trunk broken at t (snags); 0 = intact */
   brokenTop: number;
   /** chance a branch is a stub (snags / damaged trees) */
