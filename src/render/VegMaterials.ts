@@ -9,7 +9,7 @@
 
 import { DoubleSide, type Texture } from 'three';
 import { MeshStandardNodeMaterial } from 'three/webgpu';
-import { attribute, clamp, float, texture, uv, vec3 } from 'three/tsl';
+import { attribute, clamp, float, normalMap, texture, uv, vec3 } from 'three/tsl';
 import type { NF, NV3, NV4 } from '../gpu/TSLTypes';
 
 function vdata(): NV4 {
@@ -40,6 +40,27 @@ export function barkMaterial(p: BarkMatParams): MeshStandardNodeMaterial {
   const base = vec3(p.color.r, p.color.g, p.color.b);
   mat.colorNode = hueShift(base, d.x, 0.18).mul(d.w.mul(0.75).add(0.25));
   mat.roughness = p.roughness ?? 0.93;
+  mat.metalness = 0;
+  return mat;
+}
+
+/**
+ * Synthesized bark material: tileable albedo/cavity + normal/rough/height.
+ * Cavity feeds `aoNode` — AO on indirect light only (DEVIATIONS D-1 close).
+ */
+export function barkTexturedMaterial(tex: {
+  texA: Texture;
+  texB: Texture;
+}): MeshStandardNodeMaterial {
+  const mat = new MeshStandardNodeMaterial();
+  const d = vdata();
+  const a = texture(tex.texA, uv() as never) as unknown as NV4;
+  const b = texture(tex.texB, uv() as never) as unknown as NV4;
+  const albedo = a.rgb.mul(a.rgb); // sqrt-encoded at bake
+  mat.colorNode = hueShift(albedo, d.x, 0.14).mul(d.w.mul(0.45).add(0.55));
+  mat.normalNode = normalMap(vec3(b.x, b.y, 1));
+  mat.aoNode = a.w;
+  mat.roughnessNode = b.z;
   mat.metalness = 0;
   return mat;
 }

@@ -21,9 +21,10 @@ import { float, mix, positionWorld, smoothstep, texture, uv, vec3 } from 'three/
 import type { NF, NV4 } from '../gpu/TSLTypes';
 import { hash12 } from '../gpu/noise/NoiseTSL';
 import type { DataTexture } from 'three';
+import { bakeBarkTextures, type BarkTextures } from '../gpu/passes/BarkSynth';
 import { PostStack } from '../render/PostStack';
 import { setupSunShadows } from '../render/ShadowSetup';
-import { barkMaterial, foliageCardMaterial } from '../render/VegMaterials';
+import { barkTexturedMaterial, foliageCardMaterial } from '../render/VegMaterials';
 import { SunSky } from '../sky/SunSky';
 import { captureFoliageAtlas } from '../vegetation/FoliageCards';
 import { TREE_SPECIES } from '../vegetation/Species';
@@ -125,6 +126,17 @@ export async function buildGalleryScene(ctx: WorldContext): Promise<void> {
       await captureFoliageAtlas(engine.renderer, sp, seed.rng(`cards/${sp.id}`)),
     );
   }
+
+  // ---- bark textures (synthesized per species layer) -------------------------
+  ctx.progress(0.09, 'gallery: synthesizing bark');
+  const barks = new Map<number, BarkTextures>();
+  for (const sp of TREE_SPECIES) {
+    if (barks.has(sp.barkLayer)) continue;
+    barks.set(
+      sp.barkLayer,
+      await bakeBarkTextures(engine.renderer, sp.barkLayer, seed.sub(`bark/${sp.barkLayer}`) % 977),
+    );
+  }
   if (q.get('view') === 'atlas') {
     // raw atlas inspection row behind the trees
     let ax = -30;
@@ -167,10 +179,8 @@ export async function buildGalleryScene(ctx: WorldContext): Promise<void> {
         sp.label,
         `seed ${vi} · ${(built.stats.tris / 1000).toFixed(0)}k tris · ${built.stats.height.toFixed(1)} m`,
       );
-      const barkMesh = new Mesh(
-        built.bark,
-        barkMaterial({ color: sp.kind === 'snag' ? { r: 0.21, g: 0.18, b: 0.15 } : { r: 0.16, g: 0.115, b: 0.08 } }),
-      );
+      const barkTex = barks.get(sp.barkLayer) as BarkTextures;
+      const barkMesh = new Mesh(built.bark, barkTexturedMaterial(barkTex));
       barkMesh.position.set(at.x, 0.42, at.z);
       barkMesh.castShadow = true;
       barkMesh.receiveShadow = true;

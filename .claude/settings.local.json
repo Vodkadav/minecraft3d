@@ -41,7 +41,11 @@
       "Bash(git commit -q -m 'Phase 2 CLOSE: golden-hour gate passed vs Witcher ref; shadow-color test passed *)",
       "Bash(node -e \"const t=require\\('three/webgpu'\\); console.log\\('IrradianceNode' in t\\)\")",
       "WebFetch(domain:github.com)",
-      "Bash(git commit -q -m 'Phase 4: tree generators + foliage cluster-card pipeline \\(ez-tree style, zero assets\\) *)"
+      "Bash(git commit -q -m 'Phase 4: tree generators + foliage cluster-card pipeline \\(ez-tree style, zero assets\\) *)",
+      "Bash(sed -n 30,60p node_modules/three/src/nodes/accessors/Tangent.js)",
+      "Bash(sed -n 1,50p node_modules/three/src/nodes/accessors/TangentUtils.js)",
+      "Bash(git commit -q -m 'Phase 4: bark texture synthesis \\(6 species recipes\\) + textured bark material w/ aoNode *)",
+      "Bash(sed -n 40,100p src/core/NoiseJS.ts)"
     ]
   }
 }
