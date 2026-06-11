@@ -59,6 +59,7 @@ import {
   smoothstep,
   storage,
   texture,
+  time,
   uint,
   uniform,
   uniformArray,
@@ -69,6 +70,7 @@ import {
 } from 'three/tsl';
 import { canopyAt, cellHash, cellHash2 } from '../gpu/passes/Scatter';
 import { grassTranslucency, rockMaterial } from '../render/VegMaterials';
+import { gustAt, windContext, windExposure, windU } from '../render/Wind';
 import type { NF, NI, NU, NV2, NV3, NV4 } from '../gpu/TSLTypes';
 import type { Heightfield } from '../world/Heightfield';
 import type { ProbeGI } from '../gpu/passes/ProbeGI';
@@ -653,11 +655,36 @@ export class GroundRing {
     );
     const rx = ls.x.mul(c).add(ls.z.mul(s));
     const rz = ls.z.mul(c).sub(ls.x.mul(s));
+    // wind: cantilever bend (tip²) riding the traveling gust field + a fine
+    // per-blade shimmer; tips dip as they deflect. Same field as the trees
+    // (Wind.ts) so meadow waves and canopy surges line up.
+    let dx: NF = float(0);
+    let dy: NF = float(0);
+    let dz: NF = float(0);
+    if (windContext()) {
+      const wd = vec2(windU.dir as unknown as NV2);
+      const tN = positionLocal.y; // 0..1 along the blade
+      const amp = (windU.strength as unknown as NF)
+        .mul(gustAt(wpos).mul(0.9).add(0.3))
+        .mul(windExposure(wpos));
+      const bend = amp.mul(tN.mul(tN)).mul(bladeH.mul(0.42));
+      const flut = time
+        .mul(5.2)
+        .add(h2.x.mul(6.2832))
+        .add(wpos.x.add(wpos.y).mul(0.9))
+        .sin()
+        .mul(tN)
+        .mul(amp)
+        .mul(0.05);
+      dx = wd.x.mul(bend).sub(wd.y.mul(flut));
+      dz = wd.y.mul(bend).add(wd.x.mul(flut));
+      dy = bend.mul(tN).mul(-0.4);
+    }
     // random lean (shear) — vertical uniform blades read as planted corn
     mat.positionNode = vec3(
-      rx.add(tilt.x.mul(ls.y)).add(wpos.x),
-      ls.y.add(y),
-      rz.add(tilt.y.mul(ls.y)).add(wpos.y),
+      rx.add(tilt.x.mul(ls.y)).add(dx).add(wpos.x),
+      ls.y.add(y).add(dy),
+      rz.add(tilt.y.mul(ls.y)).add(dz).add(wpos.y),
     );
 
     const t = uv().y as unknown as NF;

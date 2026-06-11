@@ -14,6 +14,7 @@ import { Forests } from '../vegetation/Forests';
 import { GroundRing } from '../vegetation/GroundRing';
 import { buildVegLibrary } from '../vegetation/VegLibrary';
 import { CausticsBake, setCausticContext } from '../render/Caustics';
+import { setWindContext, windU } from '../render/Wind';
 import { sunU, updateSunUniforms } from '../render/VegMaterials';
 import { buildCanopyShell } from '../world/CanopyShell';
 import { Heightfield } from '../world/Heightfield';
@@ -91,6 +92,19 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
     if (Number.isFinite(ck)) bake.focusK.value = ck;
     setCausticContext({ hf, bake, sunDir: sunU.dir });
     engine.onUpdate(() => bake.update(engine.renderer));
+  }
+
+  // Phase 6 wind: global gust field for all vegetation (?wind=N strength,
+  // ?winddir=deg, ?ablate=wind to A/B) — context before veg materials build
+  if (!ablate.has('wind') && hf.noiseA) {
+    setWindContext({ noiseA: hf.noiseA, canopyTex });
+    const q0 = new URLSearchParams(window.location.search);
+    const ws = Number(q0.get('wind') ?? NaN);
+    if (Number.isFinite(ws)) windU.strength.value = ws;
+    const wdeg = Number(q0.get('winddir') ?? NaN);
+    if (Number.isFinite(wdeg)) {
+      windU.dir.value.set(Math.cos((wdeg * Math.PI) / 180), Math.sin((wdeg * Math.PI) / 180));
+    }
   }
 
   ctx.progress(0.958, 'terrain: building tiles');

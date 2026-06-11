@@ -481,6 +481,10 @@ export class Forests {
           };
         }
       }
+      // wind opt-in: living vegetation sways (trees + understory); deadfall,
+      // stumps and stones stay rigid (their vdata.y means moss/decay, and
+      // a swaying log reads broken instantly)
+      const windK = pool.cls < 15 ? 1 : 0;
       for (const { ring, parts } of rings) {
         if (!parts) continue;
         const g = groupOf(pool.cls, pool.variant, ring);
@@ -492,6 +496,7 @@ export class Forests {
             compact: this.compact,
             groupBase: offsets[g] ?? 0,
             fade: fadeFor(pool.cls, ring),
+            wind: windK,
           });
           this.patchGI(mat);
           // ?clsdbg=1 — flat-color every draw by VegClass (artifact triage:
@@ -518,6 +523,7 @@ export class Forests {
                 compact: this.compact,
                 groupBase: offsets[cg] ?? 0,
                 fade: null,
+                wind: windK,
               });
               addDraw(geoView(part.geo), cmat, cg, 0, 2 + c);
             }
