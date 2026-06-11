@@ -107,6 +107,9 @@ export interface TubeOpts {
   vScale: number;
   /** trunk-only root flare */
   flare?: { amp: number; height: number; lobes: number; phase: number };
+  /** jagged cap over ring 0 — tubes historically had NO start cap (invisible
+   *  on branches attached to a parent; an open hole on free-lying deadfall) */
+  capBase?: boolean;
   /** per-branch sway phase + flexibility for vdata */
   swayPhase: number;
   swayFlexBase: number;
@@ -130,6 +133,7 @@ export function tubeForBranch(
   if (n < 2) return;
   const rings: number[][] = [];
   let lastRingPos: number[] = [];
+  let firstRingPos: number[] = [];
   // initial frame
   _T.copy(br.dirs[0] as Vector3);
   const ref = Math.abs(_T.y) < 0.94 ? new Vector3(0, 1, 0) : new Vector3(1, 0, 0);
@@ -202,13 +206,51 @@ export function tubeForBranch(
     }
     rings.push(ring);
     lastRingPos = ringPos;
+    if (i === 0) firstRingPos = ringPos;
   }
 
+  // winding: rings are built on (N, B=T×N) — increasing angle is CCW viewed
+  // from −T, so quads must run base-ring-first to put front faces OUTWARD
+  // (the old b-first order rendered tube interiors on FrontSide materials)
   for (let i = 0; i < rings.length - 1; i++) {
     const a = rings[i] as number[];
     const b = rings[i + 1] as number[];
     for (let k = 0; k < segsAround; k++) {
-      g.quad(a[k] as number, b[k] as number, b[k + 1] as number, a[k + 1] as number);
+      g.quad(a[k] as number, a[k + 1] as number, b[k + 1] as number, b[k] as number);
+    }
+  }
+
+  // base cap (free-lying pieces): jagged disc facing −T0. Winding note: the
+  // cap advances along −T, which flips handedness vs the wall quads — the
+  // outward order here is the MIRROR of the tip-cap order.
+  if (opts.capBase && baseR > 0.015) {
+    const baseP = br.pts[0] as Vector3;
+    const baseD = br.dirs[0] as Vector3;
+    const first = rings[0] as number[];
+    const center = g.vertex(
+      baseP.x - baseD.x * baseR * 0.4,
+      baseP.y - baseD.y * baseR * 0.4,
+      baseP.z - baseD.z * baseR * 0.4,
+      -baseD.x, -baseD.y, -baseD.z,
+      0.5, 0.5, opts.hue, opts.swayFlexBase, opts.swayPhase, 0.55,
+    );
+    const jag: number[] = [];
+    for (let k = 0; k <= segsAround; k++) {
+      const px = baseP.x + ((firstRingPos[k * 3] as number) - baseP.x) * 0.45;
+      const py = baseP.y + ((firstRingPos[k * 3 + 1] as number) - baseP.y) * 0.45;
+      const pz = baseP.z + ((firstRingPos[k * 3 + 2] as number) - baseP.z) * 0.45;
+      const spike = (rng.float() * 0.9 + 0.25) * baseR * 1.4;
+      jag.push(
+        g.vertex(
+          px - baseD.x * spike, py - baseD.y * spike, pz - baseD.z * spike,
+          -baseD.x, -baseD.y, -baseD.z,
+          0.5, 0.5, opts.hue, opts.swayFlexBase, opts.swayPhase, 0.5,
+        ),
+      );
+    }
+    for (let k = 0; k < segsAround; k++) {
+      g.quad(first[k] as number, jag[k] as number, jag[k + 1] as number, first[k + 1] as number);
+      g.tri(jag[k] as number, center, jag[k + 1] as number);
     }
   }
 
@@ -241,8 +283,8 @@ export function tubeForBranch(
       );
     }
     for (let k = 0; k < segsAround; k++) {
-      g.quad(last[k] as number, jag[k] as number, jag[k + 1] as number, last[k + 1] as number);
-      g.tri(jag[k] as number, center, jag[k + 1] as number);
+      g.quad(last[k] as number, last[k + 1] as number, jag[k + 1] as number, jag[k] as number);
+      g.tri(jag[k + 1] as number, center, jag[k] as number);
     }
   } else {
     // taper to a point
@@ -255,7 +297,7 @@ export function tubeForBranch(
       opts.hue, opts.swayFlexTip, opts.swayPhase, 1,
     );
     for (let k = 0; k < segsAround; k++) {
-      g.tri(last[k] as number, tip, last[k + 1] as number);
+      g.tri(last[k + 1] as number, tip, last[k] as number);
     }
   }
 }

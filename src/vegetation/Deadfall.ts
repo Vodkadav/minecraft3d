@@ -51,6 +51,7 @@ export function buildLog(rng: Rng, decay: DecayState): BuiltDeadfall {
       ringSegs: 13,
       uRepeats: 3,
       vScale: 1,
+      capBase: true, // free-lying: both ends visible
       swayPhase: 0,
       swayFlexBase: 0,
       swayFlexTip: 0,

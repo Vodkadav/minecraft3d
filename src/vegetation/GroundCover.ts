@@ -200,8 +200,31 @@ export function twigGeometry(rng: Rng): BufferGeometry {
     const a = rings[i] as number[];
     const b = rings[i + 1] as number[];
     for (let k = 0; k < ring; k++) {
-      g.quad(a[k] as number, b[k] as number, b[k + 1] as number, a[k + 1] as number);
+      // base-ring-first = front faces outward (same fix as TubeMesh)
+      g.quad(a[k] as number, a[k + 1] as number, b[k + 1] as number, b[k] as number);
     }
+  }
+  // end caps: fallen-branch variants scale twigs 6.5× — open tube ends read
+  // as holes there. Base fan faces −d0, tip fan +dEnd (mirrored winding).
+  const d0 = dirs[0] as Vector3;
+  const dE = dirs[segs] as Vector3;
+  const p0 = pts[0] as Vector3;
+  const pE = pts[segs] as Vector3;
+  const r0v = radii[0] as number;
+  const rEv = radii[segs] as number;
+  const first = rings[0] as number[];
+  const lastR = rings[segs] as number[];
+  const base = g.vertex(
+    p0.x - d0.x * r0v * 0.6, p0.y - d0.y * r0v * 0.6, p0.z - d0.z * r0v * 0.6,
+    -d0.x, -d0.y, -d0.z, 0.5, 0, hue, 0, 0, 0.8,
+  );
+  const tip = g.vertex(
+    pE.x + dE.x * rEv * 0.8, pE.y + dE.y * rEv * 0.8, pE.z + dE.z * rEv * 0.8,
+    dE.x, dE.y, dE.z, 0.5, 1, hue, 0, 0, 0.85,
+  );
+  for (let k = 0; k < ring; k++) {
+    g.tri(first[k] as number, base, first[k + 1] as number);
+    g.tri(lastR[k + 1] as number, tip, lastR[k] as number);
   }
   return g.build();
 }

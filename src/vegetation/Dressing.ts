@@ -78,7 +78,8 @@ export function buildVines(
       const a = ringIds[i] as number[];
       const b = ringIds[i + 1] as number[];
       for (let k = 0; k < ringN; k++) {
-        stems.quad(a[k] as number, b[k] as number, b[k + 1] as number, a[k + 1] as number);
+        // base-ring-first = fronts outward (same fix as TubeMesh)
+        stems.quad(a[k] as number, a[k + 1] as number, b[k + 1] as number, b[k] as number);
       }
     }
     // leaf cards along the strand
@@ -146,7 +147,9 @@ export function buildMushroom(rng: Rng, kind: 'cap' | 'shelf'): BufferGeometry {
     const a = rowIds[i] as number[];
     const b = rowIds[i + 1] as number[];
     for (let k = 0; k < SEG; k++) {
-      g.quad(a[k] as number, a[k + 1] as number, b[k + 1] as number, b[k] as number);
+      // x/z angle param is LEFT-handed vs the tube basis → reversed order
+      // here puts cap-top fronts outward (was inside-out on FrontSide)
+      g.quad(a[k] as number, b[k] as number, b[k + 1] as number, a[k + 1] as number);
     }
   }
   // gill underside disc

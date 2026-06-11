@@ -201,6 +201,9 @@ export function deadwoodMaterial(
   mat.aoNode = a.w;
   mat.roughnessNode = mix(b.z, float(1), moss);
   mat.metalness = 0;
+  // same crossfade insurance as bark: a dither hole in a FrontSide closed
+  // tube shows clean through (interior wall is a back face)
+  mat.side = DoubleSide;
   return mat;
 }
 
