@@ -1,6 +1,7 @@
 /** LAAS entry point — boot sequence with fail-loud diagnostics. */
 
 import { BootUI } from './core/BootUI';
+import { browserGate } from './core/BrowserGate';
 import {
   describeDiagnostics,
   failLoud,
@@ -22,6 +23,9 @@ import { buildScene, registerScene, type WorldContext } from './debug/Scenes';
 async function boot(): Promise<void> {
   const hooks = initHooks();
   installGlobalErrorHooks();
+  // environment gate BEFORE any loading: mobile / non-Chromium / missing
+  // WebGPU each get a clear notice instead of a broken boot (?nogate=1 skips)
+  if (!browserGate()) return;
   const params = parseParams();
   const bootUI = new BootUI(hooks);
 
@@ -32,7 +36,10 @@ async function boot(): Promise<void> {
     failLoud('WebGPU unavailable — LAAS has no fallback by design', [
       diag.reason ?? 'unknown reason',
       '',
-      'Requirements: Chrome/Edge 113+, Safari 26+, or equivalent with WebGPU enabled.',
+      'Chrome exposes WebGPU here, but no usable GPU adapter came up. Check:',
+      '  • chrome://gpu — WebGPU should read “Hardware accelerated”',
+      '  • Settings → System → hardware acceleration ON, then relaunch',
+      '  • update Chrome and the GPU driver',
     ]);
     return;
   }

@@ -219,6 +219,18 @@ cov 0.62), contact shadows (?ablate=contact to A/B), black facets root-caused to
   pointerlockerror/rejection. Verified HEADED via tools/probe-pointerlock.ts:
   first-click lock 2 ms; click-right-after-exit re-locks unaided in
   1270 ms; no unhandled rejections.
+  BROWSER GATE ADDED (2026-06-12, user-requested — Safari/Firefox fail
+  to boot): src/core/BrowserGate.ts runs BEFORE any engine work:
+  (1) mobile/tablet → "a computer is required" (userAgentData.mobile,
+  classic UA markers, iPadOS Macintosh-UA + maxTouchPoints masquerade —
+  never screen size); (2) non-Chromium → "Google Chrome is required"
+  (UA-CH brands first, "Chrome/" UA token fallback — HeadlessChrome
+  passes both, tooling unaffected, verified by a headless sanity boot);
+  (3) Chromium without navigator.gpu → actionable checklist (update /
+  hardware acceleration / chrome://gpu / Linux Vulkan flag). Adapter-null
+  keeps the richer probeWebGPU diagnostics overlay (Safari 26+ claims
+  dropped from its text). ?nogate=1 escape hatch. PENDING USER CONFIRM:
+  live Safari/Firefox/mobile messaging (user testing themselves).
 
 - **USER FEEDBACK BATCH 2 — COMPLETE (2026-06-12, commits f245787..ca941b9).**
   All 11 items + 3 live follow-ups landed, each verified by shots and

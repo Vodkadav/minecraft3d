@@ -45,8 +45,7 @@ export async function probeWebGPU(): Promise<GpuDiagnostics> {
   if (!('gpu' in navigator) || !navigator.gpu) {
     return {
       ok: false,
-      reason:
-        'navigator.gpu is missing — this browser has no WebGPU. Use Chrome/Edge 113+ or Safari 26+.',
+      reason: 'navigator.gpu is missing — this browser has no WebGPU. Use Chrome 113+.',
       features: [],
       limits: {},
     };
