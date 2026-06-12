@@ -37,6 +37,7 @@ import {
   PERIOD_RID,
   PERIOD_VAL,
 } from '../gpu/passes/NoiseBake';
+import { sunU } from './VegMaterials';
 import { zoneMasks, type MacroParams } from '../world/MacroMap';
 import { LAKE_LEVEL, WORLD_HALF, WORLD_SIZE } from '../world/WorldConst';
 
@@ -252,6 +253,26 @@ export function buildTerrainShading(inp: TerrainShadingInputs): TerrainShading {
   col = mix(col, vec3(0.055, 0.052, 0.038), pondK);
   col = mix(col, snowCol, snowW);
   col = col.mul(macroTint.add(1));
+
+  // feedback 2.8 (splat half): a real grass field is DIRECTIONAL — forward
+  // scatter through backlit blades brightens and warms it toward the sun at
+  // grazing view angles. Distance-gated: near meadows have actual blades
+  // (g0–g3); this gives the 200 m+ sward the same directional life so the
+  // far layers dissolve into a live field, not flat paint.
+  {
+    const vDir = positionWorld.sub(cameraPosition).normalize();
+    const sunD = vec3(sunU.dir as unknown as NV3).normalize();
+    const toSun = vDir.dot(sunD).max(0);
+    const grazing = float(1).sub(baseNormal.dot(vDir.negate()).abs()).pow2();
+    const sheenK = grassW
+      .mul(snowW.oneMinus())
+      .mul(toSun.pow(3))
+      .mul(grazing)
+      .mul(smoothstep(0.05, 0.22, sunD.y))
+      .mul(smoothstep(60, 220, positionWorld.sub(cameraPosition).length()))
+      .mul(0.55);
+    col = col.add(vec3(0.085, 0.1, 0.032).mul(sheenK)) as NV3;
+  }
 
   // gorge/ravine wall vegetation (scene1: ravine walls are NOT bare — they
   // carry moss bands, hanging greens and ledge clumps). Steep faces in damp

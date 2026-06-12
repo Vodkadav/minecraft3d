@@ -60,6 +60,7 @@ import {
   storage,
   texture,
   time,
+  transformNormalToView,
   uint,
   uniform,
   uniformArray,
@@ -96,10 +97,15 @@ const GRASS_CAPS = [524288, 1048576, 1835008]; // near/mid/far compact regions
 
 /**
  * Continuous distance thinning, conserved by blade widening (1/√thin in the
- * vertex stage). thin(0..~40 m) = 1; ~0.45 at 100 m; ~0.3 at 155 m.
+ * vertex stage). thin(0..~40 m) = 1; ~0.45 at 100 m; ~0.16 at 155 m.
+ * Beyond ~120 m an extra collapse folds coverage into ever-wider
+ * super-tufts so the band reaches GRASS_R without a vertex explosion
+ * (feedback 2.8: grass should render much farther, cheaply).
  */
 function grassThin(dist: NF): NF {
-  return float(58).div(dist.max(1).add(42)).min(1).pow(1.15);
+  const base = float(58).div(dist.max(1).add(42)).min(1).pow(1.15);
+  const far = float(120).div(dist.max(120)).pow(1.6);
+  return base.mul(far);
 }
 
 const DEB_GRID = 512;
@@ -107,6 +113,15 @@ const DEB_CELL = 0.3; // ±77 m ring
 const DEB_R = 74;
 // cobble / pebble / twig / chip / litter
 const DEB_CAPS = [24576, 49152, 49152, 32768, 65536];
+
+// far super-tuft layer (g3, feedback 2.8): its own COARSE toroidal grid —
+// the fine grid physically ends at ±161 m. Wide merged tufts carry the
+// meadow silhouette 150→265 m; beyond that the terrain splat owns it.
+const FAR_GRID = 768;
+const FAR_CELL = 0.7; // ±269 m ring, ~2 slots/m²
+const FAR_R0 = 150;
+const FAR_R = 265;
+const FAR_CAP = 196608;
 
 interface RingBind {
   cells: StorageBufferNode<'uint'>;
@@ -231,12 +246,11 @@ function bladeClump(blades: number, segs: number): BufferGeometry {
 }
 
 /** three crossed wide blades — far-band tuft (≈ a small clump in one card) */
-function tuftGeometry(): BufferGeometry {
+function tuftGeometry(W = 0.04): BufferGeometry {
   const pos: number[] = [];
   const nrm: number[] = [];
   const uvA: number[] = [];
   const idx: number[] = [];
-  const W = 0.04;
   for (let k = 0; k < 3; k++) {
     const a = k * 1.92 + 0.4;
     const c = Math.cos(a);
@@ -249,7 +263,14 @@ function tuftGeometry(): BufferGeometry {
       [-W * 0.55, 1],
     ] as const) {
       pos.push(u * c, v, u * s);
-      nrm.push(-s * 0.97, 0.25, c * 0.97);
+      // rounded cross-section (see grassBladeGeometry): edges tilt ±38°
+      // toward the width axis (c,0,s)
+      const sgn = u < 0 ? -1 : 1;
+      nrm.push(
+        -s * 0.97 * 0.788 + sgn * 0.616 * c,
+        0.25,
+        c * 0.97 * 0.788 + sgn * 0.616 * s,
+      );
       uvA.push(u < 0 ? 0 : 1, v);
     }
     idx.push(base, base + 2, base + 1, base, base + 3, base + 2);
@@ -273,7 +294,7 @@ export class GroundRing {
   private reading = false;
   private frame = 0;
   private counters!: ReturnType<StorageBufferNode<'uint'>['toAtomic']>;
-  private caps: number[] = [...GRASS_CAPS, ...DEB_CAPS];
+  private caps: number[] = [...GRASS_CAPS, ...DEB_CAPS, FAR_CAP];
 
   constructor(
     private hf: Heightfield,
@@ -565,6 +586,68 @@ export class GroundRing {
     })().compute(DEB_GRID * DEB_GRID);
     debrisK.setName('debrisRingCull');
 
+    // ---------------- far super-tuft cull (g3) -----------------------------------
+    const farK = Fn(() => {
+      const i = instanceIndex;
+      If(i.greaterThanEqual(FAR_GRID * FAR_GRID), () => {
+        Return();
+      });
+      const sx = float(i.mod(FAR_GRID));
+      const sy = float(i.div(FAR_GRID));
+      const wc = worldCell(sx, sy, FAR_GRID, FAR_CELL);
+      const jit = cellHash2(wc, salt ^ 0x6f21);
+      const wpos = wc.add(jit).mul(FAR_CELL);
+      const dist = wpos.sub(vec2(camU.x, camU.z)).length();
+      If(dist.lessThan(FAR_R0 - 16).or(dist.greaterThan(FAR_R)), () => {
+        Return();
+      });
+      const uvW = wpos.div(WORLD_SIZE).add(0.5);
+      const bio = texture(
+        hf.biomeTex as NonNullable<typeof hf.biomeTex>,
+        uvW,
+        0,
+      ) as unknown as NV4;
+      const fl = texture(
+        hf.fieldsTex as NonNullable<typeof hf.fieldsTex>,
+        uvW,
+        0,
+      ) as unknown as NV4;
+      const ns = texture(hf.normalTex, uvW, 0) as unknown as NV4;
+      const bioId = bio.x.mul(8).add(0.5).floor().toInt();
+      const h = hf.sampleHeight(wpos);
+      const above = h.sub(hf.sampleWaterYNearest(wpos));
+      If(above.lessThan(0.06), () => {
+        Return();
+      });
+      const canopy = canopyAt(canopyTex, wpos);
+      const bank = smoothstep(0.06, 0.5, above).mul(
+        float(1).sub(smoothstep(0.2, 1.1, fl.z).mul(0.78)),
+      );
+      const dens = byBio(bioId, [0.18, 0.7, 0.62, 0.7, 1.5, 1.1])
+        .mul(bank)
+        .mul(bio.z.mul(0.85).add(0.15))
+        .mul(float(1).sub(bio.w.mul(0.55)))
+        .mul(float(1).sub(canopy.mul(0.45)))
+        .mul(float(1).sub(bio.y.mul(0.95)))
+        .mul(float(1).sub(smoothstep(0.55, 0.95, ns.w)));
+      // ramp IN over the fine band's dissolve, OUT at the splat handoff
+      const fadeIn = smoothstep(FAR_R0 - 16, FAR_R0 + 14, dist);
+      const edge = float(1).sub(smoothstep(FAR_R * 0.93, FAR_R, dist));
+      If(
+        cellHash(wc, salt ^ 0x55aa).greaterThanEqual(
+          dens.mul(fadeIn).mul(edge).mul(0.55),
+        ),
+        () => {
+          Return();
+        },
+      );
+      If(inFrustum(vec3(wpos.x, h.add(0.6), wpos.y), 1.6).lessThan(0.5), () => {
+        Return();
+      });
+      appendRing(int(8), wc, h);
+    })().compute(FAR_GRID * FAR_GRID);
+    farK.setName('farTuftCull');
+
     // ---------------- draws -------------------------------------------------------
     const draws: { geo: BufferGeometry; mat: MeshStandardNodeMaterial; g: number }[] = [];
 
@@ -585,6 +668,21 @@ export class GroundRing {
       const mat = this.grassMaterial(bindL, grassFades[l] ?? [null, null], l === 2);
       this.patchGI(mat);
       draws.push({ geo: grassGeos[l] as BufferGeometry, mat, g: l });
+    }
+
+    // far super-tufts: one draw on the coarse list, wide cards, full
+    // terrain-normal shading (mode 'far' in grassMaterial)
+    {
+      const bindF: RingBind = {
+        cells,
+        heights,
+        base: offsets[8] ?? 0,
+        cell: FAR_CELL,
+        salt: salt ^ 0x6f21,
+      };
+      const matF = this.grassMaterial(bindF, [null, null], true, true);
+      this.patchGI(matF);
+      draws.push({ geo: tuftGeometry(0.21), mat: matF, g: 8 });
     }
 
     const rng = this.seed.rng('groundring/geo');
@@ -646,7 +744,7 @@ export class GroundRing {
     })().compute(D);
     indirectK.setName('ringIndirect');
 
-    this.kernels = [clearK, grassK, debrisK, indirectK];
+    this.kernels = [clearK, grassK, debrisK, farK, indirectK];
   }
 
   /** blade/tuft material — color matched to the terrain grass palette */
@@ -654,6 +752,7 @@ export class GroundRing {
     bind: RingBind,
     fades: [number | null, number | null],
     tuft: boolean,
+    far = false,
   ): MeshStandardNodeMaterial {
     const mat = new MeshStandardNodeMaterial();
     const { wc, y, wpos } = fetchRing(bind);
@@ -662,13 +761,16 @@ export class GroundRing {
     const patch = cellHash2(wc.mul(0.125).floor(), bind.salt ^ 0x3333);
     const tilt = cellHash2(wc, bind.salt ^ 0x4545).sub(0.5).mul(0.5);
     const dist = wpos.sub(vec2(cameraPosition.x, cameraPosition.z)).length();
-    // width compensation for the continuous thinning — coverage conserved
-    const widen = float(1).div(grassThin(dist).sqrt()).clamp(1, 2.6);
+    // width compensation for the continuous thinning — coverage conserved.
+    // far mode: coarse-grid super-tufts have their own fixed footprint
+    const widen = far
+      ? h2.y.mul(0.8).add(1.6)
+      : float(1).div(grassThin(dist).sqrt()).clamp(1, 4);
     const bladeH = h2.x
       .pow(1.3)
-      .mul(0.3)
-      .add(0.2)
-      .mul(tuft ? 2.0 : 1)
+      .mul(far ? 0.42 : 0.3)
+      .add(far ? 0.34 : 0.2)
+      .mul(tuft && !far ? 2.0 : 1)
       .mul(widen.sub(1).mul(0.3).add(1));
     const yawA = h2.y.mul(6.2831853);
     const c = yawA.cos();
@@ -697,14 +799,16 @@ export class GroundRing {
         .mul(st.mul(0.55).add(0.6))
         .mul(tN.mul(tN))
         .mul(bladeH.mul(0.42));
-      const flut = time
-        .mul(5.2)
-        .add(h2.x.mul(6.2832))
-        .add(wpos.x.add(wpos.y).mul(0.9))
-        .sin()
-        .mul(tN)
-        .mul(amp)
-        .mul(0.05);
+      const flut = far
+        ? (float(0) as NF)
+        : time
+            .mul(5.2)
+            .add(h2.x.mul(6.2832))
+            .add(wpos.x.add(wpos.y).mul(0.9))
+            .sin()
+            .mul(tN)
+            .mul(amp)
+            .mul(0.05);
       dx = wd.x.mul(bend).sub(wd.y.mul(flut));
       dz = wd.y.mul(bend).add(wd.x.mul(flut));
       dy = bend.mul(tN).mul(-0.4);
@@ -715,6 +819,29 @@ export class GroundRing {
       ls.y.add(y).add(dy),
       rz.add(tilt.y.mul(ls.y)).add(dz).add(wpos.y),
     );
+    // Blade shading normal (feedback 2.7+2.9): yaw-rotate the baked rounded
+    // normal, then pull it toward the TERRAIN normal — a sward lights like
+    // the hillside it grows on (the GoT move; per-blade card normals made
+    // meadows sparkle gray). Harder pull with distance: near keeps blade
+    // curvature, far converges on the splat so the g2 band dissolves clean.
+    const nR = vec3(
+      normalLocal.x.mul(c).add(normalLocal.z.mul(s)),
+      normalLocal.y,
+      normalLocal.z.mul(c).sub(normalLocal.x.mul(s)),
+    );
+    const tNrm = (
+      texture(
+        this.hf.normalTex,
+        wpos.div(WORLD_SIZE).add(0.5),
+        0,
+      ) as unknown as NV4
+    ).xyz.normalize();
+    const upK = far
+      ? (float(1) as NF)
+      : smoothstep(8, 70, dist).mul(0.35).add(0.5);
+    mat.normalNode = transformNormalToView(
+      mix(nR.normalize(), tNrm, upK).normalize() as unknown as NV3,
+    ) as unknown as typeof mat.normalNode;
 
     const t = uv().y as unknown as NF;
     const fresh = mix(
@@ -809,10 +936,11 @@ export class GroundRing {
       const c = new Uint32Array(ab);
       const n = (g: number): number => Math.min(c[g] ?? 0, this.caps[g] ?? 0);
       this.hud = {
-        'veg.grass': n(0) + n(1) + n(2),
+        'veg.grass': n(0) + n(1) + n(2) + n(8),
         'veg.g0': n(0),
         'veg.g1': n(1),
         'veg.g2': n(2),
+        'veg.g3': n(8),
         'veg.debris': n(3) + n(4) + n(5) + n(6) + n(7),
       };
     } finally {

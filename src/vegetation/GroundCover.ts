@@ -36,6 +36,11 @@ export function grassBladeGeometry(SEG = 4): BufferGeometry {
   const idx: number[] = [];
   const W = 0.014;
   const H = 1; // unit height; instance scales
+  // rounded cross-section normals (Ghost of Tsushima): edge verts tilt
+  // ±38° around the blade axis so the strip shades like a half-cylinder
+  // instead of a flat card — interpolation does the curving per-pixel
+  const SN = 0.616;
+  const CS = 0.788;
   let bendZ = 0;
   for (let i = 0; i <= SEG; i++) {
     const t = i / SEG;
@@ -44,7 +49,7 @@ export function grassBladeGeometry(SEG = 4): BufferGeometry {
     const y = t * H * (1 - t * t * 0.06);
     if (i < SEG) {
       pos.push(-w, y, bendZ, w, y, bendZ);
-      nrm.push(0, 0.25, -1, 0, 0.25, -1);
+      nrm.push(-SN, 0.25, -CS, SN, 0.25, -CS);
       uvA.push(0, t, 1, t);
     } else {
       pos.push(0, y, bendZ);
