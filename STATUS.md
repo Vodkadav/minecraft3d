@@ -196,100 +196,80 @@ cov 0.62), contact shadows (?ablate=contact to A/B), black facets root-caused to
 
 ## Next actions (always keep current)
 
-- **USER FEEDBACK BATCH 2 (2026-06-12, live session after Phase 6 +
-  bookmarks) — WORK THIS LIST FIRST, in roughly this order. User wording
-  preserved; agent root-cause notes inline.**
-  1. WIND NEEDS A BIGGER REWORK (user-flagged twice; top priority).
-     Symptoms: (a) "move slower for a bit, then they shake two times,
-     over and over" — repetitive shared rhythm; (b) cliff-top tree
-     "shaking more wildly, v fast, looks kinda bugged out"; (c) design:
-     "things should be logically swaying MORE, not faster, in strong
-     wind. and skeletally (could be faked) swaying". Grass "semi-okay".
-     THREE CONFIRMED CAUSES in Wind.ts:
-     (i) PHASE-EXPLOSION BUG: f1 = sin(time·(3.4+gust·1.6)) — time ×
-         TIME-VARYING frequency ⇒ phase = t·f(t); any gust change slews
-         phase by t·Δf — at t=10 min a 1% gust wobble = ~10 rad/frame ⇒
-         chaotic fast jitter, worst where gust VARIANCE is high (exposed
-         cliff tops), grows with session time. NEVER multiply `time` by
-         a varying frequency — integrate phase or use fixed freq + noise.
-     (ii) fixed-frequency sine trio (1.1/2.3/3.4 Hz) beats in a global
-         repeating envelope — every plant shares the tempo.
-     (iii) strength wired into FREQUENCY feel instead of amplitude.
-     REWORK DESIGN (fake-skeletal, vertex-only, keep it cheap):
-     - mean LEAN downwind ∝ strength² × exposure (whole plant, ls.y²
-       cantilever profile from the base — reads as the trunk bending).
-     - slow SWAY around the lean at a per-instance NATURAL frequency
-       (hash: 0.15–0.45 Hz, big trees slower via pool scale), amplitude
-       ∝ gust strength (NOT freq) — damped-spring feel: drive with the
-       traveling gust field sampled at the instance + a small fixed-freq
-       resonant term whose AMPLITUDE follows the gust.
-     - branch SECONDARY motion: vdata.y-scaled deflection that LAGS the
-       trunk (sample the gust field with a small upwind offset ≈ time
-       lag), modest aperiodic flutter from advected noise (no sines with
-       varying freq; per-instance fixed freq jitter ok).
-     - leaf/card micro-flutter amplitude ∝ strength, fades by ~120 m.
-     - grass: keep current feel (user ok), just inherit the lean² rule.
-  2. FOG WASHES OUT THE SCENE: "so global that it simply washes out the
-     scene... already washed out feeling". FIX: cut Froxels base density
-     (fogK default 1.0 → ~0.4), make it valley/moisture-SELECTIVE
-     (stronger ground-hug, much weaker altitude layer), near-zero at
-     noon; reduce the flat ambient in-scatter term (it lifts blacks
-     everywhere = wash). Also consider scene contrast generally (user
-     says scene already felt washed out BEFORE fog — grade/exposure may
-     need a contrast pass; check ColorScript noon curve).
-  3. WATER NEAR-CAMERA REPETITIVE PATTERN: "the water thing you did
-     recently added a weird very repetitive pattern close to the camera.
-     i get the idea" — = CAUSTICS (6 m tile, integer wave lattice is
-     periodic INSIDE the tile too). FIX: domain-warp the caustic sample
-     uv (fbm gradient offset), bigger tile (6→11 m?), second decorrelated
-     tap (different scale/rotation) blended — kill visible tiling. Maybe
-     also slightly lower gain near camera.
-  4. SNOW PARTICLES: fine, leave.
-  5. IMPOSTOR OUTLINE (older bug): "blurrying... at edges turns into an
-     outline effect... easy to distinguish impostors from actual trees".
-     ROOT CAUSE: atlas alpha-edge bleed — bilinear samples across the
-     alpha boundary mix in background/empty texel RGB → halo. FIX:
-     post-capture RGB DILATION into transparent texels (flood edge colors
-     outward, Impostors.ts capture step) + check alphaTest/mip settings
-     on the impostor material.
-  6. LOD RING TRANSPARENCY BANDS (older bug): "two easy to distinguish
-     rings around the camera where things are more transparent, no
-     overlap". ROOT CAUSE CONFIRMED IN CODE: applyDitherFade masks BOTH
-     rings with IGN.lessThan(fade) — incoming ring's drawn pixel set is a
-     SUBSET of outgoing's (both small-IGN), so at a 50/50 crossover 50%
-     of pixels draw NEITHER ring = hole bands. FIX: COMPLEMENTARY dither —
-     fade-IN rings must use the inverted pattern (draw when IGN >
-     1−fade) so out+in partition the pixels exactly. VegInstance
-     applyDitherFade: invert for fadeInAt edge. Re-check band widths
-     after (holes were probably most of the visible banding).
-  7. GRASS NORMALS: user asks if blade normals point UP (terrain-normal
-     trick). CHECK GroundRing grass: if using geometric blade normals,
-     switch to up/terrain-blended.
-  8. GRASS DISTANCE: render much farther, cheaply — "bake a texture of
-     what grass would look like from afar... or industry best tricks".
-     PLAN: extend the tuft-cross band (g2) far beyond 155 m with
-     aggressive coverage-conserving thinning+widening; strengthen the
-     splat match (it IS the baked far layer) + consider a view-dependent
-     grass sheen term on the splat so distant meadows get the directional
-     brightness real grass fields have.
-  9. ROUNDED BLADE NORMALS (Ghost of Tsushima trick): curve the normal
-     across blade width (half-cylinder shading) instead of flat card
-     normal — do together with 7.
-  10. SUN DISC TOO SMALL: "small dot instead of a normal sized sun" —
-     Atmosphere background sun disc: render 2.5–4× angular size with a
-     soft limb (games oversize the disc; 0.53° physical reads tiny).
-  11. SUNLIT FOLIAGE TURNS SILVER: "sunlight... makes things SILVER...
-     loses color, grayish". ROOT CAUSE: white dielectric specular at
-     glancing sun on foliage cards (F0 0.04 + roughness still lets a
-     desaturating white sheen through; cards have one flat normal each =
-     coherent sheen). FIX: cut specularIntensity on foliage/card
-     materials to ~0.2–0.3 (keep a little for life), rely on
-     translucency+diffuse for the lit look. Check grass too.
-  Suggested order: 6 (pure win, small), 1 (top complaint), 2, 3, 11, 10,
-  7+9, 5, 8. Re-shoot canonical framings after each; commit per item or
-  small groups. These fold INTO Phase 7 (user-feedback loop is part of
-  the phase's "final delta" work).
-
+- **USER FEEDBACK BATCH 2 — COMPLETE (2026-06-12, commits f245787..ca941b9).**
+  All 11 items + 3 live follow-ups landed, each verified by shots and
+  committed separately:
+  1. WIND REWORK (f245787→7fa4fc3): fake-skeletal hierarchy — mean lean
+     ∝ strength²·exposure (cantilever (y/(y+h0))²), per-instance natural
+     frequency sway 0.15–0.45 Hz/√scale (amplitude ∝ gust, NEVER
+     frequency; no time×varying-freq anywhere — the phase-explosion bug
+     and the shared sine tempo are gone by construction), branch motion
+     lags via downwind-offset gust sampling, aperiodic flutter from
+     advected fbm GRADIENT channels, all motion fades 380–480 m
+     (impostors rigid). Pools: trees{1,1,6}, understory{1,1.8,0.9},
+     snags stiff{0.45,0.8,6}. Grass keeps its feel + lean² rule.
+     LIVE FOLLOW-UP (b9badf8): "leaves shaking wildly" — flutter was
+     ±11 cm @ ~3.4 Hz decorrelation → ±2.5 cm @ ~0.75 Hz (6 m features,
+     4.5 m/s advection, amp 0.3→0.07). Cards translate rigidly (vdata
+     phase is per-card — verified).
+  2. FOG (bce5013): fogK 1.0→0.4, noon near-zero (todK floor 0.12),
+     ground-hug dominates (0.8 w, 20 m scale) vs altitude blanket (0.2),
+     moisture-selective m²+0.25 floor, ambient in-scatter 0.045→0.018
+     × (0.4+0.6·sunVis). Morning meadow no longer whites out at 50 m;
+     dawn-lake mist survives (thinner — judge live).
+  3. CAUSTIC TILING (9186b2f): tile 6→11 m w/ lattice scaled ×1.83 (same
+     physical k-band), 9 waves (2 diagonals break lattice symmetry),
+     STATIC fbm-gradient domain warp ±0.9 m. No repeat along 40 m of
+     channel (?view=caust2 top-down).
+     LIVE FOLLOW-UP (ca941b9): "horribly strong in shallow water" —
+     FOCAL RAMP smoothstep(0.04,0.5,depth) (cm-deep water can't focus
+     0.3–1.1 m waves); gains terrain 2.2→1.7, rocks/debris 1.6→1.3.
+  5. IMPOSTOR HALO (5233b8d): capture clears to transparent BLACK and
+     edge taps mixed it in → per-tile ring-BFS RGB dilation (albedo +
+     normal + depth) into the empty space before composing the atlas.
+  6. LOD DITHER HOLES (f245787): COMPLEMENTARY dither — fade-IN edges
+     draw IGN ≥ 1−fade so paired rings partition pixels exactly; bands
+     must MATCH across each boundary (ring2 got inBand=BAND1/band=BAND2
+     for the impostor edge). Grass cull now double-appends boundary-band
+     cells to BOTH layers (single-list assignment halved density even
+     with complementary dither); caps 512k/1M/1.75M.
+  10. SUN DISC (1431777): 0.014 rad (3× physical), softer limb, radiance
+     120→50 SUN_E (flux ×3.7, not ×9).
+  11. SILVER WASH (51e5d0d): user flagged trees, then terrain too — F0
+     0.04 Schlick saturation at glancing sun. MeshPhysicalNodeMaterial
+     + specularIntensity: cards 0.18 / hero leaves 0.3 / impostors 0.25
+     / canopy shell 0.2 / terrain 0.35 / rock 0.4 / bark+deadwood 0.45.
+     (MeshStandardNodeMaterial hardcodes F0 — physical variant is the
+     sanctioned hook, same lighting model, zero cost.)
+  7+9. GRASS NORMALS (a1d664f): half-cylinder rounding BAKED into
+     blade/tuft vertex normals (±38°), material yaw-rotates the normal
+     (was unrotated!) and blends toward TERRAIN normal 0.5→0.85 with
+     distance. Sward lights like its hillside; shadows drape smoothly.
+  8. FAR GRASS (a1d664f): g3 layer — coarse toroidal grid (768²×0.7 m =
+     ±269 m, the fine grid physically ends at ±161 m) of wide
+     super-tufts 150→265 m, kernel-density ramp-in, full terrain-normal
+     shading, bend-only wind; grassThin far-collapse (120/d)^1.6; splat
+     gains view-dependent directional sheen (forward-scatter toward sun,
+     gated >60 m). veg.g3 counter added.
+  4. SNOW: fine per user — untouched.
+- **EXPOSED while fixing fog (was fog-covered; ablate-discriminated
+  2026-06-12): large-lake FAR RIM = solid black stripe at grazing.**
+  NOT caustics/biofilm (survives ?ablate=caustics), IS water pixels
+  (vanishes with ?ablate=water): grazing fresnel mirrors the flat dark
+  SSR-miss fallback where off-screen trees can't be hit. This RAISES the
+  planar-lake-pass priority (was optional polish) — the old "thin dark
+  band" diagnosis (min-reduced far field) is the same symptom family but
+  the dominant term at bookmark 2 is the reflection fallback.
+- **NEW ARTIFACT (spotted in batch-2 verification shots, 2026-06-12):
+  smooth featureless gray-green BLOB ROCKS** — perfectly smooth shaded
+  blobs with no texture/strata, seen in bm4 foreground (big one), the
+  meadow top-down (several ~1 m blobs on grass), gallery-of-suspects:
+  StoneM/StoneL far ring swap at 120 m (EX_R1_FAR low-detail rock), a
+  rock material variant losing its detail nodes, or shadow-proxy-like
+  geometry drawing in main view. INVESTIGATE NEXT (?clsdbg=1 flat-colors
+  classes; ?ablate=veg isolates). Also noticed bm7 (forest interior)
+  frames a trunk close-up — re-pose that bookmark during Phase-7
+  bookmark polish.
 - **PHASE 6 COMPLETE (2026-06-12, commits eef662f..51aba85) — all six
   systems built, verified by shots, gate DELTA written.** What landed
   this session (beyond the user-confirmed water v1):
