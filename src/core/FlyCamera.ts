@@ -297,8 +297,11 @@ export class FlyCamera {
       this.grounded = false;
       this.jumpAt = -1;
     }
+    // velocity-Verlet half-step: the arc is EXACTLY ballistic at any dt
+    // (plain semi-implicit Euler biases the jump apex by −v0·dt/2 —
+    // frame-rate-dependent jump height)
+    this.basePos.y += (this.velY - GRAVITY * dt * 0.5) * dt;
     this.velY -= GRAVITY * dt;
-    this.basePos.y += this.velY * dt;
 
     const g = probe(this.basePos.x, this.basePos.z);
     const eyeFloor = g.ground + EYE_HEIGHT;
