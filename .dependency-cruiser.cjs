@@ -31,17 +31,17 @@ module.exports = {
     {
       name: "game-application-no-downward",
       comment:
-        "Application (use cases + ports) must not import infrastructure or ui — the composition root wires those in.",
+        "Application (use cases + ports) must not import infrastructure or ui — the composition root wires those in. Test files are exempt: a *.test.ts is a mini composition root that legitimately wires a concrete honest fake to exercise the use case.",
       severity: "error",
-      from: { path: "^src/game/application/" },
+      from: { path: "^src/game/application/", pathNot: "\\.test\\.ts$" },
       to: { path: "^src/game/(infrastructure|ui)/" },
     },
     {
       name: "game-ui-no-infrastructure",
       comment:
-        "UI consumes application ports + domain types only; concrete adapters are injected at the composition root.",
+        "UI consumes application ports + domain types only; concrete adapters are injected at the composition root. Test files are exempt (see above).",
       severity: "error",
-      from: { path: "^src/game/ui/" },
+      from: { path: "^src/game/ui/", pathNot: "\\.test\\.ts$" },
       to: { path: "^src/game/infrastructure/" },
     },
     {
