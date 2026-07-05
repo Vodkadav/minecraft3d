@@ -1,0 +1,32 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# GPU-render smoke tests (tools/) are intentionally NOT run here: WebGPU is
+# disabled in Headless Chrome and needs a GPU-enabled runner + flag set
+# (--enable-unsafe-webgpu --use-angle=vulkan ...). See docs/research findings §8.
+# CI gates the pure build path; render verification stays local for now.
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build
+        run: npm run build
