@@ -14,11 +14,11 @@ Live: https://vodkadav.github.io/minecraft3d/ (desktop Chrome + WebGPU).
 - [x] CI gate (typecheck + build) — green
 - [x] Deploy to GitHub Pages (free) — live
 - [ ] M0.4 ESLint/Prettier (non-blocking → blocking) — deferred
-- [ ] M0.5 Vitest for game-logic layers — deferred until first testable logic
+- [x] M0.5 Vitest + dependency-cruiser (layer rules) wired into the CI gate — game-logic layers
 - [ ] M1 Mobile PWA shell + capability gating (manifest, service worker, storage.persist, mobile preset)
-- [ ] M2 World framing: save architecture, seed vault, adjustable boundary
-- [ ] M3 Game-logic core: item registry, inventory, crafting, gathering (TDD)
-- [ ] M4 Menu, settings, multiplayer lobby UI
+- [x] M2 World framing: save architecture (OPFS/IndexedDB ports + fakes), seed vault, adjustable boundary — TDD, renderer-free
+- [x] M3 Game-logic core: item registry, inventory, crafting, gathering — TDD, renderer-free
+- [~] M4 Menu, settings, multiplayer lobby UI — i18n engine done; menu/settings/lobby shells in progress
 - [ ] M5 Spawning: proximity-gated, tunable density (research-first)
 - [ ] M6 Characters & creatures: animation, taming, riding
 - [ ] M7 Multiplayer: player-hosted P2P (research-first)
@@ -30,3 +30,7 @@ Live: https://vodkadav.github.io/minecraft3d/ (desktop Chrome + WebGPU).
   flag/preset-gated.
 - Open research questions (resolve before their milestone): iOS Safari WebGPU status; spawn-density
   systems; physics-building/crafting patterns; persistent-world P2P netcode. See the research doc.
+- Game logic lives under `src/game/{domain,application,infrastructure,ui}` (layered, dependency-cruiser
+  enforced) — additive, renderer-free, and separate from the untouched LAAS engine (`src/core`, `render`,
+  `gpu`, `world`, `sky`, `vegetation`, `debug`). This is the Opus-owned block; Fable's [F] engine work
+  (voxel terrain, mobile fidelity, netcode transport) plugs into these ports.
