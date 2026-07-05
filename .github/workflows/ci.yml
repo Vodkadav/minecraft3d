@@ -28,5 +28,11 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      - name: Test (game-logic units)
+        run: npm run test:run
+
+      - name: Architecture (layer rules)
+        run: npm run arch
+
       - name: Build
         run: npm run build
