@@ -14,7 +14,10 @@ import type { Locale } from "../domain/i18n/translate";
 import { InMemorySeedVaultStore } from "../infrastructure/persistence/InMemorySeedVaultStore";
 import { InMemoryWorldSaveStore } from "../infrastructure/persistence/InMemoryWorldSaveStore";
 import { LocalStorageSettingsStore } from "../infrastructure/persistence/LocalStorageSettingsStore";
+import { NavigatorPersistentStorage } from "../infrastructure/persistence/NavigatorPersistentStorage";
 import type { SettingsStore } from "../application/ports/SettingsStore";
+import type { PersistentStorage } from "../application/ports/PersistentStorage";
+import { ensurePersistentStorage } from "../application/StoragePersistence";
 import { LobbyController } from "../application/LobbyController";
 import { MainMenuController } from "../application/MainMenuController";
 import { SettingsController } from "../application/SettingsController";
@@ -28,6 +31,7 @@ import { SettingsView } from "../ui/SettingsView";
 export interface GameUiOptions {
   readonly locale?: Locale;
   readonly settingsStore?: SettingsStore;
+  readonly persistentStorage?: PersistentStorage;
   readonly onLaunch?: (session: LoopbackSession) => void;
 }
 
@@ -46,19 +50,40 @@ export function mountGameUi(
   const menu = new MainMenuController(worlds);
   const lobby = new LobbyController(worlds, seeds);
   const settings = new SettingsController(settingsStore);
+  const persistentStorage =
+    options.persistentStorage ?? new NavigatorPersistentStorage();
   const loc = createLocalizer(options.locale ?? "en");
   void settings.load();
 
   let mounted: MenuScreen | null = null;
 
-  const launch = (session: LoopbackSession) => options.onLaunch?.(session);
+  // Persist-permission is requested once, at the first world launch (= first
+  // save), so a world is not LRU-evicted (research §7). The grant state is
+  // surfaced in an aria-live status line.
+  const status = document.createElement("p");
+  status.setAttribute("role", "status");
+  status.setAttribute("aria-live", "polite");
+  status.className = "laas-storage-status";
+  let persistRequested = false;
+
+  const launch = (session: LoopbackSession) => {
+    if (!persistRequested) {
+      persistRequested = true;
+      void ensurePersistentStorage(persistentStorage).then((r) => {
+        status.textContent = r.persisted
+          ? loc.t("storage.persisted")
+          : loc.t("storage.notPersisted");
+      });
+    }
+    options.onLaunch?.(session);
+  };
   const toMenu = () => {
     menu.back();
     reconcile();
   };
 
   const show = (el: HTMLElement) => {
-    container.replaceChildren(el);
+    container.replaceChildren(el, status);
   };
 
   function reconcile(): void {

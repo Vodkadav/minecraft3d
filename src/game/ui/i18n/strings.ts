@@ -45,6 +45,9 @@ export const UI_STRINGS: Catalog = {
     "lobby.pickSeed": "Pick a saved seed to host",
     "lobby.seed.none": "No saved seeds yet.",
     "lobby.seed.use": "Host with {name}",
+
+    "storage.persisted": "Storage is protected — your worlds won't be evicted.",
+    "storage.notPersisted": "Storage is best-effort — worlds may be evicted under pressure.",
   },
   es: {
     "app.title": "Caja de Arena de Supervivencia",
@@ -82,6 +85,9 @@ export const UI_STRINGS: Catalog = {
     "lobby.pickSeed": "Elige una semilla guardada para crear",
     "lobby.seed.none": "Aún no hay semillas guardadas.",
     "lobby.seed.use": "Crear con {name}",
+
+    "storage.persisted": "El almacenamiento está protegido: tus mundos no se eliminarán.",
+    "storage.notPersisted": "Almacenamiento de mejor esfuerzo: los mundos podrían eliminarse.",
   },
   da: {
     "app.title": "Overlevelses-Sandkasse",
@@ -119,6 +125,9 @@ export const UI_STRINGS: Catalog = {
     "lobby.pickSeed": "Vælg et gemt frø at være vært for",
     "lobby.seed.none": "Ingen gemte frø endnu.",
     "lobby.seed.use": "Vær vært med {name}",
+
+    "storage.persisted": "Lageret er beskyttet — dine verdener bliver ikke slettet.",
+    "storage.notPersisted": "Bedste forsøg-lager — verdener kan blive slettet ved pladsmangel.",
   },
 };
 

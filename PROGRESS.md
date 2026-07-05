@@ -15,7 +15,8 @@ Live: https://vodkadav.github.io/minecraft3d/ (desktop Chrome + WebGPU).
 - [x] Deploy to GitHub Pages (free) — live
 - [ ] M0.4 ESLint/Prettier (non-blocking → blocking) — deferred
 - [x] M0.5 Vitest + dependency-cruiser (layer rules) wired into the CI gate — game-logic layers
-- [ ] M1 Mobile PWA shell + capability gating (manifest, service worker, storage.persist, mobile preset)
+- [~] M1 Mobile PWA shell — manifest, service worker (offline precache), capability-tier gate,
+  storage.persist done ([O]); mobile-reduced render preset [F, Fable] + iOS Safari WebGPU check [R] remain
 - [x] M2 World framing: save architecture (OPFS/IndexedDB ports + fakes), seed vault, adjustable boundary — TDD, renderer-free
 - [x] M3 Game-logic core: item registry, inventory, crafting, gathering — TDD, renderer-free
 - [x] M4 Menu, settings, multiplayer lobby UI — EN/ES/DA, a11y baseline, Host/Join loopback (netcode M7)

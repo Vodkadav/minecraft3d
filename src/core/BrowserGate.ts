@@ -25,6 +25,10 @@
  */
 
 import { failLoud } from './Diagnostics';
+import {
+  classifyCapabilityTier,
+  type CapabilityResult,
+} from '../game/domain/capability/CapabilityTier';
 
 interface UAClientHints {
   mobile?: boolean;
@@ -58,16 +62,42 @@ export function isChromiumBrowser(): boolean {
   return /Chrome\//.test(navigator.userAgent);
 }
 
+/**
+ * Coarse capability classification from the current environment. The adapter
+ * probe is async (Diagnostics.probeWebGPU) so `adapterOk` is left unknown here;
+ * the gate acts on device class + browser engine + WebGPU presence, and the
+ * async probe fails loudly later if the adapter itself is unusable.
+ */
+export function detectCapabilityTier(): CapabilityResult {
+  return classifyCapabilityTier({
+    isMobile: isMobileDevice(),
+    isChromium: isChromiumBrowser(),
+    hasWebGpu: 'gpu' in navigator && !!navigator.gpu,
+  });
+}
+
 /** @returns true when boot may proceed; false after rendering a notice */
 export function browserGate(): boolean {
   if (new URLSearchParams(window.location.search).get('nogate') === '1') return true;
 
+  const { tier } = detectCapabilityTier();
+  if (tier === 'desktop-full') return true;
+
+  // Classified but not runnable yet — show the most actionable notice. Mobile
+  // messaging wins first: telling a phone user to toggle hardware acceleration
+  // would be wrong. The mobile-reduced render path is M1.6 (Fable) — until it
+  // lands, a WebGPU-capable phone/tablet is acknowledged but still directed to
+  // desktop rather than dropped into the full desktop path.
   if (isMobileDevice()) {
-    failLoud('A computer is required', [
-      'LAAS pushes desktop-class GPU work through WebGPU — phone and tablet',
-      'browsers are not supported.',
+    failLoud('Mobile support is on the way', [
+      tier === 'mobile-reduced'
+        ? 'Your device supports WebGPU, but the reduced-fidelity mobile render'
+        : 'Phone and tablet browsers are not supported yet, and this device does',
+      tier === 'mobile-reduced'
+        ? 'path is still in development.'
+        : 'not expose the WebGPU support LAAS needs.',
       '',
-      'Please revisit from a desktop or laptop running Google Chrome.',
+      'For now, please open LAAS on a desktop or laptop running Google Chrome.',
     ]);
     return false;
   }
@@ -83,20 +113,16 @@ export function browserGate(): boolean {
     return false;
   }
 
-  if (!('gpu' in navigator) || !navigator.gpu) {
-    failLoud('WebGPU is unavailable in this browser', [
-      'You are on a Chromium browser, but it does not expose WebGPU.',
-      '',
-      'Things to check:',
-      '  • Update Chrome — WebGPU needs version 113 or newer.',
-      '  • Settings → System → “Use hardware acceleration” must be ON',
-      '    (relaunch after changing it).',
-      '  • chrome://gpu should list WebGPU as “Hardware accelerated”.',
-      '  • On Linux, recent Chrome may need chrome://flags/#enable-vulkan',
-      '    or launching with --enable-features=Vulkan.',
-    ]);
-    return false;
-  }
-
-  return true;
+  failLoud('WebGPU is unavailable in this browser', [
+    'You are on a Chromium browser, but it does not expose WebGPU.',
+    '',
+    'Things to check:',
+    '  • Update Chrome — WebGPU needs version 113 or newer.',
+    '  • Settings → System → “Use hardware acceleration” must be ON',
+    '    (relaunch after changing it).',
+    '  • chrome://gpu should list WebGPU as “Hardware accelerated”.',
+    '  • On Linux, recent Chrome may need chrome://flags/#enable-vulkan',
+    '    or launching with --enable-features=Vulkan.',
+  ]);
+  return false;
 }
