@@ -18,7 +18,7 @@ Live: https://vodkadav.github.io/minecraft3d/ (desktop Chrome + WebGPU).
 - [ ] M1 Mobile PWA shell + capability gating (manifest, service worker, storage.persist, mobile preset)
 - [x] M2 World framing: save architecture (OPFS/IndexedDB ports + fakes), seed vault, adjustable boundary — TDD, renderer-free
 - [x] M3 Game-logic core: item registry, inventory, crafting, gathering — TDD, renderer-free
-- [~] M4 Menu, settings, multiplayer lobby UI — i18n engine done; menu/settings/lobby shells in progress
+- [x] M4 Menu, settings, multiplayer lobby UI — EN/ES/DA, a11y baseline, Host/Join loopback (netcode M7)
 - [ ] M5 Spawning: proximity-gated, tunable density (research-first)
 - [ ] M6 Characters & creatures: animation, taming, riding
 - [ ] M7 Multiplayer: player-hosted P2P (research-first)
