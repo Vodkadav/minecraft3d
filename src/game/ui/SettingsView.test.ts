@@ -1,0 +1,83 @@
+// @vitest-environment happy-dom
+import { describe, expect, it, beforeEach } from "vitest";
+import { isOk } from "../domain/Result";
+import { InMemorySettingsStore } from "../infrastructure/persistence/InMemorySettingsStore";
+import { SettingsController } from "../application/SettingsController";
+import { createLocalizer } from "./i18n/strings";
+import { SettingsView } from "./SettingsView";
+
+const flush = () => new Promise((r) => setTimeout(r, 0));
+
+async function build() {
+  const store = new InMemorySettingsStore();
+  const controller = new SettingsController(store);
+  await controller.load();
+  const el = SettingsView(controller, createLocalizer("en"));
+  document.body.appendChild(el);
+  return { store, controller, el };
+}
+
+function control<T extends HTMLElement>(el: HTMLElement, id: string): T {
+  const found = el.querySelector<T>(`#${id}`);
+  if (!found) throw new Error(`no control #${id}`);
+  return found;
+}
+
+describe("SettingsView", () => {
+  beforeEach(() => {
+    document.body.innerHTML = "";
+  });
+
+  it("renders a graphics select that includes the mobile preset", async () => {
+    const { el } = await build();
+    const select = control<HTMLSelectElement>(el, "laas-graphics");
+    const values = [...select.options].map((o) => o.value);
+    expect(values).toEqual(["low", "mobile", "high", "ultra"]);
+  });
+
+  it("associates every control with a label", async () => {
+    const { el } = await build();
+    for (const id of [
+      "laas-graphics",
+      "laas-density",
+      "laas-radius",
+      "laas-locale",
+      "laas-contrast",
+      "laas-textscale",
+      "laas-motion",
+    ]) {
+      const label = el.querySelector(`label[for="${id}"]`);
+      expect(label, `label for ${id}`).toBeTruthy();
+    }
+  });
+
+  it("flows an animal-density change through the controller and store", async () => {
+    const { el, controller, store } = await build();
+    const density = control<HTMLInputElement>(el, "laas-density");
+    density.value = "0.2";
+    density.dispatchEvent(new Event("change"));
+    await flush();
+
+    expect(controller.settings.animalDensity).toBeCloseTo(0.2);
+    const reloaded = await store.load();
+    if (isOk(reloaded)) expect(reloaded.value.animalDensity).toBeCloseTo(0.2);
+  });
+
+  it("flows the high-contrast toggle through the controller", async () => {
+    const { el, controller } = await build();
+    const toggle = control<HTMLInputElement>(el, "laas-contrast");
+    toggle.checked = true;
+    toggle.dispatchEvent(new Event("change"));
+    await flush();
+    expect(controller.settings.highContrast).toBe(true);
+  });
+
+  it("flows the boundary-radius change through the controller", async () => {
+    const { el, controller } = await build();
+    const radius = control<HTMLInputElement>(el, "laas-radius");
+    radius.value = "1000";
+    radius.dispatchEvent(new Event("change"));
+    await flush();
+    expect(controller.settings.boundaryRadius).toBe(1000);
+  });
+});
