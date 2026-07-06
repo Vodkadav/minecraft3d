@@ -34,12 +34,21 @@ import { VoxelTerrain } from '../voxel/VoxelTerrain';
 import { attachPlacementTool } from '../voxel/placement/PlacementTool';
 import { attachTreasureField } from '../voxel/treasure/TreasureField';
 import { attachSpawnField } from '../spawn/SpawnFieldView';
+import { createPlayerHealthBar } from '../spawn/PlayerHealthBar';
+import {
+  PLAYER_MAX_HEALTH,
+  damagePlayer,
+  respawnPlayer,
+  spawnPlayerVitals,
+  tickVitals,
+} from '../game/domain/combat/PlayerVitals';
 import { LocalStorageSettingsStore } from '../game/infrastructure/persistence/LocalStorageSettingsStore';
 import { SettingsController } from '../game/application/SettingsController';
 import { IndexedDbKeyValueStore } from '../game/infrastructure/persistence/IndexedDbKeyValueStore';
 import { OpfsBlobStore } from '../game/infrastructure/persistence/OpfsBlobStore';
 import { PersistentWorldSaveStore } from '../game/infrastructure/persistence/PersistentWorldSaveStore';
 import type { WorldContext } from './Scenes';
+import type { CamPose } from '../core/Hooks';
 
 export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
   const { engine, params, seed } = ctx;
@@ -327,6 +336,7 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
     ctx.progress(0.985, 'voxel: restoring digs');
     await voxels.init();
     voxelsRef = voxels;
+    if (ctx.world) ctx.world.voxels = voxels; // M7 net glue reaches it here
     engine.scene.add(voxels.group);
     new DigTool(voxels, engine.camera, engine.renderer.domElement);
     window.addEventListener('pagehide', () => voxels.flushSave());
@@ -382,6 +392,14 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
   if (spawnsOn && view !== 'split') {
     const settings = new SettingsController(new LocalStorageSettingsStore());
     await settings.load();
+    // M6 player health: only wild worlds (spawns on) can hurt you, so the
+    // vitals + bar live here. Death respawns full at the start position — a
+    // family game loses your spot, never your progress.
+    let vitals = spawnPlayerVitals();
+    // reposition through the fly camera's own seam (setPose owns basePos too —
+    // a raw camera.position.set is stomped by fly.update the same frame)
+    let respawnPose: CamPose | null = null;
+    const healthBar = createPlayerHealthBar();
     const spawns = attachSpawnField({
       seed: params.seed,
       ground: {
@@ -392,6 +410,17 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
       getPlayerXZ: () => [engine.camera.position.x, engine.camera.position.z],
       density: settings.settings.animalDensity,
       dom: engine.renderer.domElement,
+      onPlayerHit: (amount) => {
+        const r = damagePlayer(vitals, amount);
+        vitals = r.state;
+        healthBar.set(vitals.health / PLAYER_MAX_HEALTH);
+        healthBar.flashDamage();
+        if (r.died) {
+          vitals = respawnPlayer(vitals);
+          if (respawnPose) ctx.hooks.setPose?.(respawnPose);
+          healthBar.set(1);
+        }
+      },
       ...(voxelsRef
         ? {
             save: {
@@ -401,7 +430,13 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
           }
         : {}),
     });
-    engine.onUpdate((dt) => spawns.update(dt));
+    engine.onUpdate((dt) => {
+      spawns.update(dt);
+      if (!respawnPose) respawnPose = ctx.hooks.getPose?.() ?? null; // spawn = respawn
+      const before = vitals.health;
+      vitals = tickVitals(vitals, dt);
+      if (vitals.health !== before) healthBar.set(vitals.health / PLAYER_MAX_HEALTH);
+    });
   }
 
   // camera spawn: ground-clamped (?alt/x/z → fly) or the DEFAULT WALK SPAWN

@@ -21,7 +21,16 @@ import { VoxelTerrain, type VoxelSurface } from '../voxel/VoxelTerrain';
 import { attachPlacementTool } from '../voxel/placement/PlacementTool';
 import { attachTreasureField } from '../voxel/treasure/TreasureField';
 import { attachSpawnField } from '../spawn/SpawnFieldView';
+import { createPlayerHealthBar } from '../spawn/PlayerHealthBar';
+import {
+  PLAYER_MAX_HEALTH,
+  damagePlayer,
+  respawnPlayer,
+  spawnPlayerVitals,
+  tickVitals,
+} from '../game/domain/combat/PlayerVitals';
 import type { WorldContext } from './Scenes';
+import type { CamPose } from '../core/Hooks';
 
 const GROUND_SIZE = 320;
 const GROUND_SEGS = 200;
@@ -112,6 +121,11 @@ export async function buildVoxelDevScene(ctx: WorldContext): Promise<void> {
 
   // M5/M6 proximity-gated spawns: creatures roam/flee/aggro; F attacks,
   // E harvests (placeholder primitives; models are M6.1)
+  let vitals = spawnPlayerVitals();
+  // reposition via the fly camera seam (setPose owns basePos; a raw
+  // camera.position.set is stomped by fly.update the same frame)
+  let respawnPose: CamPose | null = null;
+  const healthBar = createPlayerHealthBar();
   const spawns = attachSpawnField({
     seed: params.seed,
     ground: surface,
@@ -119,12 +133,29 @@ export async function buildVoxelDevScene(ctx: WorldContext): Promise<void> {
     getPlayerXZ: () => [engine.camera.position.x, engine.camera.position.z],
     density: 1,
     dom: engine.renderer.domElement,
+    onPlayerHit: (amount) => {
+      const r = damagePlayer(vitals, amount);
+      vitals = r.state;
+      healthBar.set(vitals.health / PLAYER_MAX_HEALTH);
+      healthBar.flashDamage();
+      if (r.died) {
+        vitals = respawnPlayer(vitals);
+        if (respawnPose) ctx.hooks.setPose?.(respawnPose);
+        healthBar.set(1);
+      }
+    },
     save: {
       entity: (k) => voxels.entity(k),
       setEntity: (k, v) => voxels.setEntity(k, v),
     },
   });
-  engine.onUpdate((dt) => spawns.update(dt));
+  engine.onUpdate((dt) => {
+    spawns.update(dt);
+    if (!respawnPose) respawnPose = ctx.hooks.getPose?.() ?? null;
+    const before = vitals.health;
+    vitals = tickVitals(vitals, dt);
+    if (vitals.health !== before) healthBar.set(vitals.health / PLAYER_MAX_HEALTH);
+  });
   (window as unknown as { __laasDbg?: Record<string, unknown> }).__laasDbg = {
     engine,
     voxels,

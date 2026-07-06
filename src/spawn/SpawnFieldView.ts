@@ -56,6 +56,10 @@ const STEP_INTERVAL_S = 1.0;
 const REACH_M = 3.5;
 /** Player hit damage per attack press (tools/weapons arrive later). */
 const ATTACK_DAMAGE = 10;
+/** How close an aggressive creature must get to bite the player (m). */
+const CONTACT_RANGE_M = 2.2;
+/** Minimum gap between a creature's bites on the player (s). */
+const BITE_COOLDOWN_S = 1.2;
 /** Wander waypoints change every this many ms. */
 const WANDER_EPOCH_MS = 8000;
 
@@ -77,6 +81,8 @@ export interface SpawnFieldDeps {
   readonly save?: SpawnSave;
   /** Called with the stacks gained from a kill/harvest (HUD hook). */
   onLoot?(stacks: readonly ItemStack[]): void;
+  /** An aggressive creature bit the player (M6 player health). */
+  onPlayerHit?(amount: number): void;
 }
 
 export interface SpawnFieldHandle {
@@ -97,6 +103,8 @@ interface CreatureEntry {
   taming: TamingState;
   /** Seconds left of the death clip; set when killed, removed at zero. */
   dying: number | null;
+  /** clockMs of this creature's last bite on the player (bite cooldown). */
+  lastBiteMs: number;
 }
 
 export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
@@ -188,6 +196,7 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
         combat: spawnCombatState(s.species),
         taming: tamed.has(s.id) ? { ...taming, phase: "tamed" } : taming,
         dying: null,
+        lastBiteMs: -Infinity,
       });
       return;
     }
@@ -341,9 +350,21 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
       const z = c.obj.position.z;
       const stats = CREATURE_STATS[c.entity.species];
       const healthFrac = stats ? c.combat.health / stats.maxHealth : 1;
+      const distToPlayer = Math.hypot(x - px, z - pz);
+      // an aggressive wild creature that reaches the player bites, on cooldown
+      if (
+        stats &&
+        stats.damage > 0 &&
+        c.taming.phase !== "tamed" &&
+        distToPlayer <= CONTACT_RANGE_M &&
+        clockMs - c.lastBiteMs >= BITE_COOLDOWN_S * 1000
+      ) {
+        c.lastBiteMs = clockMs;
+        deps.onPlayerHit?.(stats.damage);
+      }
       const behavior = decideBehavior(
         c.entity.species,
-        Math.hypot(x - px, z - pz),
+        distToPlayer,
         healthFrac,
         c.taming.phase === "tamed",
       );
