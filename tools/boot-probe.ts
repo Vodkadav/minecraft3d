@@ -45,6 +45,13 @@ async function main(): Promise<void> {
   const urlOpts: Parameters<typeof laasUrl>[0] = { scene };
   const preset = str(args.get('preset'));
   if (preset) urlOpts.preset = preset;
+  // --q spawns=1,voxel=1 → extra query params on the boot URL
+  const q = str(args.get('q'));
+  if (q) {
+    urlOpts.extra = Object.fromEntries(
+      q.split(',').map((kv) => kv.split('=') as [string, string]),
+    );
+  }
   const url = laasUrl(urlOpts);
   console.log(`[probe] ${url}`);
   await page.goto(url, { waitUntil: 'domcontentloaded' });

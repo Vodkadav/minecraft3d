@@ -151,6 +151,16 @@ were rated unreliable and dropped). The following is **domain knowledge, not ver
 
 **This section needs its own research pass** (see open questions).
 
+> **RESOLVED (2026-07-06, M5.1):** verified against the Minecraft wiki before building — mobs
+> spawn only in chunks with a player within a 128-block sphere, never within 24 blocks of any
+> player, despawn instantly beyond 128, bounded by global + per-player caps
+> ([Mob spawning](https://minecraft.wiki/w/Mob_spawning),
+> [Mob caps](https://techmcdocs.github.io/pages/GameMechanics/MobCap/)). The domain-knowledge
+> sketch above matches. Implemented in `src/game/domain/spawn/` (24 m no-spawn ring, 128 m
+> spawn/active range, 160 m despawn hysteresis, per-cell budget × density, `hash(seed, epoch,
+> cell, salt)`); global/per-player caps skipped for now (single-player budgets already bound
+> counts) — revisit at M7 multiplayer.
+
 ---
 
 ## 5. Creature AI, taming & character systems (three.js)

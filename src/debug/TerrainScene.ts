@@ -33,6 +33,9 @@ import { DigTool } from '../voxel/DigTool';
 import { VoxelTerrain } from '../voxel/VoxelTerrain';
 import { attachPlacementTool } from '../voxel/placement/PlacementTool';
 import { attachTreasureField } from '../voxel/treasure/TreasureField';
+import { attachSpawnField } from '../spawn/SpawnFieldView';
+import { LocalStorageSettingsStore } from '../game/infrastructure/persistence/LocalStorageSettingsStore';
+import { SettingsController } from '../game/application/SettingsController';
 import { IndexedDbKeyValueStore } from '../game/infrastructure/persistence/IndexedDbKeyValueStore';
 import { OpfsBlobStore } from '../game/infrastructure/persistence/OpfsBlobStore';
 import { PersistentWorldSaveStore } from '../game/infrastructure/persistence/PersistentWorldSaveStore';
@@ -367,6 +370,27 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
       onDiscovered: (_t, _reward, state) => voxels.setEntity('treasure.discovered', state),
     });
     engine.onUpdate((dt) => treasures.update(dt));
+  }
+
+  // M5 proximity-gated spawns — same gate shape as the voxel subsystem (menu
+  // launch always; URL boots opt in with ?spawns=1); density = the M4 slider
+  const spawnsOn =
+    ctx.world !== undefined ||
+    new URLSearchParams(window.location.search).get('spawns') === '1';
+  if (spawnsOn && view !== 'split') {
+    const settings = new SettingsController(new LocalStorageSettingsStore());
+    await settings.load();
+    const spawns = attachSpawnField({
+      seed: params.seed,
+      ground: {
+        heightAt: (x, z) => hf.heightAtCpu(x, z),
+        waterAt: (x, z) => hf.waterYAtCpu(x, z),
+      },
+      parent: engine.scene,
+      getPlayerXZ: () => [engine.camera.position.x, engine.camera.position.z],
+      density: settings.settings.animalDensity,
+    });
+    engine.onUpdate((dt) => spawns.update(dt));
   }
 
   // camera spawn: ground-clamped (?alt/x/z → fly) or the DEFAULT WALK SPAWN

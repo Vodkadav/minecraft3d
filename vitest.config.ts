@@ -12,6 +12,7 @@ export default defineConfig({
       "src/game/**/*.test.ts",
       "src/voxel/**/*.test.ts",
       "src/gpu/**/*.test.ts",
+      "src/spawn/**/*.test.ts",
     ],
     environment: "node",
     globals: false,

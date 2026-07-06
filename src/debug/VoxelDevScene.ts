@@ -20,6 +20,7 @@ import { DigTool } from '../voxel/DigTool';
 import { VoxelTerrain, type VoxelSurface } from '../voxel/VoxelTerrain';
 import { attachPlacementTool } from '../voxel/placement/PlacementTool';
 import { attachTreasureField } from '../voxel/treasure/TreasureField';
+import { attachSpawnField } from '../spawn/SpawnFieldView';
 import type { WorldContext } from './Scenes';
 
 const GROUND_SIZE = 320;
@@ -108,6 +109,16 @@ export async function buildVoxelDevScene(ctx: WorldContext): Promise<void> {
     onDiscovered: (_t, _reward, state) => voxels.setEntity('treasure.discovered', state),
   });
   engine.onUpdate((dt) => treasures.update(dt));
+
+  // M5 proximity-gated spawns (placeholder primitives; models are M6)
+  const spawns = attachSpawnField({
+    seed: params.seed,
+    ground: surface,
+    parent: scene,
+    getPlayerXZ: () => [engine.camera.position.x, engine.camera.position.z],
+    density: 1,
+  });
+  engine.onUpdate((dt) => spawns.update(dt));
   (window as unknown as { __laasDbg?: Record<string, unknown> }).__laasDbg = {
     engine,
     voxels,

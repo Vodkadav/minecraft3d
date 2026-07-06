@@ -22,7 +22,15 @@ Live: https://vodkadav.github.io/minecraft3d/ (desktop Chrome + WebGPU).
 - [x] M2 World framing: save architecture (OPFS/IndexedDB ports + fakes), seed vault, adjustable boundary — TDD, renderer-free
 - [x] M3 Game-logic core: item registry, inventory, crafting, gathering — TDD, renderer-free
 - [x] M4 Menu, settings, multiplayer lobby UI — EN/ES/DA, a11y baseline, Host/Join loopback (netcode M7)
-- [ ] M5 Spawning: proximity-gated, tunable density (research-first)
+- [~] M5 Spawning — done 2026-07-06 except interaction: 5.1 research verified (Minecraft model,
+  see research doc §4); 5.2 deterministic seeded field (`domain/spawn/SpawnField`, TDD:
+  hash(seed, epoch, cell, salt), per-cell budget × the M4 `animalDensity` slider); 5.3 proximity
+  gate (`domain/spawn/SpawnProximity`, TDD: 24 m no-spawn ring, 128 m spawn range, 160 m despawn
+  hysteresis, nearest-player multi-player rule, removed-ids seam); 5.4 terrain placement
+  (`src/spawn/`: walkable-ground validity above-water + slope, placeholder primitives per
+  species, wired into voxeldev + world under the menu-launch/?spawns=1 gate; verified aerial
+  shot + world boot). Remaining: harvest/kill interaction (arrives with M6 combat / M3 gathering
+  wiring); global spawn caps deferred to M7 multiplayer.
 - [ ] M6 Characters & creatures: animation, taming, riding
 - [ ] M7 Multiplayer: player-hosted P2P (research-first)
 - [~] M8 Hybrid voxel terrain (Fable-led) — Fable [F] core done (2026-07-06): 8.1 SDF chunk store
