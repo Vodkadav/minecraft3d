@@ -28,6 +28,12 @@ import { PostStack } from '../render/PostStack';
 import { setupSunShadows } from '../render/ShadowSetup';
 import { Clouds } from '../sky/Clouds';
 import { SunSky } from '../sky/SunSky';
+import { DigMask } from '../voxel/DigMask';
+import { DigTool } from '../voxel/DigTool';
+import { VoxelTerrain } from '../voxel/VoxelTerrain';
+import { IndexedDbKeyValueStore } from '../game/infrastructure/persistence/IndexedDbKeyValueStore';
+import { OpfsBlobStore } from '../game/infrastructure/persistence/OpfsBlobStore';
+import { PersistentWorldSaveStore } from '../game/infrastructure/persistence/PersistentWorldSaveStore';
 import type { WorldContext } from './Scenes';
 
 export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
@@ -76,6 +82,15 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
   const ablate = new Set(
     (new URLSearchParams(window.location.search).get('ablate') ?? '').split(','),
   );
+  // M1.6 mobile-reduced fidelity cuts — every gate composes with ?ablate=
+  // and leaves low/high/ultra byte-identical to before
+  const mobile = params.preset === 'mobile';
+
+  // M8 hybrid voxel terrain (?voxel=1) — additive and flag-gated: a no-flags
+  // boot never builds the mask, so the terrain material graph is unchanged
+  const voxelOn =
+    new URLSearchParams(window.location.search).get('voxel') === '1';
+  const digMask = voxelOn ? new DigMask() : null;
 
   // irradiance probe field (Phase 3 GI; canopy-aware since Phase 5 —
   // ?ablate=canopygi rebuilds the bare-heightfield field for A/B)
@@ -130,7 +145,11 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
       post.update(engine.camera);
     });
   } else {
-    const tiles = new TerrainTiles(hf, view, { gi, canopyTex });
+    const tiles = new TerrainTiles(hf, view, {
+      gi,
+      canopyTex,
+      ...(digMask ? { digMask } : {}),
+    });
     engine.scene.add(tiles.mesh);
     engine.scene.add(tiles.farShell);
     // ?ablate=proxy — drop the terrain shadow caster (shadow-debug bisect)
@@ -159,6 +178,13 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
     const lib = await buildVegLibrary(engine.renderer, seed, (p, m) =>
       ctx.progress(0.963 + p * 0.006, m),
     );
+    // mobile: halve per-class draw distances before Forests bakes them into
+    // its cull buffers (trees stay ~infinite — impostors carry the far field)
+    if (mobile) {
+      for (let i = 0; i < lib.clsMaxDist.length; i++) {
+        lib.clsMaxDist[i] = (lib.clsMaxDist[i] ?? 150) * 0.5;
+      }
+    }
     const forests = new Forests(
       hf,
       scatter,
@@ -176,7 +202,8 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
     });
 
     // near-field carpets: 800k-blade grass ring + 80k debris ring
-    if (!ablate.has('grass')) {
+    // (mobile: skipped outright — the largest instance carpet in the frame)
+    if (!ablate.has('grass') && !mobile) {
       const ring = new GroundRing(hf, canopyTex, seed, ablate.has('gi') ? null : gi);
       ring.init(lib.atlases.get('beech') ?? null);
       engine.scene.add(ring.group);
@@ -205,8 +232,12 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
   });
 
   // 4-cascade CSM + PCSS contact hardening; cloud shadows gate the sun term
-  const shadowRig = setupSunShadows(sunSky.sun, engine.camera, (wxz) =>
-    clouds.shadowAt(wxz),
+  // (mobile: 2 cascades on a 1024² map over a shorter 1200 m range)
+  const shadowRig = setupSunShadows(
+    sunSky.sun,
+    engine.camera,
+    (wxz) => clouds.shadowAt(wxz),
+    mobile ? { maxFar: 1200, cascades: 2, mapSize: 1024 } : undefined,
   );
   // cascade cameras drive the per-cascade caster cull in Forests
   forestsRef?.setCSM(shadowRig.csm ?? null);
@@ -216,17 +247,20 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
     shadowRig,
   };
 
-  // GPU particles: snow/pollen/leaves riding the wind (?ablate=particles)
+  // GPU particles: snow/pollen/leaves riding the wind (?ablate=particles;
+  // mobile keeps a token 4096-particle population)
   if (view !== 'split' && !ablate.has('particles')) {
-    const parts = new Particles(hf, canopyTex, ablate.has('gi') ? null : gi);
+    const partCount = mobile ? 4096 : PARTICLE_COUNT;
+    const parts = new Particles(hf, canopyTex, ablate.has('gi') ? null : gi, partCount);
     engine.scene.add(parts.mesh);
     engine.onUpdate((dt) => parts.update(engine.renderer, engine.camera, dt));
-    engine.stats.counters['particles'] = PARTICLE_COUNT;
+    engine.stats.counters['particles'] = partCount;
   }
 
-  // froxel volumetrics: canopy shafts + valley fog (?ablate=froxels, ?fog=N)
+  // froxel volumetrics: canopy shafts + valley fog (?ablate=froxels, ?fog=N;
+  // mobile: skipped — PostStack already handles the froxels-null path)
   let froxels: Froxels | null = null;
-  if (!ablate.has('froxels')) {
+  if (!ablate.has('froxels') && !mobile) {
     froxels = new Froxels(hf, sunSky.atmosphere, canopyTex, clouds);
     const fq = Number(new URLSearchParams(window.location.search).get('fog') ?? NaN);
     if (Number.isFinite(fq)) froxels.fogK.value = fq;
@@ -260,6 +294,42 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
     ground: hf.heightAtCpu(x, z),
     water: hf.waterYAtCpu(x, z),
   });
+
+  // M8 voxel digging: chunk meshes + dig input + delta persistence. The
+  // ground probe becomes cavern-aware so walk mode can descend into digs.
+  if (digMask && view !== 'split') {
+    const store =
+      'storage' in navigator && 'getDirectory' in navigator.storage
+        ? new PersistentWorldSaveStore(new OpfsBlobStore(), new IndexedDbKeyValueStore())
+        : null;
+    const voxels = new VoxelTerrain(
+      { heightAt: (x, z) => hf.heightAtCpu(x, z) },
+      digMask,
+      params.seed,
+      store,
+    );
+    ctx.progress(0.985, 'voxel: restoring digs');
+    await voxels.init();
+    engine.scene.add(voxels.group);
+    new DigTool(voxels, engine.camera, engine.renderer.domElement);
+    window.addEventListener('pagehide', () => voxels.flushSave());
+    // tooling probe handle (tools/voxel-shot.ts) — programmatic digs in CI-less runs
+    (
+      window as unknown as { __laasDbg?: Record<string, unknown> }
+    ).__laasDbg = Object.assign(
+      (window as unknown as { __laasDbg?: Record<string, unknown> }).__laasDbg ?? {},
+      { voxels },
+    );
+
+    const surfaceProbe = ctx.hooks.groundProbe;
+    ctx.hooks.groundProbe = (x, z) => {
+      const base = surfaceProbe(x, z);
+      return {
+        ground: voxels.groundBelow(x, z, engine.camera.position.y, base.ground),
+        water: base.water,
+      };
+    };
+  }
 
   // camera spawn: ground-clamped (?alt/x/z → fly) or the DEFAULT WALK SPAWN
   // at the map center — first dry, reasonably flat spot on a spiral out

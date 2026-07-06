@@ -3,11 +3,13 @@
  * unsupported setups get a clear message instead of a broken boot screen.
  *
  * Order of checks:
- *  1. mobile/tablet → recommend a computer. Detection is capability/UA
- *     based, never screen size: UA-Client-Hints `userAgentData.mobile`
- *     where present, classic UA markers otherwise, plus the iPadOS
- *     masquerade (iPads report a desktop macOS UA; multi-touch on "Mac"
- *     exposes them).
+ *  1. mobile/tablet WITHOUT WebGPU → recommend a computer. Detection is
+ *     capability/UA based, never screen size: UA-Client-Hints
+ *     `userAgentData.mobile` where present, classic UA markers otherwise,
+ *     plus the iPadOS masquerade (iPads report a desktop macOS UA;
+ *     multi-touch on "Mac" exposes them). A WebGPU-capable mobile Chromium
+ *     (tier mobile-reduced) proceeds — main.ts maps the tier onto the
+ *     reduced `mobile` render preset (M1.6).
  *  2. non-Chromium browser → Chrome required. The engine is built and
  *     tested exclusively against Chrome's WebGPU; Safari/Firefox coverage
  *     of the features used here is incomplete (user-verified: neither
@@ -82,22 +84,18 @@ export function browserGate(): boolean {
 
   const { tier } = detectCapabilityTier();
   if (tier === 'desktop-full') return true;
+  // M1.6: WebGPU-capable mobile Chromium boots the reduced-fidelity path —
+  // main.ts resolves the tier onto ?preset=mobile when no explicit preset
+  if (tier === 'mobile-reduced') return true;
 
-  // Classified but not runnable yet — show the most actionable notice. Mobile
-  // messaging wins first: telling a phone user to toggle hardware acceleration
-  // would be wrong. The mobile-reduced render path is M1.6 (Fable) — until it
-  // lands, a WebGPU-capable phone/tablet is acknowledged but still directed to
-  // desktop rather than dropped into the full desktop path.
+  // Unsupported — show the most actionable notice. Mobile messaging wins
+  // first: telling a phone user to toggle hardware acceleration would be wrong.
   if (isMobileDevice()) {
-    failLoud('Mobile support is on the way', [
-      tier === 'mobile-reduced'
-        ? 'Your device supports WebGPU, but the reduced-fidelity mobile render'
-        : 'Phone and tablet browsers are not supported yet, and this device does',
-      tier === 'mobile-reduced'
-        ? 'path is still in development.'
-        : 'not expose the WebGPU support LAAS needs.',
+    failLoud('This device cannot run LAAS yet', [
+      'This phone/tablet does not expose the WebGPU support LAAS needs',
+      '(the browser may be too old, or WebGPU is disabled by policy).',
       '',
-      'For now, please open LAAS on a desktop or laptop running Google Chrome.',
+      'Please try a recent Chrome, or open LAAS on a desktop or laptop.',
     ]);
     return false;
   }

@@ -82,6 +82,12 @@ export class TerrainTiles {
       gi?: ProbeGI;
       /** canopy coverage map — attenuates probe ambient under tree crowns */
       canopyTex?: StorageTexture;
+      /**
+       * M8 voxel digging (?voxel=1): fragments inside a dig sphere are
+       * discarded so the voxel cavern below shows through. Absent by default —
+       * a no-flags boot builds the exact same material graph as before.
+       */
+      digMask?: { holeNode(): import('../gpu/TSLTypes').NF };
     } = {},
   ) {
     this.hf = hf;
@@ -317,6 +323,11 @@ export class TerrainTiles {
         ? screenUV.x.lessThanEqual(0.5)
         : screenUV.x.greaterThan(0.5);
       mat.opacityNode = keep.select(float(1), float(0));
+      mat.alphaTest = 0.5;
+    } else if (opts.digMask) {
+      // punch dig holes: alpha-tested discard inside any carved sphere — the
+      // M8 voxel cavern mesh renders the space behind the hole
+      mat.opacityNode = opts.digMask.holeNode().oneMinus();
       mat.alphaTest = 0.5;
     }
 

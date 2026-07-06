@@ -108,7 +108,7 @@ export function setupSunShadows(
   sun: DirectionalLight,
   camera: PerspectiveCamera,
   cloudShadow?: (wxz: NV2) => NF,
-  opts?: { maxFar?: number; lightMargin?: number },
+  opts?: { maxFar?: number; lightMargin?: number; cascades?: number; mapSize?: number },
 ): ShadowRig {
   // perf attribution: ?ablate=shadows (no casting) | pcss (default filter)
   const ablate = new Set(
@@ -120,8 +120,9 @@ export function setupSunShadows(
   }
   const maxFar = opts?.maxFar ?? 3200;
   const lightMargin = opts?.lightMargin ?? 700;
+  const mapSize = opts?.mapSize ?? 2048;
   sun.castShadow = true;
-  sun.shadow.mapSize.set(2048, 2048);
+  sun.shadow.mapSize.set(mapSize, mapSize);
   sun.shadow.bias = -0.00012;
   sun.shadow.normalBias = 2.2;
   sun.shadow.radius = 1.15;
@@ -152,7 +153,7 @@ export function setupSunShadows(
   // ?shadowcache=0 re-renders every cascade every frame (perf A/B)
   const q = new URLSearchParams(window.location.search);
   const csmOpts = {
-    cascades: Math.max(1, Math.min(4, Number(q.get('csmcasc') ?? 4))),
+    cascades: Math.max(1, Math.min(4, Number(q.get('csmcasc') ?? opts?.cascades ?? 4))),
     maxFar,
     mode: 'practical' as const,
     lightMargin,

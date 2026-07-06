@@ -1,6 +1,6 @@
 /** URL parameter parsing — every run is fully described by its URL. */
 
-export type QualityPreset = 'low' | 'high' | 'ultra';
+export type QualityPreset = 'low' | 'mobile' | 'high' | 'ultra';
 
 export interface LaasParams {
   /** world seed — reproduces the entire world */
@@ -9,7 +9,7 @@ export interface LaasParams {
   scene: string;
   /** time of day, hours 0..24 */
   timeOfDay: number;
-  /** quality preset: low (iGPU floor), high (default), ultra (max grids) */
+  /** quality preset: low (iGPU floor), mobile (M1.6 reduced), high (default), ultra (max grids) */
   preset: QualityPreset;
   /** HUD visible at boot */
   hud: boolean;
@@ -29,11 +29,21 @@ function num(v: string | null, fallback: number): number {
   return Number.isFinite(n) ? n : fallback;
 }
 
-export function parseParams(search: string = window.location.search): LaasParams {
+/**
+ * @param fallbackPreset preset when the URL carries no valid `?preset=` —
+ * main.ts resolves it from capability tier + persisted settings (M1.6);
+ * an explicit URL preset always wins.
+ */
+export function parseParams(
+  search: string = window.location.search,
+  fallbackPreset: QualityPreset = 'high',
+): LaasParams {
   const q = new URLSearchParams(search);
-  const presetRaw = q.get('preset') ?? 'high';
+  const presetRaw = q.get('preset');
   const preset: QualityPreset =
-    presetRaw === 'low' || presetRaw === 'ultra' ? presetRaw : 'high';
+    presetRaw === 'low' || presetRaw === 'mobile' || presetRaw === 'high' || presetRaw === 'ultra'
+      ? presetRaw
+      : fallbackPreset;
   const shotN = num(q.get('shot'), 0);
   return {
     seed: Math.floor(num(q.get('seed'), 1)) >>> 0,

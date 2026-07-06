@@ -66,11 +66,17 @@ export class Particles {
   private readonly uCamUp = uniform(new Vector3(0, 1, 0));
   private readonly uDt = uniform(0.016);
 
-  constructor(hf: Heightfield, canopyTex: StorageTexture | null, gi: ProbeGI | null = null) {
+  constructor(
+    hf: Heightfield,
+    canopyTex: StorageTexture | null,
+    gi: ProbeGI | null = null,
+    // M1.6: the mobile preset runs a much smaller population
+    count: number = PARTICLE_COUNT,
+  ) {
     // (x, y, z, type) — type carries through until the particle re-rolls
-    const pos = instancedArray(PARTICLE_COUNT, 'vec4');
+    const pos = instancedArray(count, 'vec4');
     // (phase, size01, age, ttl)
-    const misc = instancedArray(PARTICLE_COUNT, 'vec4');
+    const misc = instancedArray(count, 'vec4');
 
     const biomeTex = hf.biomeTex;
     if (!biomeTex) throw new Error('particles need the biome texture');
@@ -89,7 +95,7 @@ export class Particles {
 
     this.stepK = Fn(() => {
       const i = instanceIndex;
-      If(i.greaterThanEqual(PARTICLE_COUNT), () => {
+      If(i.greaterThanEqual(count), () => {
         Return();
       });
       const cam = vec3(this.uCam);
@@ -168,7 +174,7 @@ export class Particles {
       });
       pos.element(i).assign(vec4(p, ty));
       misc.element(i).z.assign(age);
-    })().compute(PARTICLE_COUNT);
+    })().compute(count);
     this.stepK.setName('particles');
 
     // ---------------- render: camera-facing lit quads -----------------------------
@@ -252,7 +258,7 @@ export class Particles {
         new IrradianceNode(irr as unknown as ConstructorParameters<typeof IrradianceNode>[0]);
     }
 
-    const mesh = new InstancedMesh(geo, mat, PARTICLE_COUNT);
+    const mesh = new InstancedMesh(geo, mat, count);
     mesh.frustumCulled = false;
     mesh.castShadow = false;
     mesh.receiveShadow = true;

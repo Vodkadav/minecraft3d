@@ -1,7 +1,7 @@
 /** LAAS entry point — boot sequence with fail-loud diagnostics. */
 
 import { BootUI } from './core/BootUI';
-import { browserGate } from './core/BrowserGate';
+import { browserGate, detectCapabilityTier } from './core/BrowserGate';
 import {
   describeDiagnostics,
   failLoud,
@@ -11,22 +11,48 @@ import {
 import { Engine } from './core/Engine';
 import { FlyCamera } from './core/FlyCamera';
 import { initHooks } from './core/Hooks';
-import { parseCamString, parseParams } from './core/Params';
+import { parseCamString, parseParams, type QualityPreset } from './core/Params';
 import { WorldSeed } from './core/Seed';
+import { resolveRenderPreset } from './game/domain/capability/RenderPreset';
+import type { GraphicsPreset } from './game/domain/settings/Settings';
+import { isErr } from './game/domain/Result';
+import { LocalStorageSettingsStore } from './game/infrastructure/persistence/LocalStorageSettingsStore';
 import { Hud } from './debug/HUD';
 import { buildGalleryScene } from './debug/GalleryScene';
 import { buildSanityScene } from './debug/SanityScene';
+import { buildVoxelDevScene } from './debug/VoxelDevScene';
 import { buildShadowTestScene } from './debug/ShadowTestScene';
 import { buildTerrainScene } from './debug/TerrainScene';
 import { buildScene, registerScene, type WorldContext } from './debug/Scenes';
 
+/**
+ * M1.6 boot preset when the URL carries no explicit `?preset=`: capability
+ * tier (mobile-reduced → 'mobile') → persisted game settings → 'high'.
+ * Storage failures fall through to the default — never break boot over it.
+ */
+async function bootFallbackPreset(): Promise<QualityPreset> {
+  const { tier } = detectCapabilityTier();
+  let persisted: GraphicsPreset | null = null;
+  if (tier !== 'mobile-reduced') {
+    try {
+      const loaded = await new LocalStorageSettingsStore().load();
+      if (!isErr(loaded)) persisted = loaded.value.graphicsPreset;
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.warn('[laas] settings unavailable, using default preset:', e);
+    }
+  }
+  return resolveRenderPreset(tier, persisted);
+}
+
 async function boot(): Promise<void> {
   const hooks = initHooks();
   installGlobalErrorHooks();
-  // environment gate BEFORE any loading: mobile / non-Chromium / missing
-  // WebGPU each get a clear notice instead of a broken boot (?nogate=1 skips)
+  // environment gate BEFORE any loading: unsupported mobile / non-Chromium /
+  // missing WebGPU each get a clear notice instead of a broken boot; a
+  // WebGPU-capable mobile proceeds on the reduced path (?nogate=1 skips)
   if (!browserGate()) return;
-  const params = parseParams();
+  const params = parseParams(window.location.search, await bootFallbackPreset());
   const bootUI = new BootUI(hooks);
 
   bootUI.set(0.02, 'probing WebGPU');
@@ -61,6 +87,8 @@ async function boot(): Promise<void> {
   registerScene('terrain', buildTerrainScene);
   registerScene('gallery', buildGalleryScene);
   registerScene('shadowtest', buildShadowTestScene);
+  // M8 voxel proving ground — full dig stack over an analytic surface
+  registerScene('voxeldev', buildVoxelDevScene);
   // 'world' becomes the streamed open world once terrain tiles land.
   registerScene('world', buildTerrainScene);
 
