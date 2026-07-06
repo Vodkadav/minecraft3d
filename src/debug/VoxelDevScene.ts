@@ -18,6 +18,8 @@ import { PersistentWorldSaveStore } from '../game/infrastructure/persistence/Per
 import { DigMask } from '../voxel/DigMask';
 import { DigTool } from '../voxel/DigTool';
 import { VoxelTerrain, type VoxelSurface } from '../voxel/VoxelTerrain';
+import { attachPlacementTool } from '../voxel/placement/PlacementTool';
+import { attachTreasureField } from '../voxel/treasure/TreasureField';
 import type { WorldContext } from './Scenes';
 
 const GROUND_SIZE = 320;
@@ -80,6 +82,32 @@ export async function buildVoxelDevScene(ctx: WorldContext): Promise<void> {
   scene.add(voxels.group);
   new DigTool(voxels, engine.camera, engine.renderer.domElement);
   window.addEventListener('pagehide', () => voxels.flushSave());
+
+  // build mode (B) — capture-phase listener suppresses DigTool while active
+  const placement = attachPlacementTool({
+    terrain: voxels,
+    camera: engine.camera,
+    dom: engine.renderer.domElement,
+    parent: scene,
+    save: {
+      load: () => voxels.entity('placement.pieces'),
+      persist: (data) => voxels.setEntity('placement.pieces', data),
+    },
+  });
+  engine.onUpdate(() => placement.update());
+
+  const claimed = voxels.entity('treasure.discovered');
+  const treasures = attachTreasureField({
+    seed: params.seed,
+    surface,
+    parent: scene,
+    getPlayerXZ: () => [engine.camera.position.x, engine.camera.position.z],
+    ...(Array.isArray(claimed)
+      ? { discovery: claimed.filter((id): id is string => typeof id === 'string') }
+      : {}),
+    onDiscovered: (_t, _reward, state) => voxels.setEntity('treasure.discovered', state),
+  });
+  engine.onUpdate((dt) => treasures.update(dt));
   (window as unknown as { __laasDbg?: Record<string, unknown> }).__laasDbg = {
     engine,
     voxels,

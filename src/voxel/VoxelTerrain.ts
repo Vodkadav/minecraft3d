@@ -63,6 +63,9 @@ export class VoxelTerrain {
   private readonly worldId: string;
   private readonly poseProvider: (() => PlayerState) | null;
   private preserved: PreservedSaveFields | null = null;
+  /** Entities written by sibling subsystems (placement, treasures) this
+   *  session — spread over the loaded bag on save so both survive. */
+  private readonly extraEntities: Record<string, unknown> = {};
   private createdAt: number | null = null;
   private saveTimer: number | undefined;
 
@@ -220,6 +223,17 @@ export class VoxelTerrain {
     return baseGround;
   }
 
+  /** Read a key from the world save's entities bag (session writes win). */
+  entity(key: string): unknown {
+    return this.extraEntities[key] ?? this.preserved?.entities[key];
+  }
+
+  /** Write a sibling subsystem's entities key; persisted with the next save. */
+  setEntity(key: string, value: unknown): void {
+    this.extraEntities[key] = value;
+    this.scheduleSave();
+  }
+
   /** Persist now (also called on page hide so a pending debounce isn't lost). */
   flushSave(): Promise<void> {
     if (this.saveTimer !== undefined) {
@@ -290,6 +304,7 @@ export class VoxelTerrain {
       modifiedChunks: this.volume.toChunkDeltas(),
       entities: {
         ...this.preserved?.entities,
+        ...this.extraEntities,
         'voxel.digSpheres': this.digMask.toFlatArray(),
       },
       inventories: this.preserved?.inventories ?? {},

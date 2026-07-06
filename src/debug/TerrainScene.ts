@@ -31,6 +31,8 @@ import { SunSky } from '../sky/SunSky';
 import { DigMask } from '../voxel/DigMask';
 import { DigTool } from '../voxel/DigTool';
 import { VoxelTerrain } from '../voxel/VoxelTerrain';
+import { attachPlacementTool } from '../voxel/placement/PlacementTool';
+import { attachTreasureField } from '../voxel/treasure/TreasureField';
 import { IndexedDbKeyValueStore } from '../game/infrastructure/persistence/IndexedDbKeyValueStore';
 import { OpfsBlobStore } from '../game/infrastructure/persistence/OpfsBlobStore';
 import { PersistentWorldSaveStore } from '../game/infrastructure/persistence/PersistentWorldSaveStore';
@@ -339,6 +341,32 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
         water: base.water,
       };
     };
+
+    // build mode (B) — capture-phase listener suppresses DigTool while active
+    const placement = attachPlacementTool({
+      terrain: voxels,
+      camera: engine.camera,
+      dom: engine.renderer.domElement,
+      parent: engine.scene,
+      save: {
+        load: () => voxels.entity('placement.pieces'),
+        persist: (data) => voxels.setEntity('placement.pieces', data),
+      },
+    });
+    engine.onUpdate(() => placement.update());
+
+    const claimed = voxels.entity('treasure.discovered');
+    const treasures = attachTreasureField({
+      seed: params.seed,
+      surface: { heightAt: (x, z) => hf.heightAtCpu(x, z) },
+      parent: engine.scene,
+      getPlayerXZ: () => [engine.camera.position.x, engine.camera.position.z],
+      ...(Array.isArray(claimed)
+        ? { discovery: claimed.filter((id): id is string => typeof id === 'string') }
+        : {}),
+      onDiscovered: (_t, _reward, state) => voxels.setEntity('treasure.discovered', state),
+    });
+    engine.onUpdate((dt) => treasures.update(dt));
   }
 
   // camera spawn: ground-clamped (?alt/x/z → fly) or the DEFAULT WALK SPAWN

@@ -95,6 +95,35 @@ describe("VoxelTerrain.saveNow preservation", () => {
     expect(saved.playerState).toEqual(live);
   });
 
+  it("round-trips sibling-subsystem entities via entity()/setEntity()", async () => {
+    const store = new InMemoryWorldSaveStore();
+    await store.save(existingSave("w1", 42));
+    const voxels = new VoxelTerrain(SURFACE, new DigMask(), 42, store, "voxel-demo", {
+      worldId: "w1",
+    });
+    await voxels.init();
+    expect(voxels.entity("quest.flags")).toEqual(["intro-done"]);
+    expect(voxels.entity("placement.pieces")).toBeUndefined();
+
+    voxels.setEntity("placement.pieces", { pieces: [1, 2] });
+    expect(voxels.entity("placement.pieces")).toEqual({ pieces: [1, 2] });
+    await voxels.flushSave();
+
+    const saved = await loadSave(store, "w1");
+    expect(saved.entities["placement.pieces"]).toEqual({ pieces: [1, 2] });
+    expect(saved.entities["quest.flags"]).toEqual(["intro-done"]); // foreign key intact
+  });
+
+  it("setEntity works on a fresh world with no prior save", async () => {
+    const store = new InMemoryWorldSaveStore();
+    const voxels = new VoxelTerrain(SURFACE, new DigMask(), 7, store);
+    await voxels.init();
+    voxels.setEntity("treasure.discovered", { claimed: ["t1"] });
+    await voxels.flushSave();
+    const saved = await loadSave(store, "voxel-demo-7");
+    expect(saved.entities["treasure.discovered"]).toEqual({ claimed: ["t1"] });
+  });
+
   it("keeps default fields for a fresh (NotFound) world", async () => {
     const store = new InMemoryWorldSaveStore();
     const voxels = new VoxelTerrain(SURFACE, new DigMask(), 7, store);
