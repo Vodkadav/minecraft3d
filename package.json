@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "PROJECT LAAS \u2014 fully procedural open world in the browser (WebGPU)",
+  "description": "PROJECT LAAS — fully procedural open world in the browser (WebGPU)",
   "scripts": {
     "dev": "vite --port 5173 --strictPort",
     "build": "tsc --noEmit && vite build",
@@ -19,7 +19,8 @@
     "lint": "eslint src tools --max-warnings 0"
   },
   "dependencies": {
-    "three": "0.184.0"
+    "three": "0.184.0",
+    "trystero": "^0.25.2"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
