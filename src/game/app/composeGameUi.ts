@@ -6,8 +6,12 @@
  * after each interaction. Untested composition glue: behaviour lives in the
  * tested controllers/views this file merely assembles.
  *
- * Host/Join/Solo resolve to loopback sessions today (netcode is M7); `onLaunch`
- * hands the resulting session to the engine entry so it can start the world.
+ * Host/Join/Solo resolve to loopback sessions today (netcode is M7). Each
+ * session's worldId is resolved through WorldLifecycle into a WorldLaunch (seed +
+ * saved player pose + delta save); `onLaunch` hands THAT to the engine entry so
+ * it can boot the chosen world and restore where the player left off. Wiring the
+ * engine side (src/main.ts booting from WorldLaunch, FlyCamera pose restore) is
+ * the [F] handoff.
  */
 
 import type { Locale } from "../domain/i18n/translate";
@@ -23,6 +27,7 @@ import { MainMenuController } from "../application/MainMenuController";
 import { SettingsController } from "../application/SettingsController";
 import type { LoopbackSession } from "../application/LoopbackSession";
 import type { MenuScreen } from "../application/MainMenuController";
+import { WorldLifecycle, type WorldLaunch } from "../application/WorldLifecycle";
 import { createLocalizer } from "../ui/i18n/strings";
 import { LobbyView } from "../ui/LobbyView";
 import { MainMenuView } from "../ui/MainMenuView";
@@ -32,7 +37,7 @@ export interface GameUiOptions {
   readonly locale?: Locale;
   readonly settingsStore?: SettingsStore;
   readonly persistentStorage?: PersistentStorage;
-  readonly onLaunch?: (session: LoopbackSession) => void;
+  readonly onLaunch?: (launch: WorldLaunch) => void;
 }
 
 export interface GameUiHandle {
@@ -49,6 +54,7 @@ export function mountGameUi(
 
   const menu = new MainMenuController(worlds);
   const lobby = new LobbyController(worlds, seeds);
+  const lifecycle = new WorldLifecycle(worlds);
   const settings = new SettingsController(settingsStore);
   const persistentStorage =
     options.persistentStorage ?? new NavigatorPersistentStorage();
@@ -75,7 +81,14 @@ export function mountGameUi(
           : loc.t("storage.notPersisted");
       });
     }
-    options.onLaunch?.(session);
+    // Resolve the session's world into the engine boot descriptor (seed + saved
+    // pose + deltas), then hand it to the engine entry. A load failure of a
+    // just-created world is an unexpected I/O fault — log it, don't transition.
+    void lifecycle.launch(session.worldId).then((resolved) => {
+      if (resolved.ok) options.onLaunch?.(resolved.value);
+      // eslint-disable-next-line no-console
+      else console.warn("[game] world launch failed", resolved.error);
+    });
   };
   const toMenu = () => {
     menu.back();
