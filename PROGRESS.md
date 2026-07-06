@@ -51,7 +51,14 @@ Live: https://vodkadav.github.io/minecraft3d/ (desktop Chrome + WebGPU).
   under the camera, speed-driven clips; no ride speed boost yet. Remaining: player humanoid
   model (KayKit, needed for M7 remote players — deferred to M7 wiring), player health system
   (open design item — wolf damage has no target yet), ride speed boost.
-- [ ] M7 Multiplayer: player-hosted P2P (research-first)
+- [~] M7 Multiplayer — 7.1 research resolved + ADR 0002 (trystero/Nostr signaling, Metered TURN,
+  room-code lobby, pause-on-host-offline, host validates intents); 7.2/7.5 [O] done TDD
+  (`domain/net`: RoomCode/Protocol/IntentRules; `application`: NetTransport port, HostSession
+  welcome-snapshot + validate→apply→broadcast, JoinSession, honest in-memory network — 72 tests);
+  7.3 [F] done: TrysteroTransport adapter, live-verified P2P message exchange between two
+  browsers over public Nostr rails. Remaining: 7.4 UI/engine glue (host room code in UI, join-by-
+  code boot from welcome snapshot, pose/dig sync loop, remote avatars) — precise plan in
+  `docs/HANDOFF-M7-WIRING.md`.
 - [~] M8 Hybrid voxel terrain (Fable-led) — Fable [F] core done (2026-07-06): 8.1 SDF chunk store
   (TDD, delta persistence via M2 save), 8.2 Transvoxel regular-cell mesher (TDD; MIT Lengyel tables,
   see CREDITS.md), 8.3 break-ground seam (`?voxel=1`: dig-mask hole punch, dig/fill tool, walkable
