@@ -69,6 +69,16 @@ describe("steer", () => {
   });
 });
 
+describe("tamed follow", () => {
+  it("tamed creatures follow: toward the player, stopping close", () => {
+    expect(decideBehavior("deer", 50, 1, true)).toBe("follow");
+    expect(decideBehavior("wolf", 5, 1, true)).toBe("follow"); // never aggro once tamed
+    const v = steer("follow", [0, 0], [20, 0], [0, 0]);
+    expect(v[0]).toBeGreaterThan(0);
+    expect(steer("follow", [18, 0], [20, 0], [0, 0])).toEqual([0, 0]); // heel distance
+  });
+});
+
 describe("wanderWaypoint", () => {
   it("is deterministic per (id, anchor, epoch)", () => {
     expect(wanderWaypoint("spawn:1:0:0:0:0", [50, 50], 3)).toEqual(

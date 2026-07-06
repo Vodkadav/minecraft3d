@@ -8,7 +8,7 @@
 
 import { hashUnitFloat } from "../rng/hash";
 
-export type Behavior = "idle" | "roam" | "flee" | "aggro";
+export type Behavior = "idle" | "roam" | "flee" | "aggro" | "follow";
 
 export interface Temperament {
   /** Player distance (m) that triggers the reaction... */
@@ -27,6 +27,9 @@ export const TEMPERAMENT: Readonly<Record<string, Temperament>> = {
 const ROAM_SPEED = 1.2;
 const FLEE_SPEED = 5.5;
 const AGGRO_SPEED = 4.0;
+const FOLLOW_SPEED = 3.0;
+/** Tamed heel distance — a follower stops here, not on top of the player. */
+const HEEL_M = 3;
 /** Wander waypoints land within this radius of the creature's spawn anchor. */
 export const WANDER_RADIUS_M = 20;
 const ARRIVE_M = 0.75;
@@ -35,7 +38,9 @@ export function decideBehavior(
   species: string,
   playerDistM: number,
   healthFrac: number,
+  tamed = false,
 ): Behavior {
+  if (tamed) return "follow";
   const t = TEMPERAMENT[species];
   if (!t) return "roam";
   if (playerDistM <= t.reactRange) {
@@ -55,14 +60,21 @@ export function steer(
   const [tx, tz] =
     behavior === "flee"
       ? [pos[0] * 2 - player[0], pos[1] * 2 - player[1]]
-      : behavior === "aggro"
+      : behavior === "aggro" || behavior === "follow"
         ? player
         : waypoint;
   const dx = tx - pos[0];
   const dz = tz - pos[1];
   const d = Math.hypot(dx, dz);
-  if (d < ARRIVE_M) return [0, 0];
-  const speed = behavior === "flee" ? FLEE_SPEED : behavior === "aggro" ? AGGRO_SPEED : ROAM_SPEED;
+  if (d < (behavior === "follow" ? HEEL_M : ARRIVE_M)) return [0, 0];
+  const speed =
+    behavior === "flee"
+      ? FLEE_SPEED
+      : behavior === "aggro"
+        ? AGGRO_SPEED
+        : behavior === "follow"
+          ? FOLLOW_SPEED
+          : ROAM_SPEED;
   return [(dx / d) * speed, (dz / d) * speed];
 }
 

@@ -45,6 +45,7 @@ import {
   spawnCombatState,
   type CombatState,
 } from "../game/domain/combat/Combat";
+import { feed, startTaming, TAMING_RULES, type TamingState } from "../game/domain/taming/Taming";
 import { hashUnitFloat } from "../game/domain/rng/hash";
 import type { ItemStack } from "../game/domain/inventory/Inventory";
 import { nearestWithin, SPECIES_VISUAL, validGround, type SpawnGround } from "./SpawnPlacement";
@@ -93,6 +94,7 @@ interface CreatureEntry {
   /** Ground offset for this visual. */
   readonly lift: number;
   combat: CombatState;
+  taming: TamingState;
   /** Seconds left of the death clip; set when killed, removed at zero. */
   dying: number | null;
 }
@@ -141,6 +143,13 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
         )
       : [],
   );
+  const tamed = new Set<string>(
+    Array.isArray(deps.save?.entity("taming.tamed"))
+      ? (deps.save.entity("taming.tamed") as unknown[]).filter(
+          (id): id is string => typeof id === "string",
+        )
+      : [],
+  );
   let lastCx: number | null = null;
   let lastCz: number | null = null;
   let sinceStep = Infinity; // first update always steps
@@ -163,6 +172,7 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
       if (obj instanceof Mesh) obj.castShadow = true;
       obj.name = s.id;
       group.add(obj);
+      const taming = startTaming(s.species);
       creatures.set(s.id, {
         entity: s,
         obj,
@@ -170,6 +180,7 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
         instance,
         lift,
         combat: spawnCombatState(s.species),
+        taming: tamed.has(s.id) ? { ...taming, phase: "tamed" } : taming,
         dying: null,
       });
       return;
@@ -220,6 +231,23 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
     deps.onLoot?.(stacks);
   }
 
+  function consumeFood(itemId: string): boolean {
+    const prior = deps.save?.entity("spawn.loot");
+    if (!Array.isArray(prior)) return false;
+    const stacks = (prior as ItemStack[]).filter(
+      (st) => typeof st?.itemId === "string" && typeof st?.count === "number",
+    );
+    const hit = stacks.find((st) => st.itemId === itemId && st.count > 0);
+    if (!hit) return false;
+    deps.save?.setEntity(
+      "spawn.loot",
+      stacks
+        .map((st) => (st === hit ? { ...st, count: st.count - 1 } : st))
+        .filter((st) => st.count > 0),
+    );
+    return true;
+  }
+
   function pickTarget<E extends { entity: SpawnEntity; obj: Object3D }>(
     pool: ReadonlyMap<string, E>,
   ): E | null {
@@ -243,10 +271,22 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
         const roll = hashUnitFloat(deps.seed, clockMs | 0, 0x6f00);
         grantLoot(lootFor(target.entity.species, roll));
         persistRemoved(target.entity.id);
+        if (tamed.delete(target.entity.id)) deps.save?.setEntity("taming.tamed", [...tamed]);
         // rigged creatures fall over first; primitives vanish immediately
         const duration = target.instance?.playDeath() ?? 0;
         if (duration > 0) target.dying = duration;
         else remove(target.entity.id);
+      }
+    } else if (ev.code === "KeyT") {
+      const target = pickTarget(creatures);
+      if (!target || target.dying !== null || target.taming.phase === "tamed") return;
+      const rules = TAMING_RULES[target.entity.species];
+      if (!rules || !consumeFood(rules.foodItemId)) return;
+      const r = feed(target.taming, rules.foodItemId, clockMs);
+      target.taming = r.state;
+      if (r.becameTamed) {
+        tamed.add(target.entity.id);
+        deps.save?.setEntity("taming.tamed", [...tamed]);
       }
     } else if (ev.code === "KeyE") {
       const target = pickTarget(nodes);
@@ -272,7 +312,12 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
       const z = c.obj.position.z;
       const stats = CREATURE_STATS[c.entity.species];
       const healthFrac = stats ? c.combat.health / stats.maxHealth : 1;
-      const behavior = decideBehavior(c.entity.species, Math.hypot(x - px, z - pz), healthFrac);
+      const behavior = decideBehavior(
+        c.entity.species,
+        Math.hypot(x - px, z - pz),
+        healthFrac,
+        c.taming.phase === "tamed",
+      );
       const wp = wanderWaypoint(c.entity.id, c.anchor, epoch);
       const [vx, vz] = steer(behavior, [x, z], [px, pz], wp);
       c.instance?.setBehavior(vx === 0 && vz === 0 ? "idle" : behavior);
@@ -305,7 +350,7 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
           active,
           removed,
         });
-        for (const id of leave) remove(id);
+        for (const id of leave) if (!tamed.has(id)) remove(id);
         for (const s of enter) materialize(s);
       }
       stepCreatures(dt);

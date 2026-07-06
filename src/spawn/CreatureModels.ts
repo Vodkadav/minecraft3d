@@ -32,6 +32,7 @@ const BEHAVIOR_CLIP: Readonly<Record<Behavior, string>> = {
   roam: "Walk",
   flee: "Gallop",
   aggro: "Gallop",
+  follow: "Walk",
 };
 
 export const DEATH_CLIP = "Death";
