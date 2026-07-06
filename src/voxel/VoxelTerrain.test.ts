@@ -59,6 +59,31 @@ describe("VoxelTerrain world-id keying", () => {
   });
 });
 
+describe("VoxelTerrain dig-mask economy", () => {
+  // surface sits at y=10 (SURFACE fake); mask slots are scarce (128) so only
+  // carves that can actually cut the surface sheet may record a hole sphere
+  it("records a mask sphere for a carve that intersects the surface", () => {
+    const mask = new DigMask();
+    const voxels = new VoxelTerrain(SURFACE, mask, 1, null);
+    voxels.carveAt(0, 10, 0, 2);
+    expect(mask.toFlatArray().length).toBe(4);
+  });
+
+  it("records no mask sphere for a deep underground carve", () => {
+    const mask = new DigMask();
+    const voxels = new VoxelTerrain(SURFACE, mask, 1, null);
+    voxels.carveAt(0, -20, 0, 2); // 30 m under the surface
+    expect(mask.toFlatArray().length).toBe(0);
+  });
+
+  it("records no mask sphere for a carve entirely above the surface", () => {
+    const mask = new DigMask();
+    const voxels = new VoxelTerrain(SURFACE, mask, 1, null);
+    voxels.carveAt(0, 40, 0, 2);
+    expect(mask.toFlatArray().length).toBe(0);
+  });
+});
+
 describe("VoxelTerrain.saveNow preservation", () => {
   async function carvedAndSaved(opts: { poseProvider?: () => PlayerState } = {}) {
     const store = new InMemoryWorldSaveStore();

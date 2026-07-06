@@ -70,7 +70,7 @@ export class VoxelTerrain {
   private saveTimer: number | undefined;
 
   constructor(
-    surface: VoxelSurface,
+    private readonly surface: VoxelSurface,
     private readonly digMask: DigMask,
     private readonly seed: number,
     private readonly store: WorldSaveStore | null,
@@ -127,9 +127,20 @@ export class VoxelTerrain {
 
   carveAt(x: number, y: number, z: number, radius: number): void {
     this.volume.carveSphere(x, y, z, radius);
-    this.digMask.add(x, y, z, radius);
+    // mask slots are scarce (MAX_DIG_SPHERES) — only carves that can cut the
+    // surface sheet punch a visible hole, so deep tunnel carves record nothing
+    if (this.intersectsSurface(x, y, z, radius)) this.digMask.add(x, y, z, radius);
     this.remeshDirtyChunks();
     this.scheduleSave();
+  }
+
+  /** Sphere vs heightfield sheet: center + 4 rim samples to cover slopes. */
+  private intersectsSurface(x: number, y: number, z: number, r: number): boolean {
+    for (const [dx, dz] of [[0, 0], [r, 0], [-r, 0], [0, r], [0, -r]] as const) {
+      const h = this.surface.heightAt(x + dx, z + dz);
+      if (Math.abs(h - y) <= r) return true;
+    }
+    return false;
   }
 
   fillAt(x: number, y: number, z: number, radius: number, materialId = 0): void {

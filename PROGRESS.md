@@ -45,8 +45,13 @@ Live: https://vodkadav.github.io/minecraft3d/ (desktop Chrome + WebGPU).
   markers) built TDD and wired into voxeldev + world scenes, persisting through
   `VoxelTerrain.entity()/setEntity()`; ore brassy verified visually (deep-pit shot), gem seeding
   unit-tested; end-to-end menu → Solo → full-world boot verified in Playwright.
-  **Remaining — Fable [F]:** transition-cell LOD stitching, field-derived hole mask (>128 digs),
-  rim material/vegetation polish; playtest gate.
+  Dig-mask economy fixed (2026-07-06): only carves that intersect the surface sheet record a mask
+  sphere, so deep tunnel carves no longer consume the 128 slots (~10× effective capacity for
+  mining). **Deferred (recorded, not skipped):** field-derived hole mask — trigger: >128 SURFACE
+  digs in real play; transvoxel transition-cell stitching — trigger: voxel chunks gaining LOD
+  levels (today all edited chunks render LOD0, no cracks possible); rim material/veg-over-hole
+  culling — cosmetic, trigger: playtest feedback (touches 15 veg node materials, prime-directive
+  risk). **Remaining:** playtest gate.
 
 ## Notes
 
