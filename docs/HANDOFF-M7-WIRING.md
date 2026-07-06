@@ -1,5 +1,12 @@
 # M7 wiring handoff — what's done, what remains (2026-07-06)
 
+> **DONE (2026-07-06).** All four tasks below landed and were verified end-to-end
+> over public Nostr rails (`tools/net-probe.ts`): host code, join-by-code boot,
+> pose/edit sync, mutual avatars. A live 2-peer join deadlock (single dropped
+> `join` packet → no welcome) was root-caused and fixed with a timed re-announce.
+> Follow-ups tracked in PROGRESS.md M7: KayKit humanoid avatars, interact-intent
+> sync, freeze-and-wait host-offline UX. Kept for the gotchas below.
+
 All M7 layers below the UI/engine glue are DONE, tested, and merged:
 
 - `domain/net/` RoomCode + Protocol (`parseMessage` → Result) + IntentRules (pose/dig caps) — 54 tests

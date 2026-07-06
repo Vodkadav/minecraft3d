@@ -48,17 +48,24 @@ Live: https://vodkadav.github.io/minecraft3d/ (desktop Chrome + WebGPU).
   one-shot death), primitives upgrade in place when the async load lands. 6.4 wiring done:
   T feeds (consumes loot food), tamed ids persist, tamed creatures heel (follow behavior, TDD).
   6.5 done (MVP): G mounts a tamed creature — walk controller stays the mover, mount glued
-  under the camera, speed-driven clips; no ride speed boost yet. Remaining: player humanoid
-  model (KayKit, needed for M7 remote players — deferred to M7 wiring), player health system
-  (open design item — wolf damage has no target yet), ride speed boost.
-- [~] M7 Multiplayer — 7.1 research resolved + ADR 0002 (trystero/Nostr signaling, Metered TURN,
+  under the camera, speed-driven clips; no ride speed boost yet. Player health done
+  (2026-07-06): `domain/combat/PlayerVitals` (TDD: damage, single death, grace-period
+  full-heal regen, respawn), aggressive-creature contact damage in SpawnFieldView, a11y
+  health-bar HUD, scene respawn via the fly-camera setPose seam; verified voxeldev boots
+  with the bar mounted. Remaining: player humanoid model (KayKit — remote avatars are
+  capsules today), ride speed boost.
+- [x] M7 Multiplayer — 7.1 research resolved + ADR 0002 (trystero/Nostr signaling, Metered TURN,
   room-code lobby, pause-on-host-offline, host validates intents); 7.2/7.5 [O] done TDD
   (`domain/net`: RoomCode/Protocol/IntentRules; `application`: NetTransport port, HostSession
   welcome-snapshot + validate→apply→broadcast, JoinSession, honest in-memory network — 72 tests);
   7.3 [F] done: TrysteroTransport adapter, live-verified P2P message exchange between two
-  browsers over public Nostr rails. Remaining: 7.4 UI/engine glue (host room code in UI, join-by-
-  code boot from welcome snapshot, pose/dig sync loop, remote avatars) — precise plan in
-  `docs/HANDOFF-M7-WIRING.md`.
+  browsers over public Nostr rails. 7.4 [F] done (2026-07-06): host room-code badge, join-by-code
+  boot from the welcome snapshot, 10 Hz pose + echo-guarded world-edit sync loop (`src/net/`),
+  smoothed remote-player avatars, WireCodec for trystero's JSON transport. Root-caused + fixed a
+  live 2-peer join deadlock (single dropped join packet → no welcome; now re-announced on a timer).
+  Verified end-to-end over public Nostr rails (`tools/net-probe.ts`): B joins by code, boots with
+  A's seed, mutual avatars. Follow-ups: KayKit humanoid avatars, interact-intent sync, freeze-and-
+  wait host-offline UX (ADR 0002 §5, warns today).
 - [~] M8 Hybrid voxel terrain (Fable-led) — Fable [F] core done (2026-07-06): 8.1 SDF chunk store
   (TDD, delta persistence via M2 save), 8.2 Transvoxel regular-cell mesher (TDD; MIT Lengyel tables,
   see CREDITS.md), 8.3 break-ground seam (`?voxel=1`: dig-mask hole punch, dig/fill tool, walkable
