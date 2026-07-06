@@ -5,10 +5,11 @@
  */
 
 import type { Renderer, StorageBufferNode } from 'three/webgpu';
-import { Fn, If, Return, float, instanceIndex, instancedArray, vec2 } from 'three/tsl';
+import { float, instancedArray, vec2 } from 'three/tsl';
 import type { MacroParams } from '../../world/MacroMap';
 import { macroTerrain } from '../../world/MacroMap';
 import { WORLD_SIZE } from '../../world/WorldConst';
+import { SYNTH_SLICE, slicedCompute } from '../SlicedCompute';
 
 export type FloatBuffer = StorageBufferNode<'float'>;
 
@@ -24,15 +25,14 @@ export async function runHeightSynthesis(
   renderer: Renderer,
   res: number,
   mp: MacroParams,
+  onProgress?: (frac: number) => void,
 ): Promise<SynthesisResult> {
   const height = instancedArray(res * res, 'float');
   const hardness = instancedArray(res * res, 'float');
 
-  const kernel = Fn(() => {
-    const i = instanceIndex;
-    If(i.greaterThanEqual(res * res), () => {
-      Return();
-    });
+  // full-detail macro function per texel — the heaviest per-thread kernel in
+  // the pipeline, so it runs time-sliced (see SlicedCompute)
+  const kernel = slicedCompute(res * res, SYNTH_SLICE, `heightSynthesis_${res}`, (i) => {
     const x = i.mod(res);
     const y = i.div(res);
     const wpos = vec2(float(x).add(0.5), float(y).add(0.5))
@@ -42,9 +42,8 @@ export async function runHeightSynthesis(
     const m = macroTerrain(wpos, mp, 'full');
     height.element(i).assign(m.height);
     hardness.element(i).assign(m.hardness);
-  })().compute(res * res);
-  kernel.setName(`heightSynthesis_${res}`);
+  });
 
-  await renderer.computeAsync(kernel);
+  await kernel.run(renderer, onProgress ? (d, t) => onProgress(d / t) : undefined);
   return { height, hardness, res };
 }

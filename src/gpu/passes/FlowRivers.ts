@@ -38,6 +38,7 @@ import { valleyFields, type MacroParams } from '../../world/MacroMap';
 import { WORLD_SIZE } from '../../world/WorldConst';
 import { bilerpFloatBuffer } from '../BufferSample';
 import { hash12 } from '../noise/NoiseTSL';
+import { TRACE_SLICE, gpuFence, slicedCompute } from '../SlicedCompute';
 import type { NB, NF, NI, NU } from '../TSLTypes';
 import type { FloatBuffer } from './HeightSynthesis';
 
@@ -171,6 +172,7 @@ export async function runFlowRivers(
   })().compute(N);
   enforceK.setName('channelEnforce');
   await renderer.computeAsync([initMisc, enforceK]);
+  await gpuFence(renderer);
 
   interface FillLevel {
     res: number;
@@ -250,6 +252,7 @@ export async function runFlowRivers(
     })().compute(coarse.res * coarse.res);
     k.setName(`fillDown_${coarse.res}`);
     await renderer.computeAsync(k);
+    await gpuFence(renderer);
   }
 
   // relax each level, seeding W from the coarser solution
@@ -277,6 +280,7 @@ export async function runFlowRivers(
     })().compute(lvl.res * lvl.res);
     initW.setName(`fillInit_${lvl.res}`);
     await renderer.computeAsync(initW);
+    await gpuFence(renderer);
 
     const mkStep = (src: FloatBuffer, dst: FloatBuffer): ComputeNode => {
       const k = H.guard(() => {
@@ -300,13 +304,15 @@ export async function runFlowRivers(
     const stepAB = mkStep(lvl.wA, lvl.wB);
     const stepBA = mkStep(lvl.wB, lvl.wA);
 
-    const BATCH = 32;
+    // fine levels bound the per-submission work (TDR watchdog — SlicedCompute)
+    const BATCH = lvl.res >= 2048 ? 8 : 32;
     for (let it = 0; it < lvl.iters; it += BATCH) {
       const nodes: ComputeNode[] = [];
       for (let k = 0; k < Math.min(BATCH, lvl.iters - it); k++) {
         nodes.push((it + k) % 2 === 0 ? stepAB : stepBA);
       }
       await renderer.computeAsync(nodes);
+      await gpuFence(renderer);
       opts.onProgress?.(
         `hydrology: filling depressions (${lvl.res}²)`,
         (li + it / lvl.iters) / levels.length,
@@ -324,12 +330,11 @@ export async function runFlowRivers(
   const W = wA;
 
   // --- 2. flow accumulation by particle tracing -------------------------------
+  // 260-step march × 4 bilinear reads per particle — the heaviest single
+  // dispatch in the whole pipeline, hence the smallest slice budget
   const STEPS = 260;
-  const traceK = Fn<void>(() => {
-    If(instanceIndex.greaterThanEqual(particles), () => {
-      Return();
-    });
-    const pid = instanceIndex.toFloat();
+  const traceK = slicedCompute(particles, TRACE_SLICE, 'flowTrace', (gi) => {
+    const pid = gi.toFloat();
     // jittered-grid spawn (decorrelated, full coverage)
     const cells = float(N);
     const spawn = pid.mul(cells.div(particles)).floor().toVar();
@@ -383,10 +388,11 @@ export async function runFlowRivers(
         },
       );
     });
-  })().compute(particles);
-  traceK.setName('flowTrace');
+  });
   opts.onProgress?.('hydrology: tracing flow', 0.55);
-  await renderer.computeAsync(traceK);
+  await traceK.run(renderer, (d, t) =>
+    opts.onProgress?.('hydrology: tracing flow', 0.55 + 0.1 * (d / t)),
+  );
 
   // shared separable triangle blur builder
   const makeBlur = (
@@ -448,6 +454,7 @@ export async function runFlowRivers(
     makeBlur(waterStrength, moistB, 1, 0, 2),
     makeBlur(moistB, waterStrength, 0, 1, 2),
   ]);
+  await gpuFence(renderer);
 
   // lake-depth field, blurred: post-erosion hummocks leave 2–6 m potholes
   // everywhere in the wetland — per-cell W−H painted them as dotted ponds.
@@ -463,6 +470,7 @@ export async function runFlowRivers(
     makeBlur(lakeDepthB, moistB, 1, 0, 3),
     makeBlur(moistB, lakeDepthB, 0, 1, 3),
   ]);
+  await gpuFence(renderer);
 
   // --- 3c. carve from the blurred field, fade out inside lakes ----------------
   const carveK = guard(() => {
@@ -523,6 +531,7 @@ export async function runFlowRivers(
   carveK.setName('riverCarve');
   opts.onProgress?.('hydrology: carving rivers', 0.72);
   await renderer.computeAsync(carveK);
+  await gpuFence(renderer);
 
   // --- 3d. talus relax: carved walls collapse to angle of repose --------------
   // The carve (and any residual erosion notching) leaves near-vertical cell
@@ -557,6 +566,7 @@ export async function runFlowRivers(
   opts.onProgress?.('hydrology: talus relax', 0.78);
   for (let it = 0; it < 13; it++) {
     await renderer.computeAsync([relaxAB, relaxBA]);
+    await gpuFence(renderer);
   }
 
   // --- 4. moisture: separable blur --------------------------------------------
@@ -567,6 +577,7 @@ export async function runFlowRivers(
     makeBlur(moistA, moistB, 1, 0, 10),
     makeBlur(moistB, moistA, 0, 1, 10),
   ]);
+  await gpuFence(renderer);
 
   return {
     waterSurface: W,

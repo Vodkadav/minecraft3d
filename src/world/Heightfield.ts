@@ -115,7 +115,9 @@ export class Heightfield {
     const mp = makeMacroParams(seed);
 
     progress(0.04, `terrain: synthesizing ${cfg.heightRes}² heightfield`);
-    const synth = await runHeightSynthesis(renderer, cfg.heightRes, mp);
+    const synth = await runHeightSynthesis(renderer, cfg.heightRes, mp, (f) =>
+      progress(0.04 + f * 0.04, `terrain: synthesizing ${cfg.heightRes}² heightfield`),
+    );
 
     const heightTex = new StorageTexture(cfg.heightRes, cfg.heightRes);
     heightTex.type = FloatType;
@@ -136,7 +138,9 @@ export class Heightfield {
 
     // --- erosion at sim res, then detail-preserving compose back to full res --
     progress(0.08, `terrain: synthesizing ${cfg.simRes}² erosion grid`);
-    const synthSim = await runHeightSynthesis(renderer, cfg.simRes, mp);
+    const synthSim = await runHeightSynthesis(renderer, cfg.simRes, mp, (f) =>
+      progress(0.08 + f * 0.02, `terrain: synthesizing ${cfg.simRes}² erosion grid`),
+    );
 
     progress(0.1, `terrain: eroding (${cfg.erosionIters} iterations)`);
     const erosion = await runErosion(renderer, synthSim.height, synthSim.hardness, {

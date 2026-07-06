@@ -23,13 +23,11 @@
 import type { Renderer } from 'three/webgpu';
 import { StorageTexture, type StorageBufferNode } from 'three/webgpu';
 import {
-  Fn,
   If,
   Return,
   atomicAdd,
   atomicLoad,
   float,
-  instanceIndex,
   instancedArray,
   int,
   smoothstep,
@@ -41,6 +39,7 @@ import {
   vec3,
   vec4,
 } from 'three/tsl';
+import { SCATTER_SLICE, SYNTH_SLICE, slicedCompute } from '../SlicedCompute';
 import type { WorldSeed } from '../../core/Seed';
 import type { Heightfield } from '../../world/Heightfield';
 import { LAKE_LEVEL, TREELINE, WORLD_SIZE } from '../../world/WorldConst';
@@ -289,11 +288,8 @@ export async function buildCanopyMap(
   const crownR = [2.9, 2.7, 3.8, 2.7, 3.2, 0.9];
   const opacity = [0.85, 0.7, 0.9, 0.65, 0.8, 0.12];
 
-  const splatK = Fn(() => {
-    const i = instanceIndex;
-    If(i.greaterThanEqual(uint(Math.max(trees.count, 1))), () => {
-      Return();
-    });
+  const splatTotal = Math.max(trees.count, 1);
+  const splatK = slicedCompute(splatTotal, SCATTER_SLICE, 'canopySplat', (i) => {
     const A = trees.bufA.element(i) as unknown as NV4;
     const B = trees.bufB.element(i) as unknown as NV4;
     const cls = B.w.div(8).floor().toInt();
@@ -319,17 +315,12 @@ export async function buildCanopyMap(
         });
       }
     }
-  })().compute(Math.max(trees.count, 1));
-  splatK.setName('canopySplat');
-  await renderer.computeAsync(splatK);
+  });
+  await splatK.run(renderer);
 
   const tex = new StorageTexture(CANOPY_RES, CANOPY_RES);
   tex.generateMipmaps = false;
-  const packK = Fn(() => {
-    const i = instanceIndex;
-    If(i.greaterThanEqual(CANOPY_RES * CANOPY_RES), () => {
-      Return();
-    });
+  const packK = slicedCompute(CANOPY_RES * CANOPY_RES, SYNTH_SLICE, 'canopyPack', (i) => {
     const x = i.mod(CANOPY_RES);
     const y = i.div(CANOPY_RES);
     // 3×3 box blur of the fixed-point accumulation → soft canopy field
@@ -349,9 +340,8 @@ export async function buildCanopyMap(
     }
     const cov = sum.div(9 * 255).div(1.6).clamp(0, 1).pow(0.75);
     textureStore(tex, uvec2(x.toUint(), y.toUint()), vec4(cov, cov, cov, 1)).toWriteOnly();
-  })().compute(CANOPY_RES * CANOPY_RES);
-  packK.setName('canopyPack');
-  await renderer.computeAsync(packK);
+  });
+  await packK.run(renderer);
   return tex;
 }
 
@@ -366,6 +356,12 @@ export async function runScatter(
   hf: Heightfield,
   seed: WorldSeed,
 ): Promise<ScatterResult> {
+  // boot-diagnostic trail: the scatter passes are the historical TDR
+  // device-loss site — pass-level marks localize a loss to one kernel
+  const mark = (m: string): void => {
+    // eslint-disable-next-line no-console
+    console.log(`[laas] scatter: ${m}`);
+  };
   const sT = seed.sub('scatter/trees') & 0x7fffffff;
   const sU = seed.sub('scatter/understory') & 0x7fffffff;
   const sE = seed.sub('scatter/extras') & 0x7fffffff;
@@ -376,11 +372,7 @@ export async function runScatter(
   const treeB = instancedArray(TREE_CAP, 'vec4');
   const treeCount = instancedArray(1, 'uint').toAtomic();
 
-  const treeK = Fn(() => {
-    const i = instanceIndex;
-    If(i.greaterThanEqual(treeG * treeG), () => {
-      Return();
-    });
+  const treeK = slicedCompute(treeG * treeG, SCATTER_SLICE, 'scatterTrees', (i) => {
     const cell = vec2(float(i.mod(treeG)), float(i.div(treeG)));
     const jit = cellHash2(cell, sT);
     const wpos = cell.add(jit).div(treeG).sub(0.5).mul(WORLD_SIZE);
@@ -482,9 +474,9 @@ export async function runScatter(
       vec4(wpos.x, y, wpos.y, scale) as unknown as NV4,
       vec4(yaw, lean.x, lean.y, idF) as unknown as NV4,
     );
-  })().compute(treeG * treeG);
-  treeK.setName('scatterTrees');
-  await renderer.computeAsync(treeK);
+  });
+  mark(`trees (${treeG * treeG} sites)`);
+  await treeK.run(renderer);
 
   // ----------------------------------------------------------- understory --
   const underG = Math.round(WORLD_SIZE / UNDER_CELL);
@@ -492,11 +484,7 @@ export async function runScatter(
   const underB = instancedArray(UNDER_CAP, 'vec4');
   const underCount = instancedArray(1, 'uint').toAtomic();
 
-  const underK = Fn(() => {
-    const i = instanceIndex;
-    If(i.greaterThanEqual(underG * underG), () => {
-      Return();
-    });
+  const underK = slicedCompute(underG * underG, SCATTER_SLICE, 'scatterUnderstory', (i) => {
     const cell = vec2(float(i.mod(underG)), float(i.div(underG)));
     const jit = cellHash2(cell, sU);
     const wpos = cell.add(jit).div(underG).sub(0.5).mul(WORLD_SIZE);
@@ -584,9 +572,9 @@ export async function runScatter(
       vec4(wpos.x, s.h.sub(0.03), wpos.y, scale) as unknown as NV4,
       vec4(yaw, 0, 0, idF) as unknown as NV4,
     );
-  })().compute(underG * underG);
-  underK.setName('scatterUnderstory');
-  await renderer.computeAsync(underK);
+  });
+  mark(`understory (${underG * underG} sites)`);
+  await underK.run(renderer);
 
   // --------------------------------------------------------------- extras --
   const extraG = Math.round(WORLD_SIZE / EXTRA_CELL);
@@ -594,11 +582,7 @@ export async function runScatter(
   const extraB = instancedArray(EXTRA_CAP, 'vec4');
   const extraCount = instancedArray(1, 'uint').toAtomic();
 
-  const extraK = Fn(() => {
-    const i = instanceIndex;
-    If(i.greaterThanEqual(extraG * extraG), () => {
-      Return();
-    });
+  const extraK = slicedCompute(extraG * extraG, SCATTER_SLICE, 'scatterExtras', (i) => {
     const cell = vec2(float(i.mod(extraG)), float(i.div(extraG)));
     const jit = cellHash2(cell, sE);
     const wpos = cell.add(jit).div(extraG).sub(0.5).mul(WORLD_SIZE);
@@ -692,9 +676,9 @@ export async function runScatter(
       vec4(wpos.x, s.h.sub(sink), wpos.y, scale) as unknown as NV4,
       vec4(yaw, s.nrmXZ.x.mul(0.3), s.nrmXZ.y.mul(0.3), idF) as unknown as NV4,
     );
-  })().compute(extraG * extraG);
-  extraK.setName('scatterExtras');
-  await renderer.computeAsync(extraK);
+  });
+  mark(`extras (${extraG * extraG} sites)`);
+  await extraK.run(renderer);
 
   // ------------------------------------------------- stones + branches --
   // size-stratified ground solids: stones everywhere geology says so
@@ -708,11 +692,7 @@ export async function runScatter(
   const stoneCount = instancedArray(1, 'uint').toAtomic();
   const sS = seed.sub('scatter/stones') & 0x7fffffff;
 
-  const stoneK = Fn(() => {
-    const i = instanceIndex;
-    If(i.greaterThanEqual(stoneG * stoneG), () => {
-      Return();
-    });
+  const stoneK = slicedCompute(stoneG * stoneG, SCATTER_SLICE, 'scatterStones', (i) => {
     const cell = vec2(float(i.mod(stoneG)), float(i.div(stoneG)));
     const jit = cellHash2(cell, sS);
     const wpos = cell.add(jit).div(stoneG).sub(0.5).mul(WORLD_SIZE);
@@ -820,11 +800,12 @@ export async function runScatter(
       vec4(wpos.x, s.h.sub(sink), wpos.y, scale) as unknown as NV4,
       vec4(yaw, s.nrmXZ.x.mul(0.4), s.nrmXZ.y.mul(0.4), idF) as unknown as NV4,
     );
-  })().compute(stoneG * stoneG);
-  stoneK.setName('scatterStones');
-  await renderer.computeAsync(stoneK);
+  });
+  mark(`stones (${stoneG * stoneG} sites)`);
+  await stoneK.run(renderer);
 
   // ---- counts (single boot-time readback; instance data stays on GPU) ----
+  mark('count readback');
   const [tc, uc, ec, sc] = await Promise.all([
     readCount(renderer, treeCount, TREE_CAP),
     readCount(renderer, underCount, UNDER_CAP),

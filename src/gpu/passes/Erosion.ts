@@ -34,6 +34,7 @@ import {
   vec4,
 } from 'three/tsl';
 import type { NB, NF, NI } from '../TSLTypes';
+import { gpuFence } from '../SlicedCompute';
 import type { FloatBuffer } from './HeightSynthesis';
 
 export interface ErosionResult {
@@ -288,8 +289,12 @@ export async function runErosion(
   const hydraOdd = makeHydra({ wSrc: wB, sSrc: sB, wDst: wA, sDst: sA });
 
   await renderer.computeAsync([initK1, initK2]);
+  await gpuFence(renderer);
 
-  const BATCH = 8;
+  // Batch size bounds the work per GPU submission — at 2048² a batch of 8
+  // (40 dispatches × 4.2M threads) can exceed the Windows TDR watchdog on
+  // mid GPUs. The fence keeps the queue at one command buffer (SlicedCompute).
+  const BATCH = res >= 2048 ? 2 : 8;
   let done = 0;
   while (done < iters) {
     const nodes: ComputeNode[] = [];
@@ -298,6 +303,7 @@ export async function runErosion(
       nodes.push(...((done + k) % 2 === 0 ? hydraEven : hydraOdd), thermalK);
     }
     await renderer.computeAsync(nodes);
+    await gpuFence(renderer);
     done += n;
     opts.onProgress?.(done, iters);
   }

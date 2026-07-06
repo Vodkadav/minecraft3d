@@ -13,12 +13,8 @@ import { NearestFilter } from 'three';
 import type { Renderer } from 'three/webgpu';
 import { StorageTexture } from 'three/webgpu';
 import {
-  Fn,
-  If,
-  Return,
   clamp,
   float,
-  instanceIndex,
   mix,
   mx_noise_float,
   smoothstep,
@@ -30,6 +26,7 @@ import {
 } from 'three/tsl';
 import { zoneMasks, type MacroParams } from '../../world/MacroMap';
 import { Biome, LAKE_LEVEL, TREELINE, WORLD_SIZE } from '../../world/WorldConst';
+import { SYNTH_SLICE, slicedCompute } from '../SlicedCompute';
 import type { FloatBuffer } from './HeightSynthesis';
 
 export interface BiomeSnowOpts {
@@ -52,11 +49,8 @@ export async function runBiomeSnow(
   out.minFilter = NearestFilter;
   out.generateMipmaps = false;
 
-  const kernel = Fn(() => {
-    const i = instanceIndex;
-    If(i.greaterThanEqual(res * res), () => {
-      Return();
-    });
+  // full-res classification with noise + multi-tap curvature — time-sliced
+  const kernel = slicedCompute(res * res, SYNTH_SLICE, 'biomeSnowClassify', (i) => {
     const x = i.mod(res);
     const y = i.div(res);
     const uv = vec2(float(x).add(0.5), float(y).add(0.5)).div(res);
@@ -177,8 +171,7 @@ export async function runBiomeSnow(
         ? vec4(snowTemp, slopeHold, ledge, temp.div(20).add(0.5))
         : vec4(biome.div(8), snow, dens, rockExposure),
     ).toWriteOnly();
-  })().compute(res * res);
-  kernel.setName('biomeSnowClassify');
-  await renderer.computeAsync(kernel);
+  });
+  await kernel.run(renderer);
   return out;
 }
