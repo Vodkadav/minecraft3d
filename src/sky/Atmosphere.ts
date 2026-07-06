@@ -43,6 +43,7 @@ import {
   vec3,
   vec4,
 } from 'three/tsl';
+import { gpuFence } from '../gpu/SlicedCompute';
 import { vexp3 } from '../gpu/TSLTypes';
 import type { NF, NI, NV2, NV3 } from '../gpu/TSLTypes';
 
@@ -201,16 +202,14 @@ export class Atmosphere {
     })().compute(T_W * T_H);
     tK.setName('atmoTransmittance');
     await renderer.computeAsync(tK);
+    await gpuFence(renderer);
+    console.log('[laas] atmo: transmittance fenced OK');
 
     // --- multiple-scattering bake -----------------------------------------------
-    // 64 uniform sphere directions (golden spiral), unrolled as constants
-    const dirs: [number, number, number][] = [];
-    for (let k = 0; k < 64; k++) {
-      const zc = 1 - (2 * k + 1) / 64;
-      const rr = Math.sqrt(Math.max(0, 1 - zc * zc));
-      const phi = k * 2.399963229728653;
-      dirs.push([rr * Math.cos(phi), zc, rr * Math.sin(phi)]);
-    }
+    // 64 uniform sphere directions (golden spiral), computed IN-SHADER from
+    // the loop index: unrolling them as 64 constant copies of the 18-step
+    // march produced a shader big enough to kill Dawn on AMD (device loss
+    // during the bake), and a runtime loop is byte-equivalent math
     const msK = Fn(() => {
       const i = instanceIndex;
       If(i.greaterThanEqual(MS_RES * MS_RES), () => {
@@ -224,8 +223,11 @@ export class Atmosphere {
 
       const L2 = vec3(0).toVar();
       const fms = vec3(0).toVar();
-      for (const [dx, dy, dz] of dirs) {
-        const dir = vec3(dx, dy, dz);
+      Loop(64, ({ i: k }: { readonly i: NI }) => {
+        const zc = float(1).sub(float(k).mul(2).add(1).div(64));
+        const rr = sqrt(max(0, float(1).sub(zc.mul(zc))));
+        const phi = float(k).mul(2.399963229728653);
+        const dir = vec3(rr.mul(cos(phi)), zc, rr.mul(sin(phi)));
         const mu = dir.y;
         const dGround = distToGround(r, mu);
         const dTop = distToTop(r, mu);
@@ -254,7 +256,7 @@ export class Atmosphere {
         const muSg = clamp(muS, 0, 1);
         const tg = this.sampleTransmittance(float(RG + 0.01), muSg);
         L2.addAssign(groundHit.select(T.mul(tg).mul(muSg).mul(0.3 / Math.PI), vec3(0)));
-      }
+      });
       const inv = 1 / 64;
       const L2a = L2.mul(inv);
       const fmsA = fms.mul(inv);
@@ -263,6 +265,8 @@ export class Atmosphere {
     })().compute(MS_RES * MS_RES);
     msK.setName('atmoMultiScatter');
     await renderer.computeAsync(msK);
+    await gpuFence(renderer);
+    console.log('[laas] atmo: multiScatter fenced OK');
 
     // --- sky-view kernel (re-run per sun change) ----------------------------------
     const svK = Fn(() => {
@@ -329,6 +333,8 @@ export class Atmosphere {
     svK.setName('atmoSkyView');
     this.skyCompute = svK;
     await renderer.computeAsync(svK);
+    await gpuFence(renderer);
+    console.log('[laas] atmo: skyView fenced OK');
   }
 
   /** point the sun (unit world dir) and re-bake the sky-view LUT */

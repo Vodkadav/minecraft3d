@@ -23,7 +23,7 @@ import { sliceSpans } from './SliceMath';
 /** Threads/submission for heavy-per-thread kernels (macro synthesis, biome). */
 export const SYNTH_SLICE = 1 << 20;
 /** Scatter kernels are fatter (multi-texture site sampling + clump fields). */
-export const SCATTER_SLICE = 1 << 16;
+export const SCATTER_SLICE = 1 << 19;
 /** The flow trace marches up to 260 steps × 4 bilinear reads per thread. */
 export const TRACE_SLICE = 1 << 17;
 
