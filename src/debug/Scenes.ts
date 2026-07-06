@@ -4,6 +4,17 @@ import type { Engine } from '../core/Engine';
 import type { LaasHooks } from '../core/Hooks';
 import type { LaasParams } from '../core/Params';
 import type { WorldSeed } from '../core/Seed';
+import type { WorldSaveStore } from '../game/application/ports/WorldSaveStore';
+import type { PlayerState } from '../game/domain/world/WorldSaveData';
+
+/** Present when the boot came from the menu (world lifecycle) — binds the
+ *  scene to the chosen world: its real id, the SAME persistent store the menu
+ *  uses, and the live camera pose for saves. Absent on tooling/dev URL boots. */
+export interface WorldLaunchBinding {
+  worldId: string;
+  store: WorldSaveStore;
+  poseProvider: () => PlayerState;
+}
 
 export interface WorldContext {
   engine: Engine;
@@ -12,6 +23,7 @@ export interface WorldContext {
   hooks: LaasHooks;
   /** report build progress 0..1 */
   progress: (p: number, msg: string) => void;
+  world?: WorldLaunchBinding;
 }
 
 export type SceneBuilder = (ctx: WorldContext) => Promise<void>;

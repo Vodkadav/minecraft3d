@@ -15,7 +15,7 @@
 
 import { BufferAttribute, BufferGeometry, Group, Mesh } from 'three';
 import { MeshStandardNodeMaterial } from 'three/webgpu';
-import type { ChunkKey, WorldSaveData } from '../game/domain/world/WorldSaveData';
+import type { ChunkKey, PlayerState, WorldSaveData } from '../game/domain/world/WorldSaveData';
 import { CHUNK_CELLS, parseVoxelChunkKey, worldToGrid } from '../game/domain/voxel/VoxelGrid';
 import { VoxelVolume } from '../game/domain/voxel/VoxelVolume';
 import type { WorldSaveStore } from '../game/application/ports/WorldSaveStore';
@@ -32,6 +32,25 @@ export interface VoxelSurface {
 const SAVE_DEBOUNCE_MS = 2500;
 const RAY_STEP_M = 0.25;
 
+export interface VoxelTerrainOptions {
+  /** Full explicit world id (menu-launched worlds) — overrides the
+   *  `${worldIdPrefix}-${seed}` demo form so digs persist per-world. */
+  readonly worldId?: string;
+  /** Live player pose source (the camera rig). When present, saveNow writes
+   *  the LIVE pose instead of the pose captured at load — the camera is the
+   *  single source of truth; WorldLifecycle.savePlayerState covers exit. */
+  readonly poseProvider?: () => PlayerState;
+}
+
+/** Save fields this subsystem does NOT own — captured at init, preserved on
+ *  save so a voxel write never clobbers the world's name/pose/inventories. */
+interface PreservedSaveFields {
+  readonly name: string;
+  readonly entities: Readonly<Record<string, unknown>>;
+  readonly inventories: Readonly<Record<string, unknown>>;
+  readonly playerState: PlayerState;
+}
+
 export class VoxelTerrain {
   readonly group = new Group();
 
@@ -42,6 +61,8 @@ export class VoxelTerrain {
   /** xz chunk columns carrying edits — fast path for the ground probe. */
   private readonly editedColumns = new Set<string>();
   private readonly worldId: string;
+  private readonly poseProvider: (() => PlayerState) | null;
+  private preserved: PreservedSaveFields | null = null;
   private createdAt: number | null = null;
   private saveTimer: number | undefined;
 
@@ -51,8 +72,10 @@ export class VoxelTerrain {
     private readonly seed: number,
     private readonly store: WorldSaveStore | null,
     worldIdPrefix = 'voxel-demo',
+    opts: VoxelTerrainOptions = {},
   ) {
-    this.worldId = `${worldIdPrefix}-${seed}`;
+    this.worldId = opts.worldId ?? `${worldIdPrefix}-${seed}`;
+    this.poseProvider = opts.poseProvider ?? null;
     this.volume = new VoxelVolume(
       { sdfAt: (x, y, z) => y - surface.heightAt(x, z) },
       oreGemMaterialSampler(seed, surface),
@@ -79,13 +102,21 @@ export class VoxelTerrain {
       }
       return;
     }
+    // capture the fields other systems own BEFORE the delta restore, so even
+    // a corrupt-delta "fresh start" never clobbers name/pose/inventories
+    this.createdAt = loaded.value.createdAt;
+    this.preserved = {
+      name: loaded.value.name,
+      entities: loaded.value.entities,
+      inventories: loaded.value.inventories,
+      playerState: loaded.value.playerState,
+    };
     const restored = this.volume.loadFromDeltas(loaded.value.modifiedChunks);
     if (!restored.ok) {
       // eslint-disable-next-line no-console
       console.warn('[voxel] corrupt chunk delta — starting fresh', restored.error);
       return;
     }
-    this.createdAt = loaded.value.createdAt;
     const spheres = loaded.value.entities['voxel.digSpheres'];
     if (Array.isArray(spheres)) this.digMask.loadFlatArray(spheres as number[]);
     this.remeshDirtyChunks();
@@ -190,12 +221,12 @@ export class VoxelTerrain {
   }
 
   /** Persist now (also called on page hide so a pending debounce isn't lost). */
-  flushSave(): void {
+  flushSave(): Promise<void> {
     if (this.saveTimer !== undefined) {
       window.clearTimeout(this.saveTimer);
       this.saveTimer = undefined;
     }
-    void this.saveNow();
+    return this.saveNow();
   }
 
   // ---------------------------------------------------------------- internals
@@ -252,13 +283,19 @@ export class VoxelTerrain {
     const save: WorldSaveData = {
       worldId: this.worldId,
       seed: this.seed,
-      name: `Voxel dig demo (seed ${this.seed})`,
+      // dev-scene label only — a menu world's real name is preserved above
+      name: this.preserved?.name ?? `Voxel dig demo (seed ${this.seed})`,
       createdAt: this.createdAt ?? now,
       modifiedAt: now,
       modifiedChunks: this.volume.toChunkDeltas(),
-      entities: { 'voxel.digSpheres': this.digMask.toFlatArray() },
-      inventories: {},
-      playerState: { position: [0, 0, 0], yaw: 0, pitch: 0 },
+      entities: {
+        ...this.preserved?.entities,
+        'voxel.digSpheres': this.digMask.toFlatArray(),
+      },
+      inventories: this.preserved?.inventories ?? {},
+      playerState:
+        this.poseProvider?.() ??
+        this.preserved?.playerState ?? { position: [0, 0, 0], yaw: 0, pitch: 0 },
     };
     this.createdAt = save.createdAt;
     const result = await this.store.save(save);

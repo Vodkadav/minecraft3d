@@ -8,13 +8,15 @@
  *
  * Host/Join/Solo resolve to loopback sessions today (netcode is M7). Each
  * session's worldId is resolved through WorldLifecycle into a WorldLaunch (seed +
- * saved player pose + delta save); `onLaunch` hands THAT to the engine entry so
- * it can boot the chosen world and restore where the player left off. Wiring the
- * engine side (src/main.ts booting from WorldLaunch, FlyCamera pose restore) is
- * the [F] handoff.
+ * saved player pose + delta save); `onLaunch` hands THAT to the engine entry
+ * (src/main.ts) so it can boot the chosen world and restore where the player
+ * left off. The pure boot-seam helpers (menu gating, pose mapping) live here
+ * too so the engine entry stays trivial wiring.
  */
 
 import type { Locale } from "../domain/i18n/translate";
+import type { PlayerState } from "../domain/world/WorldSaveData";
+import type { WorldSaveStore } from "../application/ports/WorldSaveStore";
 import { InMemorySeedVaultStore } from "../infrastructure/persistence/InMemorySeedVaultStore";
 import { InMemoryWorldSaveStore } from "../infrastructure/persistence/InMemoryWorldSaveStore";
 import { LocalStorageSettingsStore } from "../infrastructure/persistence/LocalStorageSettingsStore";
@@ -35,6 +37,9 @@ import { SettingsView } from "../ui/SettingsView";
 
 export interface GameUiOptions {
   readonly locale?: Locale;
+  /** World persistence — the engine boot must share this instance so digs,
+   *  pose, and world metadata land in ONE store. Defaults to in-memory. */
+  readonly worlds?: WorldSaveStore;
   readonly settingsStore?: SettingsStore;
   readonly persistentStorage?: PersistentStorage;
   readonly onLaunch?: (launch: WorldLaunch) => void;
@@ -44,11 +49,54 @@ export interface GameUiHandle {
   readonly container: HTMLElement;
 }
 
+/**
+ * Menu gating: a boot with no explicit engine URL param (`scene`, `seed`,
+ * `cam`, `shot`) fronts the game with the menu; any of them — or `?menu=0` —
+ * boots the engine directly so every existing tooling/dev URL is unchanged.
+ */
+export function shouldMountMenu(search: string): boolean {
+  const q = new URLSearchParams(search);
+  if (q.get("menu") === "0") return false;
+  return !q.has("scene") && !q.has("seed") && !q.has("cam") && !q.has("shot");
+}
+
+/** Structural twin of the engine's CamPose — game code stays engine-free. */
+export interface EnginePose {
+  p: [number, number, number];
+  yaw: number;
+  pitch: number;
+}
+
+export function playerStateToCamPose(state: PlayerState): EnginePose {
+  return {
+    p: [state.position[0], state.position[1], state.position[2]],
+    yaw: state.yaw,
+    pitch: state.pitch,
+  };
+}
+
+export function camPoseToPlayerState(pose: {
+  readonly p: readonly [number, number, number];
+  readonly yaw: number;
+  readonly pitch: number;
+}): PlayerState {
+  return {
+    position: [pose.p[0], pose.p[1], pose.p[2]],
+    yaw: pose.yaw,
+    pitch: pose.pitch,
+  };
+}
+
+/** A new world's pose is all-zero position — the scene's spawn logic wins. */
+export function isDefaultPlayerState(state: PlayerState): boolean {
+  return state.position.every((c) => c === 0);
+}
+
 export function mountGameUi(
   container: HTMLElement,
   options: GameUiOptions = {},
 ): GameUiHandle {
-  const worlds = new InMemoryWorldSaveStore();
+  const worlds = options.worlds ?? new InMemoryWorldSaveStore();
   const seeds = new InMemorySeedVaultStore();
   const settingsStore = options.settingsStore ?? new LocalStorageSettingsStore();
 

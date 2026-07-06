@@ -86,9 +86,12 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
   // and leaves low/high/ultra byte-identical to before
   const mobile = params.preset === 'mobile';
 
-  // M8 hybrid voxel terrain (?voxel=1) — additive and flag-gated: a no-flags
-  // boot never builds the mask, so the terrain material graph is unchanged
+  // M8 hybrid voxel terrain — flag-gated on URL boots (?voxel=1) so a no-flags
+  // tooling boot never builds the mask and the terrain material graph is
+  // unchanged; menu-launched worlds ALWAYS get the voxel subsystem (digging is
+  // part of the game).
   const voxelOn =
+    ctx.world !== undefined ||
     new URLSearchParams(window.location.search).get('voxel') === '1';
   const digMask = voxelOn ? new DigMask() : null;
 
@@ -298,15 +301,22 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
   // M8 voxel digging: chunk meshes + dig input + delta persistence. The
   // ground probe becomes cavern-aware so walk mode can descend into digs.
   if (digMask && view !== 'split') {
+    // menu launch: the SAME store instance the menu uses, keyed to the real
+    // worldId; URL boots keep the per-seed demo id over a fresh OPFS store
     const store =
-      'storage' in navigator && 'getDirectory' in navigator.storage
+      ctx.world?.store ??
+      ('storage' in navigator && 'getDirectory' in navigator.storage
         ? new PersistentWorldSaveStore(new OpfsBlobStore(), new IndexedDbKeyValueStore())
-        : null;
+        : null);
     const voxels = new VoxelTerrain(
       { heightAt: (x, z) => hf.heightAtCpu(x, z) },
       digMask,
       params.seed,
       store,
+      'voxel-demo',
+      ctx.world
+        ? { worldId: ctx.world.worldId, poseProvider: ctx.world.poseProvider }
+        : {},
     );
     ctx.progress(0.985, 'voxel: restoring digs');
     await voxels.init();
