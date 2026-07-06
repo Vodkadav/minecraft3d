@@ -35,11 +35,18 @@ Live: https://vodkadav.github.io/minecraft3d/ (desktop Chrome + WebGPU).
   wired into VoxelTerrain, placeholder retired); 8.5[O] kinematic placement domain
   (`domain/placement`: grid/surface/socket snap + validity); 8.7[O] hidden treasures
   (`domain/treasure`: seeded placement + discovery); world-lifecycle app seam
-  (`application/WorldLifecycle` + composeGameUi). **Remaining — Fable [F]:** paint the ore/gem +
-  treasure + placement-ghost render adapters; boot the chosen world from `WorldLaunch` in
-  `src/main.ts` (mount UI, seed + FlyCamera pose restore, VoxelTerrain keyed to the real worldId,
-  save-pose on exit); world-gen device-loss time-slice fix (see Notes); transition-cell LOD
-  stitching, field-derived hole mask (>128 digs), rim material/vegetation polish.
+  (`application/WorldLifecycle` + composeGameUi). **Fable [F] session 2+3 done (2026-07-06):**
+  world-gen device-loss FIXED (two causes: GPU time-slicing `src/gpu/SlicedCompute.ts` for the
+  TDR mega-dispatches, AND the atmosphere multi-scatter bake's 64×-unrolled shader killing Dawn —
+  now a runtime loop; `?scene=world` boots READY ~48 s on the dev box, verified
+  `tools/boot-probe.ts`); menu↔engine lifecycle wired in `src/main.ts` (menu mounts on plain URL,
+  Solo launch boots the world, pose save/restore, shared save store); placement ghost
+  (`src/voxel/placement`, B build mode) + hidden treasures (`src/voxel/treasure`, streamed tier
+  markers) built TDD and wired into voxeldev + world scenes, persisting through
+  `VoxelTerrain.entity()/setEntity()`; ore brassy verified visually (deep-pit shot), gem seeding
+  unit-tested; end-to-end menu → Solo → full-world boot verified in Playwright.
+  **Remaining — Fable [F]:** transition-cell LOD stitching, field-derived hole mask (>128 digs),
+  rim material/vegetation polish; playtest gate.
 
 ## Notes
 
@@ -53,22 +60,18 @@ Live: https://vodkadav.github.io/minecraft3d/ (desktop Chrome + WebGPU).
   (voxel terrain, mobile fidelity, netcode transport) plugs into these ports. Fable's M8 subsystem:
   pure voxel domain in `src/game/domain/voxel`, mesher + three.js adapters in `src/voxel` (vitest
   covers both).
-- `?scene=voxeldev` is the lightweight voxel proving ground (analytic ground, full dig stack) —
-  exists because the full world gen currently device-loses in Playwright Chromium on the dev box
-  (AMD RDNA-3, Windows TDR — see `~/.claude/MACHINE.md`); `?voxel=1` on `?scene=world` therefore
-  still needs a visual pass on a device that can run the full pipeline.
-- **[F] World-gen device-loss fix (user-chosen approach, 2026-07-06):** the full world gen
-  (erosion/scatter compute) trips the Windows TDR GPU watchdog on AMD RDNA-3 → device lost mid-boot
-  (`mapAsync … external Instance reference no longer exists`). Even `?preset=low` fails (render
-  presets cut raster cost, not the gen-time compute burst). **Chosen fix: time-slice the world-gen
-  compute** so no single GPU submission exceeds the watchdog (yield across frames, as ProbeGI
-  already does at 3072 samples/frame) — also helps low-end/mobile and extends the mobile-reduced
-  path. Fable-led. Interim workarounds for testing on this box: raise Windows `TdrDelay`, update the
-  AMD driver, or use `?scene=voxeldev`/`?scene=sanity`. See the handoff doc for detail.
-- Menu/lobby ↔ engine world lifecycle glue: the [O] application seam is done —
-  `application/WorldLifecycle` resolves a session's worldId into a `WorldLaunch` (seed + saved
-  player pose + delta save) and saves pose back on exit; composeGameUi's `onLaunch` now emits it.
-  The [F] engine half remains: `src/main.ts` must mount the game UI, boot from `WorldLaunch`
-  (seed + FlyCamera pose restore), key VoxelTerrain to the real worldId (not `voxel-demo-${seed}`;
-  and stop VoxelTerrain.saveNow clobbering `playerState` to origin), and call `savePlayerState` on
-  exit. See `docs/HANDOFF-M8-OPUS.md`.
+- `?scene=voxeldev` is the lightweight voxel proving ground (analytic ground, full dig stack).
+  The full-world device loss is FIXED (2026-07-06, see M8 status) — `?scene=world` runs in
+  Playwright Chromium on the dev box again.
+- **[F] World-gen device-loss fix — DONE (2026-07-06):** two independent causes, both fixed.
+  (1) Gen-time mega-dispatches tripped the Windows TDR watchdog on AMD RDNA-3 → time-sliced via
+  `src/gpu/SlicedCompute.ts` (uint-uniform base offset + tail guard + `gpuFence` between
+  submissions; applied to synthesis, erosion, hydrology, biome, scatter). (2) The atmosphere
+  multiple-scattering bake unrolled 64 sphere directions × an 18-step march at COMPILE time —
+  a shader big enough to kill Dawn outright ("valid external Instance reference no longer
+  exists"); the directions are now computed in-shader from a runtime loop. Also helps
+  low-end/mobile.
+- Menu/lobby ↔ engine world lifecycle glue — DONE both halves (2026-07-06): `src/main.ts` mounts
+  the menu on a plain URL (`shouldMountMenu`), boots from `WorldLaunch` (seed + pose restore),
+  keys VoxelTerrain to the real worldId, saves pose on pagehide/visibilitychange; verified
+  end-to-end (menu → Solo → full-world READY) in Playwright.

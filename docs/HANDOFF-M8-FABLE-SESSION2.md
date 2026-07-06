@@ -1,5 +1,13 @@
 # M8 Fable session-2 handoff (2026-07-06)
 
+> **RESOLVED (session 3, 2026-07-06):** the open bug below is fixed — the killer was the
+> atmosphere multiple-scattering bake (64 compile-time-unrolled directions × 18-step march
+> produced a shader big enough to kill Dawn; now a runtime in-shader loop, see
+> `src/sky/Atmosphere.ts`). All remaining [F] items in this doc are done: adapters wired into
+> both scenes (persistence via `VoxelTerrain.entity()/setEntity()`), ore verified visually,
+> menu → Solo → world boot verified end-to-end. `SCATTER_SLICE` raised to 512k. Status lives
+> in `PROGRESS.md`; this doc is history.
+
 Pickup point after the first Fable [F] session (continuation of
 [`HANDOFF-M8-OPUS.md`](./HANDOFF-M8-OPUS.md)). Everything below is committed on `main`;
 gates green (typecheck, vitest 376/376, arch, build).
