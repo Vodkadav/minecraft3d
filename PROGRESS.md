@@ -29,11 +29,17 @@ Live: https://vodkadav.github.io/minecraft3d/ (desktop Chrome + WebGPU).
   (TDD, delta persistence via M2 save), 8.2 Transvoxel regular-cell mesher (TDD; MIT Lengyel tables,
   see CREDITS.md), 8.3 break-ground seam (`?voxel=1`: dig-mask hole punch, dig/fill tool, walkable
   caverns, OPFS round-trip verified in `?scene=voxeldev` + `tools/voxel-shot.ts`), 8.4[F] vertex
-  material painting behind the `MaterialSampler` port. ADR 0001. **Remaining — Opus [O]:** 8.4[O]
-  deterministic depth-seeded ore/gem function (replace `depthBandSampler` placeholder, TDD), 8.5
-  placement system (ghost/rotate/snap — after 8.6), 8.7 hidden treasures; **[R]:** 8.6 placement
-  research pass; **[F later]:** transition-cell LOD stitching, field-derived hole mask (>128 digs),
-  rim material/vegetation polish.
+  material painting behind the `MaterialSampler` port. ADR 0001. **Opus [O] done (2026-07-06,
+  TDD, renderer-free — see `docs/HANDOFF-M8-OPUS.md`):** 8.6[R] placement research pass; 8.4[O]
+  deterministic depth-seeded ore/gem function (`domain/voxel/OreGemSeeding` + `domain/rng/hash`,
+  wired into VoxelTerrain, placeholder retired); 8.5[O] kinematic placement domain
+  (`domain/placement`: grid/surface/socket snap + validity); 8.7[O] hidden treasures
+  (`domain/treasure`: seeded placement + discovery); world-lifecycle app seam
+  (`application/WorldLifecycle` + composeGameUi). **Remaining — Fable [F]:** paint the ore/gem +
+  treasure + placement-ghost render adapters; boot the chosen world from `WorldLaunch` in
+  `src/main.ts` (mount UI, seed + FlyCamera pose restore, VoxelTerrain keyed to the real worldId,
+  save-pose on exit); world-gen device-loss time-slice fix (see Notes); transition-cell LOD
+  stitching, field-derived hole mask (>128 digs), rim material/vegetation polish.
 
 ## Notes
 
@@ -51,6 +57,18 @@ Live: https://vodkadav.github.io/minecraft3d/ (desktop Chrome + WebGPU).
   exists because the full world gen currently device-loses in Playwright Chromium on the dev box
   (AMD RDNA-3, Windows TDR — see `~/.claude/MACHINE.md`); `?voxel=1` on `?scene=world` therefore
   still needs a visual pass on a device that can run the full pipeline.
-- Menu/lobby ↔ engine world lifecycle glue (choose/host a saved world from the M4 UI, restore
-  player pose) is Opus [O] integration work — the voxel subsystem saves under a per-seed demo
-  world id until then.
+- **[F] World-gen device-loss fix (user-chosen approach, 2026-07-06):** the full world gen
+  (erosion/scatter compute) trips the Windows TDR GPU watchdog on AMD RDNA-3 → device lost mid-boot
+  (`mapAsync … external Instance reference no longer exists`). Even `?preset=low` fails (render
+  presets cut raster cost, not the gen-time compute burst). **Chosen fix: time-slice the world-gen
+  compute** so no single GPU submission exceeds the watchdog (yield across frames, as ProbeGI
+  already does at 3072 samples/frame) — also helps low-end/mobile and extends the mobile-reduced
+  path. Fable-led. Interim workarounds for testing on this box: raise Windows `TdrDelay`, update the
+  AMD driver, or use `?scene=voxeldev`/`?scene=sanity`. See the handoff doc for detail.
+- Menu/lobby ↔ engine world lifecycle glue: the [O] application seam is done —
+  `application/WorldLifecycle` resolves a session's worldId into a `WorldLaunch` (seed + saved
+  player pose + delta save) and saves pose back on exit; composeGameUi's `onLaunch` now emits it.
+  The [F] engine half remains: `src/main.ts` must mount the game UI, boot from `WorldLaunch`
+  (seed + FlyCamera pose restore), key VoxelTerrain to the real worldId (not `voxel-demo-${seed}`;
+  and stop VoxelTerrain.saveNow clobbering `playerState` to origin), and call `savePlayerState` on
+  exit. See `docs/HANDOFF-M8-OPUS.md`.
