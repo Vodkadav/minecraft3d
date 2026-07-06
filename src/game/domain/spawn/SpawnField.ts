@@ -34,6 +34,16 @@ export const SPAWN_SPECIES: readonly SpawnSpecies[] = [
   { id: "boar", kind: "creature", maxPerCell: 1, weight: 0.2 },
 ];
 
+/**
+ * What harvesting a node yields. Deliberately NOT the M3 gathering domain:
+ * that models in-place respawning nodes; spawn-field nodes are streamed
+ * entities that despawn forever once harvested (per epoch).
+ */
+export const NODE_YIELD: Readonly<Record<string, readonly { itemId: string; count: number }[]>> = {
+  "stone-node": [{ itemId: "stone", count: 2 }],
+  "berry-bush": [{ itemId: "berries", count: 2 }],
+};
+
 export interface SpawnEntity {
   /** Stable id (seed+epoch+cell+slot) — harvest/kill references this. */
   readonly id: string;

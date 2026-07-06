@@ -305,6 +305,7 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
 
   // M8 voxel digging: chunk meshes + dig input + delta persistence. The
   // ground probe becomes cavern-aware so walk mode can descend into digs.
+  let voxelsRef: VoxelTerrain | null = null;
   if (digMask && view !== 'split') {
     // menu launch: the SAME store instance the menu uses, keyed to the real
     // worldId; URL boots keep the per-seed demo id over a fresh OPFS store
@@ -325,6 +326,7 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
     );
     ctx.progress(0.985, 'voxel: restoring digs');
     await voxels.init();
+    voxelsRef = voxels;
     engine.scene.add(voxels.group);
     new DigTool(voxels, engine.camera, engine.renderer.domElement);
     window.addEventListener('pagehide', () => voxels.flushSave());
@@ -389,6 +391,15 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
       parent: engine.scene,
       getPlayerXZ: () => [engine.camera.position.x, engine.camera.position.z],
       density: settings.settings.animalDensity,
+      dom: engine.renderer.domElement,
+      ...(voxelsRef
+        ? {
+            save: {
+              entity: (k: string) => voxelsRef.entity(k),
+              setEntity: (k: string, v: unknown) => voxelsRef.setEntity(k, v),
+            },
+          }
+        : {}),
     });
     engine.onUpdate((dt) => spawns.update(dt));
   }

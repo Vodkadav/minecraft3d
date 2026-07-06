@@ -60,6 +60,15 @@ describe("density multiplier", () => {
   });
 });
 
+describe("node yields", () => {
+  it("covers every node species in the registry", async () => {
+    const { NODE_YIELD } = await import("./SpawnField");
+    for (const sp of SPAWN_SPECIES.filter((s) => s.kind === "node")) {
+      expect(NODE_YIELD[sp.id], `yield for ${sp.id}`).toBeDefined();
+    }
+  });
+});
+
 describe("cell math", () => {
   it("worldToSpawnCell floors by the cell edge", () => {
     expect(worldToSpawnCell(0)).toBe(0);

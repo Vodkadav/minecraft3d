@@ -110,13 +110,19 @@ export async function buildVoxelDevScene(ctx: WorldContext): Promise<void> {
   });
   engine.onUpdate((dt) => treasures.update(dt));
 
-  // M5 proximity-gated spawns (placeholder primitives; models are M6)
+  // M5/M6 proximity-gated spawns: creatures roam/flee/aggro; F attacks,
+  // E harvests (placeholder primitives; models are M6.1)
   const spawns = attachSpawnField({
     seed: params.seed,
     ground: surface,
     parent: scene,
     getPlayerXZ: () => [engine.camera.position.x, engine.camera.position.z],
     density: 1,
+    dom: engine.renderer.domElement,
+    save: {
+      entity: (k) => voxels.entity(k),
+      setEntity: (k, v) => voxels.setEntity(k, v),
+    },
   });
   engine.onUpdate((dt) => spawns.update(dt));
   (window as unknown as { __laasDbg?: Record<string, unknown> }).__laasDbg = {

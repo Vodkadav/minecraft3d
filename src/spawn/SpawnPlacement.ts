@@ -29,6 +29,27 @@ export function validGround(ground: SpawnGround, x: number, z: number): boolean 
   return Math.hypot(sx, sz) <= MAX_SLOPE;
 }
 
+/** Closest of `items` within `rangeM` of (x, z), or null. */
+export function nearestWithin<T extends { readonly x: number; readonly z: number }>(
+  items: readonly T[],
+  x: number,
+  z: number,
+  rangeM: number,
+): T | null {
+  let best: T | null = null;
+  let bestSq = rangeM * rangeM;
+  for (const it of items) {
+    const dx = it.x - x;
+    const dz = it.z - z;
+    const d = dx * dx + dz * dz;
+    if (d <= bestSq) {
+      best = it;
+      bestSq = d;
+    }
+  }
+  return best;
+}
+
 export interface SpeciesVisual {
   /** Placeholder primitive until M6 models land. */
   readonly shape: "box" | "sphere" | "cone";

@@ -30,6 +30,23 @@ describe("validGround", () => {
   });
 });
 
+describe("nearestWithin", () => {
+  it("picks the closest candidate inside the range", async () => {
+    const { nearestWithin } = await import("./SpawnPlacement");
+    const items = [
+      { id: "a", x: 5, z: 0 },
+      { id: "b", x: 2, z: 0 },
+      { id: "c", x: 0, z: 9 },
+    ];
+    expect(nearestWithin(items, 0, 0, 6)?.id).toBe("b");
+  });
+
+  it("returns null when nothing is in range", async () => {
+    const { nearestWithin } = await import("./SpawnPlacement");
+    expect(nearestWithin([{ id: "a", x: 50, z: 0 }], 0, 0, 6)).toBeNull();
+  });
+});
+
 describe("species visuals", () => {
   it("covers every registered species", () => {
     for (const sp of SPAWN_SPECIES) {

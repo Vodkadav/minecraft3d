@@ -31,7 +31,17 @@ Live: https://vodkadav.github.io/minecraft3d/ (desktop Chrome + WebGPU).
   species, wired into voxeldev + world under the menu-launch/?spawns=1 gate; verified aerial
   shot + world boot). Remaining: harvest/kill interaction (arrives with M6 combat / M3 gathering
   wiring); global spawn caps deferred to M7 multiplayer.
-- [ ] M6 Characters & creatures: animation, taming, riding
+- [~] M6 Characters & creatures — core done 2026-07-06: 6.2 locomotion state machine
+  (`domain/locomotion`, TDD: full idle/run/crouch/strafe/work/fight/die/ride set, death terminal,
+  ride guards); 6.3 creature AI (`domain/ai/CreatureBrain`, TDD: temperament roam/flee/aggro,
+  wounded-flee, deterministic wander waypoints; wired — creatures roam/flee/charge in both scenes,
+  verified in-browser); 6.4 taming state machine (`domain/taming`, TDD: feed sequence, wrong-food/
+  impatience resets, tamed ⇒ rideable); 6.6 combat/death (`domain/combat`, TDD: health,
+  single-death-event, deterministic loot; wired — F attacks, E harvests nodes, loot + removed ids
+  persist to the world save entities bag). This also closes M5's interaction gap. Remaining:
+  6.1 skin/skeleton registry + real glTF models (asset research running), 6.5 mount/ride engine
+  half, AnimationMixer clip wiring, taming interaction wiring (feed input + tamed persistence),
+  player health (open design item — not in plan, needed for boar damage to matter).
 - [ ] M7 Multiplayer: player-hosted P2P (research-first)
 - [~] M8 Hybrid voxel terrain (Fable-led) — Fable [F] core done (2026-07-06): 8.1 SDF chunk store
   (TDD, delta persistence via M2 save), 8.2 Transvoxel regular-cell mesher (TDD; MIT Lengyel tables,
