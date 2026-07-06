@@ -38,7 +38,7 @@ describe("applyDamage", () => {
   });
 
   it("ignores non-positive damage", () => {
-    const s0 = spawnCombatState("boar");
+    const s0 = spawnCombatState("wolf");
     expect(applyDamage(s0, 0).state).toEqual(s0);
     expect(applyDamage(s0, -3).state).toEqual(s0);
   });
@@ -46,7 +46,7 @@ describe("applyDamage", () => {
 
 describe("lootFor", () => {
   it("is deterministic for the same roll", () => {
-    expect(lootFor("boar", 0.42)).toEqual(lootFor("boar", 0.42));
+    expect(lootFor("wolf", 0.42)).toEqual(lootFor("wolf", 0.42));
   });
 
   it("returns stacks within the species' loot rules", () => {

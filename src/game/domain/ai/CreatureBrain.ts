@@ -21,7 +21,7 @@ export interface Temperament {
 
 export const TEMPERAMENT: Readonly<Record<string, Temperament>> = {
   deer: { reactRange: 18, aggressive: false, fleeBelowHealth: 1 },
-  boar: { reactRange: 14, aggressive: true, fleeBelowHealth: 0.3 },
+  wolf: { reactRange: 14, aggressive: true, fleeBelowHealth: 0.3 },
 };
 
 const ROAM_SPEED = 1.2;

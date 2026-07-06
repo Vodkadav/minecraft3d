@@ -64,5 +64,5 @@ export const SPECIES_VISUAL: Readonly<Record<string, SpeciesVisual>> = {
   "stone-node": { shape: "box", color: 0x8a8d90, size: 0.9, lift: 0.35 },
   "berry-bush": { shape: "sphere", color: 0x7a2b3c, size: 0.7, lift: 0.45 },
   deer: { shape: "cone", color: 0xb98a5a, size: 1.4, lift: 0.7 },
-  boar: { shape: "cone", color: 0x5d4633, size: 1.0, lift: 0.5 },
+  wolf: { shape: "cone", color: 0x5d4633, size: 1.0, lift: 0.5 },
 };

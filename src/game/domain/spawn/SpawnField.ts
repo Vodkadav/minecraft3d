@@ -31,7 +31,7 @@ export const SPAWN_SPECIES: readonly SpawnSpecies[] = [
   { id: "stone-node", kind: "node", maxPerCell: 2, weight: 0.5 },
   { id: "berry-bush", kind: "node", maxPerCell: 2, weight: 0.4 },
   { id: "deer", kind: "creature", maxPerCell: 1, weight: 0.35 },
-  { id: "boar", kind: "creature", maxPerCell: 1, weight: 0.2 },
+  { id: "wolf", kind: "creature", maxPerCell: 1, weight: 0.2 },
 ];
 
 /**

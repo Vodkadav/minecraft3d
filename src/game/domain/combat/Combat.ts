@@ -30,7 +30,7 @@ export const CREATURE_STATS: Readonly<Record<string, CreatureStats>> = {
       { itemId: "hide", min: 1, max: 1 },
     ],
   },
-  boar: {
+  wolf: {
     maxHealth: 35,
     damage: 6,
     loot: [

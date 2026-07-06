@@ -26,13 +26,13 @@ describe("decideBehavior", () => {
     expect(decideBehavior("deer", 100, 1)).toBe("roam");
   });
 
-  it("aggressive boar charges a close player, roams beyond aggro range", () => {
-    expect(decideBehavior("boar", 5, 1)).toBe("aggro");
-    expect(decideBehavior("boar", 100, 1)).toBe("roam");
+  it("aggressive wolf charges a close player, roams beyond aggro range", () => {
+    expect(decideBehavior("wolf", 5, 1)).toBe("aggro");
+    expect(decideBehavior("wolf", 100, 1)).toBe("roam");
   });
 
   it("a wounded aggressive creature flees instead of charging", () => {
-    expect(decideBehavior("boar", 5, 0.2)).toBe("flee");
+    expect(decideBehavior("wolf", 5, 0.2)).toBe("flee");
   });
 
   it("unknown species just roams", () => {

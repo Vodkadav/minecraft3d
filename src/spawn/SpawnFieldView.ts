@@ -26,6 +26,7 @@ import {
   type BufferGeometry,
   type Object3D,
 } from "three";
+import { CreatureModelLibrary, type CreatureInstance } from "./CreatureModels";
 import {
   NODE_YIELD,
   worldToSpawnCell,
@@ -85,9 +86,15 @@ export interface SpawnFieldHandle {
 
 interface CreatureEntry {
   readonly entity: SpawnEntity;
-  readonly mesh: Mesh;
+  readonly obj: Object3D;
   readonly anchor: readonly [number, number];
+  /** Rigged instance (AnimationMixer); null = primitive fallback. */
+  readonly instance: CreatureInstance | null;
+  /** Ground offset for this visual. */
+  readonly lift: number;
   combat: CombatState;
+  /** Seconds left of the death clip; set when killed, removed at zero. */
+  dying: number | null;
 }
 
 export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
@@ -108,8 +115,25 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
     materials.set(species, new MeshStandardMaterial({ color: v.color, roughness: 0.85 }));
   }
 
-  const nodes = new Map<string, { entity: SpawnEntity; mesh: Mesh }>();
+  const nodes = new Map<string, { entity: SpawnEntity; obj: Mesh }>();
   const creatures = new Map<string, CreatureEntry>();
+  const models = new CreatureModelLibrary();
+  // spawns can materialize before the async model load lands — upgrade the
+  // primitive stand-ins in place when their species' model arrives
+  models.load((species) => {
+    for (const [id, c] of [...creatures]) {
+      if (c.entity.species !== species || c.instance || c.dying !== null) continue;
+      const instance = models.instantiate(species);
+      if (!instance) continue;
+      const { x, z } = { x: c.obj.position.x, z: c.obj.position.z };
+      group.remove(c.obj);
+      instance.root.position.set(x, deps.ground.heightAt(x, z) + instance.lift, z);
+      instance.root.rotation.y = c.obj.rotation.y;
+      instance.root.name = id;
+      group.add(instance.root);
+      creatures.set(id, { ...c, obj: instance.root, instance, lift: instance.lift });
+    }
+  });
   const removed = new Set<string>(
     Array.isArray(deps.save?.entity("spawn.removed"))
       ? (deps.save.entity("spawn.removed") as unknown[]).filter(
@@ -130,23 +154,44 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
     if (!validGround(deps.ground, x, z)) return;
     const v = SPECIES_VISUAL[s.species];
     if (!v) return;
+    if (s.kind === "creature") {
+      const instance = models.instantiate(s.species);
+      const obj: Object3D =
+        instance?.root ?? new Mesh(geometries.get(s.species), materials.get(s.species));
+      const lift = instance ? instance.lift : v.lift;
+      obj.position.set(x, deps.ground.heightAt(x, z) + lift, z);
+      if (obj instanceof Mesh) obj.castShadow = true;
+      obj.name = s.id;
+      group.add(obj);
+      creatures.set(s.id, {
+        entity: s,
+        obj,
+        anchor: [x, z],
+        instance,
+        lift,
+        combat: spawnCombatState(s.species),
+        dying: null,
+      });
+      return;
+    }
     const mesh = new Mesh(geometries.get(s.species), materials.get(s.species));
     mesh.position.set(x, deps.ground.heightAt(x, z) + v.lift, z);
     mesh.castShadow = true;
     mesh.name = s.id;
     group.add(mesh);
-    if (s.kind === "creature") {
-      creatures.set(s.id, { entity: s, mesh, anchor: [x, z], combat: spawnCombatState(s.species) });
-    } else {
-      nodes.set(s.id, { entity: s, mesh });
-    }
+    nodes.set(s.id, { entity: s, obj: mesh });
   }
 
   function remove(id: string): void {
-    const entry = creatures.get(id) ?? nodes.get(id);
-    if (!entry) return;
-    group.remove(entry.mesh);
-    creatures.delete(id);
+    const creature = creatures.get(id);
+    if (creature) {
+      group.remove(creature.obj);
+      creatures.delete(id);
+      return;
+    }
+    const node = nodes.get(id);
+    if (!node) return;
+    group.remove(node.obj);
     nodes.delete(id);
   }
 
@@ -175,13 +220,13 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
     deps.onLoot?.(stacks);
   }
 
-  function pickTarget<E extends { entity: SpawnEntity; mesh: Mesh }>(
+  function pickTarget<E extends { entity: SpawnEntity; obj: Object3D }>(
     pool: ReadonlyMap<string, E>,
   ): E | null {
     const [px, pz] = deps.getPlayerXZ();
     const flat = [...pool.values()].map((e) => ({
-      x: e.mesh.position.x,
-      z: e.mesh.position.z,
+      x: e.obj.position.x,
+      z: e.obj.position.z,
       e,
     }));
     return nearestWithin(flat, px, pz, REACH_M)?.e ?? null;
@@ -191,14 +236,17 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
     if (!locked()) return;
     if (ev.code === "KeyF") {
       const target = pickTarget(creatures);
-      if (!target) return;
+      if (!target || target.dying !== null) return;
       const r = applyDamage(target.combat, ATTACK_DAMAGE);
       target.combat = r.state;
       if (r.died) {
         const roll = hashUnitFloat(deps.seed, clockMs | 0, 0x6f00);
         grantLoot(lootFor(target.entity.species, roll));
-        remove(target.entity.id);
         persistRemoved(target.entity.id);
+        // rigged creatures fall over first; primitives vanish immediately
+        const duration = target.instance?.playDeath() ?? 0;
+        if (duration > 0) target.dying = duration;
+        else remove(target.entity.id);
       }
     } else if (ev.code === "KeyE") {
       const target = pickTarget(nodes);
@@ -214,20 +262,26 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
     const [px, pz] = deps.getPlayerXZ();
     const epoch = Math.floor(clockMs / WANDER_EPOCH_MS);
     for (const c of creatures.values()) {
-      const x = c.mesh.position.x;
-      const z = c.mesh.position.z;
+      c.instance?.update(dt);
+      if (c.dying !== null) {
+        c.dying -= dt;
+        if (c.dying <= 0) remove(c.entity.id);
+        continue;
+      }
+      const x = c.obj.position.x;
+      const z = c.obj.position.z;
       const stats = CREATURE_STATS[c.entity.species];
       const healthFrac = stats ? c.combat.health / stats.maxHealth : 1;
       const behavior = decideBehavior(c.entity.species, Math.hypot(x - px, z - pz), healthFrac);
       const wp = wanderWaypoint(c.entity.id, c.anchor, epoch);
       const [vx, vz] = steer(behavior, [x, z], [px, pz], wp);
+      c.instance?.setBehavior(vx === 0 && vz === 0 ? "idle" : behavior);
       if (vx === 0 && vz === 0) continue;
       const nx = x + vx * dt;
       const nz = z + vz * dt;
       if (!validGround(deps.ground, nx, nz)) continue; // cliff/water stops it
-      const v = SPECIES_VISUAL[c.entity.species];
-      c.mesh.position.set(nx, deps.ground.heightAt(nx, nz) + (v?.lift ?? 0.5), nz);
-      c.mesh.rotation.y = Math.atan2(vx, vz);
+      c.obj.position.set(nx, deps.ground.heightAt(nx, nz) + c.lift, nz);
+      c.obj.rotation.y = Math.atan2(vx, vz);
     }
   }
 

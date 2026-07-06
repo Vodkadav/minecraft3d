@@ -17,7 +17,7 @@ export interface TamingRules {
 /** Species without an entry are untameable. */
 export const TAMING_RULES: Readonly<Record<string, TamingRules>> = {
   deer: { foodItemId: "berries", feedsRequired: 3, cooldownMs: 5000 },
-  boar: { foodItemId: "meat", feedsRequired: 4, cooldownMs: 8000 },
+  wolf: { foodItemId: "meat", feedsRequired: 4, cooldownMs: 8000 },
 };
 
 export type TamingPhase = "wild" | "tamed";

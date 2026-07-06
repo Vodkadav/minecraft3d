@@ -65,7 +65,7 @@ describe("taming a deer (3 feeds of berries, 5s cooldown)", () => {
 
 describe("untameable species", () => {
   it("feeding a species without rules never advances", () => {
-    const s = startTaming("boar-king");
+    const s = startTaming("wolf-king");
     const r = feed(s, "berries", NOW);
     expect(r.state.progress).toBe(0);
     expect(r.state.phase).toBe("wild");
