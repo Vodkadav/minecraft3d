@@ -20,7 +20,9 @@ Live: https://vodkadav.github.io/minecraft3d/ (desktop Chrome + WebGPU).
 - [~] M1 Mobile PWA shell — manifest, service worker (offline precache), capability-tier gate,
   storage.persist done ([O]); M1.6 mobile-reduced render preset done ([F], 2026-07-06: engine
   `?preset=mobile` + tier/settings fallback resolution, froxels off, 4k particles, 2×1024 cascades,
-  grass ring off, veg draw distance ×0.5) — iOS Safari WebGPU check [R] remains
+  grass ring off, veg draw distance ×0.5); iOS check [R] resolved 2026-07-06: Safari 26 /
+  iOS 26 ships WebGPU enabled by default (Metal-backed) — older iOS falls to the existing
+  capability-gate message. Remaining: a real iPhone/iPad smoke test when a device is available
 - [x] M2 World framing: save architecture (OPFS/IndexedDB ports + fakes), seed vault, adjustable boundary — TDD, renderer-free
 - [x] M3 Game-logic core: item registry, inventory, crafting, gathering — TDD, renderer-free
 - [x] M4 Menu, settings, multiplayer lobby UI — EN/ES/DA, a11y baseline, Host/Join loopback (netcode M7)
@@ -40,10 +42,15 @@ Live: https://vodkadav.github.io/minecraft3d/ (desktop Chrome + WebGPU).
   verified in-browser); 6.4 taming state machine (`domain/taming`, TDD: feed sequence, wrong-food/
   impatience resets, tamed ⇒ rideable); 6.6 combat/death (`domain/combat`, TDD: health,
   single-death-event, deterministic loot; wired — F attacks, E harvests nodes, loot + removed ids
-  persist to the world save entities bag). This also closes M5's interaction gap. Remaining:
-  6.1 skin/skeleton registry + real glTF models (asset research running), 6.5 mount/ride engine
-  half, AnimationMixer clip wiring, taming interaction wiring (feed input + tamed persistence),
-  player health (open design item — not in plan, needed for boar damage to matter).
+  persist to the world save entities bag). This also closes M5's interaction gap.
+  6.1/6.2 [F] done: CC0 Quaternius Deer+Wolf rigged glTF (CREDITS.md), CreatureModelLibrary
+  (SkeletonUtils.clone per instance, height-normalized, behavior→clip AnimationMixer wiring,
+  one-shot death), primitives upgrade in place when the async load lands. 6.4 wiring done:
+  T feeds (consumes loot food), tamed ids persist, tamed creatures heel (follow behavior, TDD).
+  6.5 done (MVP): G mounts a tamed creature — walk controller stays the mover, mount glued
+  under the camera, speed-driven clips; no ride speed boost yet. Remaining: player humanoid
+  model (KayKit, needed for M7 remote players — deferred to M7 wiring), player health system
+  (open design item — wolf damage has no target yet), ride speed boost.
 - [ ] M7 Multiplayer: player-hosted P2P (research-first)
 - [~] M8 Hybrid voxel terrain (Fable-led) — Fable [F] core done (2026-07-06): 8.1 SDF chunk store
   (TDD, delta persistence via M2 save), 8.2 Transvoxel regular-cell mesher (TDD; MIT Lengyel tables,
