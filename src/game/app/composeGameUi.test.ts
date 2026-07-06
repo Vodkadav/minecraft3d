@@ -108,6 +108,26 @@ describe("mountGameUi world store injection", () => {
     expect(listed.value[0].seed).toBe(launches[0].seed);
   });
 
+  it("threads onJoinByCode through to the lobby's code input", async () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    mountGameUi(container, {
+      persistentStorage: storage,
+      settingsStore: new InMemorySettingsStore(),
+      onJoinByCode: () => Promise.resolve(true),
+    });
+
+    const online = [...container.querySelectorAll("button")].find((b) =>
+      b.textContent?.includes("Online"),
+    );
+    online?.click();
+    await flush();
+    container.click(); // reconcile runs on container click microtask
+    await flush();
+
+    expect(container.querySelector(".laas-code-input")).toBeTruthy();
+  });
+
   it("defaults to an in-memory store when none is injected (existing behavior)", async () => {
     const launches: WorldLaunch[] = [];
     const container = document.createElement("div");

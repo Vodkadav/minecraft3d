@@ -43,6 +43,10 @@ export interface GameUiOptions {
   readonly settingsStore?: SettingsStore;
   readonly persistentStorage?: PersistentStorage;
   readonly onLaunch?: (launch: WorldLaunch) => void;
+  /** M7 join-by-code: the engine entry owns the net flow (transport + welcome
+   *  + boot); resolves true once it takes over, false on failure. When absent
+   *  the lobby renders no code input (dev/test mounts stay netless). */
+  readonly onJoinByCode?: (code: string) => Promise<boolean>;
 }
 
 export interface GameUiHandle {
@@ -152,7 +156,9 @@ export function mountGameUi(
     if (screen === mounted || screen === "solo") return;
     mounted = screen;
     if (screen === "settings") show(SettingsView(settings, loc, toMenu));
-    else if (screen === "lobby") show(LobbyView(lobby, loc, launch, toMenu));
+    else if (screen === "lobby") {
+      show(LobbyView(lobby, loc, launch, toMenu, options.onJoinByCode));
+    }
     else show(MainMenuView(menu, loc, launch));
   }
 

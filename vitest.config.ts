@@ -13,6 +13,7 @@ export default defineConfig({
       "src/voxel/**/*.test.ts",
       "src/gpu/**/*.test.ts",
       "src/spawn/**/*.test.ts",
+      "src/net/**/*.test.ts",
     ],
     environment: "node",
     globals: false,

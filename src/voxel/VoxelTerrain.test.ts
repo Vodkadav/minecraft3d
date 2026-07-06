@@ -59,6 +59,27 @@ describe("VoxelTerrain world-id keying", () => {
   });
 });
 
+describe("VoxelTerrain.onLocalEdit (M7 net seam)", () => {
+  it("reports carves and fills as WorldEdits when wired", () => {
+    const voxels = new VoxelTerrain(SURFACE, new DigMask(), 1, null);
+    const edits: unknown[] = [];
+    voxels.onLocalEdit = (e) => edits.push(e);
+
+    voxels.carveAt(1, 10, 2, 1.5);
+    voxels.fillAt(3, 10, 4, 1.2, 5);
+
+    expect(edits).toEqual([
+      { op: "dig", x: 1, y: 10, z: 2, radius: 1.5 },
+      { op: "fill", x: 3, y: 10, z: 4, radius: 1.2, materialId: 5 },
+    ]);
+  });
+
+  it("is silent when not wired (default solo behavior)", () => {
+    const voxels = new VoxelTerrain(SURFACE, new DigMask(), 1, null);
+    expect(() => voxels.carveAt(0, 10, 0, 1)).not.toThrow();
+  });
+});
+
 describe("VoxelTerrain dig-mask economy", () => {
   // surface sits at y=10 (SURFACE fake); mask slots are scarce (128) so only
   // carves that can actually cut the surface sheet may record a hole sphere

@@ -77,6 +77,10 @@ export interface TransportNetwork {
   readonly host: NetTransport;
   /** Create a joiner transport wired to the host (fires the host's onPeerJoin). */
   addPeer(peerId: string): NetTransport;
+  /** Like addPeer, but the transport exists BEFORE it links — `connect()`
+   *  completes the handshake later, the way a real WebRTC peer appears
+   *  seconds after the room is joined (both ends' onPeerJoin fire then). */
+  addDetachedPeer(peerId: string): { transport: NetTransport; connect(): void };
   /** Simulate the peer dropping (fires the host's onPeerLeave). */
   removePeer(peerId: string): void;
 }
@@ -92,6 +96,19 @@ export function makeTransportNetwork(): TransportNetwork {
       joiner.link(HOST_PEER_ID, host, peerId);
       host.link(peerId, joiner, HOST_PEER_ID);
       return joiner;
+    },
+    addDetachedPeer(peerId: string) {
+      const joiner = new InMemoryTransport();
+      joiners.set(peerId, joiner);
+      return {
+        transport: joiner as NetTransport,
+        connect(): void {
+          // host side first: a joiner that greets the moment its onPeerJoin
+          // fires must be answerable (real WebRTC opens both ends together)
+          host.link(peerId, joiner, HOST_PEER_ID);
+          joiner.link(HOST_PEER_ID, host, peerId);
+        },
+      };
     },
     removePeer(peerId: string): void {
       joiners.get(peerId)?.close();

@@ -33,6 +33,10 @@ export interface HostSessionHooks {
   /** Apply a validated edit to the host's live world. */
   onWorldEdit(edit: WorldEdit): void;
   onEntityRemoved?(id: string): void;
+  /** A validated peer pose — lets the host app render remote avatars. */
+  onPeerPose?(peerId: string, state: PlayerState): void;
+  onPeerJoined?(peerId: string, playerName: string): void;
+  onPeerLeft?(peerId: string): void;
 }
 
 export interface HostSessionDeps {
@@ -58,6 +62,7 @@ export class HostSession {
     transport.onPeerLeave((peerId) => {
       this.peers.delete(peerId);
       transport.broadcast({ kind: "peerLeft", peerId });
+      this.hooks.onPeerLeft?.(peerId);
     });
     transport.onMessage((peerId, raw) => this.handle(peerId, raw));
   }
@@ -79,6 +84,7 @@ export class HostSession {
       case "join":
         this.transport.send(peerId, { kind: "welcome", ...this.snapshot() });
         this.sendToOthers(peerId, { kind: "peerJoined", peerId, playerName: msg.playerName });
+        this.hooks.onPeerJoined?.(peerId, msg.playerName);
         return;
       case "pose":
         this.handlePose(peerId, msg);
@@ -110,6 +116,7 @@ export class HostSession {
     if (!validatePose(prev?.state ?? null, msg.state, prev ? now - prev.at : 0)) return;
     peer.lastPose = { state: msg.state, at: now };
     this.sendToOthers(peerId, { kind: "peerPose", peerId, state: msg.state });
+    this.hooks.onPeerPose?.(peerId, msg.state);
   }
 
   private handleEdit(msg: DigMsg | FillMsg, edit: WorldEdit): void {

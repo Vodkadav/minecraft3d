@@ -125,6 +125,58 @@ describe("HostSession", () => {
     expect(inbox).toEqual([]);
   });
 
+  it("surfaces valid poses to the host app via onPeerPose", () => {
+    const poses: Array<{ peerId: string; state: PlayerState }> = [];
+    net = makeTransportNetwork();
+    session = new HostSession(
+      net.host,
+      () => SNAPSHOT,
+      {
+        onWorldEdit: () => {},
+        onPeerPose: (peerId, state) => poses.push({ peerId, state }),
+      },
+      { clock: () => now },
+    );
+    const alice = net.addPeer("alice");
+
+    alice.broadcast({ kind: "pose", state: pose(1, 2, 3) });
+
+    expect(poses).toEqual([{ peerId: "alice", state: pose(1, 2, 3) }]);
+  });
+
+  it("does NOT surface a rejected (teleporting) pose via onPeerPose", () => {
+    const poses: PlayerState[] = [];
+    net = makeTransportNetwork();
+    session = new HostSession(
+      net.host,
+      () => SNAPSHOT,
+      { onWorldEdit: () => {}, onPeerPose: (_id, state) => poses.push(state) },
+      { clock: () => now },
+    );
+    const alice = net.addPeer("alice");
+
+    alice.broadcast({ kind: "pose", state: pose(0, 0, 0) });
+    now += 100;
+    alice.broadcast({ kind: "pose", state: pose(1000, 0, 0) });
+
+    expect(poses).toEqual([pose(0, 0, 0)]);
+  });
+
+  it("surfaces peer lifecycle to the host app via onPeerJoined/onPeerLeft", () => {
+    const events: string[] = [];
+    net = makeTransportNetwork();
+    session = new HostSession(net.host, () => SNAPSHOT, {
+      onWorldEdit: () => {},
+      onPeerJoined: (peerId, name) => events.push(`joined:${peerId}:${name}`),
+      onPeerLeft: (peerId) => events.push(`left:${peerId}`),
+    });
+    const alice = net.addPeer("alice");
+    alice.broadcast({ kind: "join", playerName: "Alice" });
+    net.removePeer("alice");
+
+    expect(events).toEqual(["joined:alice:Alice", "left:alice"]);
+  });
+
   it("broadcasts peerLeft when a peer drops", () => {
     net.addPeer("alice");
     const bob = net.addPeer("bob");

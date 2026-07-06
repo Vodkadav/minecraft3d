@@ -27,6 +27,7 @@ import {
   shouldMountMenu,
 } from './game/app/composeGameUi';
 import { InMemoryWorldSaveStore } from './game/infrastructure/persistence/InMemoryWorldSaveStore';
+import { attachHostNet, createJoinNet, type JoinNetHandle } from './net/NetSync';
 import { IndexedDbKeyValueStore } from './game/infrastructure/persistence/IndexedDbKeyValueStore';
 import { LocalStorageSettingsStore } from './game/infrastructure/persistence/LocalStorageSettingsStore';
 import { OpfsBlobStore } from './game/infrastructure/persistence/OpfsBlobStore';
@@ -65,6 +66,9 @@ interface MenuLaunch {
   worldId: string;
   playerState: PlayerState;
   store: WorldSaveStore;
+  /** Present when this boot JOINS a remote world (M7): the live net session
+   *  created before the boot; the store is in-memory (host owns the save). */
+  join?: JoinNetHandle;
 }
 
 async function boot(): Promise<void> {
@@ -118,6 +122,41 @@ function mountMenu(hooks: LaasHooks): void {
         playerState: launch.playerState,
         store: worlds,
       }).catch(reportBootFailure);
+    },
+    // M7 join-by-code: bring the net session up FIRST — the welcome snapshot
+    // is what the engine boots from. The joiner's world lives in an in-memory
+    // store (the host owns the durable save; a joiner never writes OPFS).
+    onJoinByCode: async (code) => {
+      const join = createJoinNet(code);
+      const welcome = await join.waitForWelcome();
+      if (!welcome) {
+        join.dispose();
+        return false;
+      }
+      const store = new InMemoryWorldSaveStore();
+      const now = Date.now();
+      const defaultPose: PlayerState = { position: [0, 0, 0], yaw: 0, pitch: 0 };
+      await store.save({
+        worldId: welcome.worldId,
+        seed: welcome.seed,
+        name: welcome.name,
+        createdAt: now,
+        modifiedAt: now,
+        modifiedChunks: welcome.modifiedChunks,
+        entities: welcome.entities,
+        inventories: {},
+        playerState: defaultPose,
+      });
+      container.remove();
+      if (bootEl) bootEl.style.display = '';
+      bootEngine(hooks, {
+        seed: welcome.seed,
+        worldId: welcome.worldId,
+        playerState: defaultPose,
+        store,
+        join,
+      }).catch(reportBootFailure);
+      return true;
     },
   });
 }
@@ -215,10 +254,39 @@ async function bootEngine(hooks: LaasHooks, launch: MenuLaunch | null): Promise<
   hooks.flyCamEnabled = (on) => {
     fly.enabled = on;
   };
+  // net-probe seam: which world seed actually booted (menu boots carry no URL seed)
+  (window as unknown as { __laasSeed?: number }).__laasSeed = params.seed;
+
+  // M7 multiplayer glue: every menu-launched world is joinable (host), and a
+  // join boot binds its pre-created session to the now-live scene (joiner)
+  if (launch?.join) {
+    const world = launch.join.attachWorld({
+      voxels: ctx.world?.voxels ?? null,
+      parent: engine.scene,
+      getPose: () => camPoseToPlayerState(fly.getPose()),
+      // ponytail: freeze-and-wait UX (ADR 0002 §5) is a follow-up; today the
+      // host vanishing just warns — the joiner can keep walking the frozen world
+      onHostGone: () => console.warn('[laas] host left — exit to menu to rejoin later'),
+    });
+    engine.onUpdate((dt) => world.update(dt));
+  } else if (launch) {
+    const net = await attachHostNet({
+      worldId: launch.worldId,
+      seed: launch.seed,
+      store: launch.store,
+      getPose: () => camPoseToPlayerState(fly.getPose()),
+      voxels: ctx.world?.voxels ?? null,
+      parent: engine.scene,
+    });
+    engine.onUpdate((dt) => net.update(dt));
+    console.log(`[laas] room code: ${net.code}`);
+    showRoomCodeBadge(net.code);
+  }
 
   // menu-launched worlds persist the player's pose on exit so the next
-  // launch restores where they left off (the live camera owns the pose)
-  if (launch) {
+  // launch restores where they left off (the live camera owns the pose);
+  // a JOINER saves nothing — the host owns the world save
+  if (launch && !launch.join) {
     const lifecycle = new WorldLifecycle(launch.store);
     const savePose = (): void => {
       void lifecycle.savePlayerState(launch.worldId, camPoseToPlayerState(fly.getPose()));
@@ -235,6 +303,18 @@ async function bootEngine(hooks: LaasHooks, launch: MenuLaunch | null): Promise<
   hooks.ready = true;
    
   console.log('[laas] ready');
+}
+
+/** Playtesters read the invite code off this badge (also on the console). */
+function showRoomCodeBadge(code: string): void {
+  const badge = document.createElement('div');
+  badge.id = 'laas-room-code';
+  badge.textContent = code;
+  badge.style.cssText =
+    'position:fixed;top:8px;right:8px;z-index:20;padding:6px 10px;' +
+    'font:700 16px/1.2 ui-monospace,Consolas,monospace;letter-spacing:2px;' +
+    'color:#fff;background:rgba(0,0,0,0.78);border-radius:6px;user-select:text;';
+  document.body.appendChild(badge);
 }
 
 function reportBootFailure(e: unknown): void {

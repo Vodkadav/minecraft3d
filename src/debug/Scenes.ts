@@ -6,6 +6,7 @@ import type { LaasParams } from '../core/Params';
 import type { WorldSeed } from '../core/Seed';
 import type { WorldSaveStore } from '../game/application/ports/WorldSaveStore';
 import type { PlayerState } from '../game/domain/world/WorldSaveData';
+import type { VoxelTerrain } from '../voxel/VoxelTerrain';
 
 /** Present when the boot came from the menu (world lifecycle) — binds the
  *  scene to the chosen world: its real id, the SAME persistent store the menu
@@ -14,6 +15,9 @@ export interface WorldLaunchBinding {
   worldId: string;
   store: WorldSaveStore;
   poseProvider: () => PlayerState;
+  /** Set by the scene once the M8 voxel subsystem boots — the M7 net glue
+   *  applies remote dig/fill through it. */
+  voxels?: VoxelTerrain;
 }
 
 export interface WorldContext {

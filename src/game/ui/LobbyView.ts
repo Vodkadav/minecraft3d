@@ -12,6 +12,7 @@
 import type { Localizer } from "../application/i18n/Localizer";
 import type { LobbyController } from "../application/LobbyController";
 import type { LoopbackSession } from "../application/LoopbackSession";
+import { isValidRoomCode } from "../domain/net/RoomCode";
 import type { WorldSummary } from "../domain/world/WorldSaveData";
 import type { SeedEntry } from "../domain/seedvault/SeedVault";
 import { injectStyles } from "./styles";
@@ -21,6 +22,7 @@ export function LobbyView(
   loc: Localizer,
   onSession?: (session: LoopbackSession) => void,
   onBack?: () => void,
+  onJoinByCode?: (code: string) => Promise<boolean>,
 ): HTMLElement {
   const doc = document;
   injectStyles(doc);
@@ -32,6 +34,53 @@ export function LobbyView(
   const heading = doc.createElement("h1");
   heading.textContent = loc.t("lobby.title");
   root.appendChild(heading);
+
+  // M7 join-by-code (ADR 0002 §4): a friend's invite code beats any list.
+  // Only rendered when the host app wires the real net path in.
+  if (onJoinByCode) {
+    const row = doc.createElement("div");
+    row.className = "laas-code-row";
+
+    const label = doc.createElement("label");
+    label.textContent = loc.t("lobby.code.label");
+    label.htmlFor = "laas-code-input";
+
+    const input = doc.createElement("input");
+    input.type = "text";
+    input.id = "laas-code-input";
+    input.className = "laas-code-input";
+    input.placeholder = loc.t("lobby.code.placeholder");
+    input.maxLength = 8;
+    input.autocapitalize = "characters";
+    input.spellcheck = false;
+
+    const joinByCode = doc.createElement("button");
+    joinByCode.type = "button";
+    joinByCode.textContent = loc.t("lobby.code.join");
+
+    const codeStatus = doc.createElement("p");
+    codeStatus.className = "laas-code-status";
+    codeStatus.setAttribute("role", "status");
+    codeStatus.setAttribute("aria-live", "polite");
+
+    joinByCode.addEventListener("click", () => {
+      const code = input.value.trim().toUpperCase();
+      if (!isValidRoomCode(code)) {
+        codeStatus.textContent = loc.t("lobby.code.invalid");
+        return;
+      }
+      joinByCode.disabled = true;
+      codeStatus.textContent = loc.t("lobby.code.connecting");
+      void onJoinByCode(code).then((launched) => {
+        if (launched) return; // the host app tears the menu down
+        joinByCode.disabled = false;
+        codeStatus.textContent = loc.t("lobby.code.failed");
+      });
+    });
+
+    row.append(label, input, joinByCode);
+    root.append(row, codeStatus);
+  }
 
   const worldsHeading = doc.createElement("h2");
   worldsHeading.id = "laas-worlds-heading";

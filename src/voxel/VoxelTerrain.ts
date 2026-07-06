@@ -15,6 +15,7 @@
 
 import { BufferAttribute, BufferGeometry, Group, Mesh } from 'three';
 import { MeshStandardNodeMaterial } from 'three/webgpu';
+import type { WorldEdit } from '../game/domain/net/Protocol';
 import type { ChunkKey, PlayerState, WorldSaveData } from '../game/domain/world/WorldSaveData';
 import { CHUNK_CELLS, parseVoxelChunkKey, worldToGrid } from '../game/domain/voxel/VoxelGrid';
 import { VoxelVolume } from '../game/domain/voxel/VoxelVolume';
@@ -53,6 +54,10 @@ interface PreservedSaveFields {
 
 export class VoxelTerrain {
   readonly group = new Group();
+
+  /** M7 net seam: every locally-applied edit is reported here so the session
+   *  wiring can broadcast it (host) or send it as an intent (joiner). */
+  onLocalEdit: ((edit: WorldEdit) => void) | null = null;
 
   private readonly volume: VoxelVolume;
   private readonly sampler: GridSampler;
@@ -132,6 +137,7 @@ export class VoxelTerrain {
     if (this.intersectsSurface(x, y, z, radius)) this.digMask.add(x, y, z, radius);
     this.remeshDirtyChunks();
     this.scheduleSave();
+    this.onLocalEdit?.({ op: 'dig', x, y, z, radius });
   }
 
   /** Sphere vs heightfield sheet: center + 4 rim samples to cover slopes. */
@@ -147,6 +153,7 @@ export class VoxelTerrain {
     this.volume.fillSphere(x, y, z, radius, materialId);
     this.remeshDirtyChunks();
     this.scheduleSave();
+    this.onLocalEdit?.({ op: 'fill', x, y, z, radius, materialId });
   }
 
   /** Continuous SDF (meters, negative = solid) — trilinear over the lattice. */

@@ -13,6 +13,7 @@
 
 import { joinRoom } from "trystero";
 import type { NetTransport } from "../../application/ports/NetTransport";
+import { decodeWire, encodeWire } from "./WireCodec";
 
 /** Shared app id — rooms only meet inside the same namespace. */
 const APP_ID = "vodkadav-minecraft3d";
@@ -36,15 +37,15 @@ export function makeTrysteroTransport(roomCode: string): NetTransport {
   let messageCb: ((peerId: string, msg: unknown) => void) | null = null;
 
   action.onMessage = (data, ctx) => {
-    messageCb?.(ctx.peerId, data);
+    messageCb?.(ctx.peerId, decodeWire(data));
   };
 
   return {
     send(peerId, msg) {
-      void action.send(msg as never, { target: peerId });
+      void action.send(encodeWire(msg) as never, { target: peerId });
     },
     broadcast(msg) {
-      void action.send(msg as never);
+      void action.send(encodeWire(msg) as never);
     },
     onMessage(cb) {
       messageCb = cb;

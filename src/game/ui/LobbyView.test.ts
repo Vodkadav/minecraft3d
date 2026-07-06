@@ -14,7 +14,7 @@ function seed(overrides: Partial<SeedEntry> = {}): SeedEntry {
   return { id: "s1", seed: 42, name: "Home", createdAt: 100, ...overrides };
 }
 
-async function build() {
+async function build(onJoinByCode?: (code: string) => Promise<boolean>) {
   const worlds = new InMemoryWorldSaveStore();
   const seeds = new InMemorySeedVaultStore();
   await seeds.add(seed());
@@ -30,6 +30,7 @@ async function build() {
     createLocalizer("en"),
     (s) => sessions.push(s),
     () => backs++,
+    onJoinByCode,
   );
   document.body.appendChild(el);
   await flush();
@@ -76,6 +77,64 @@ describe("LobbyView", () => {
     expect(buttonByText(el, "Join")).toBeTruthy();
     expect(sessions).toHaveLength(1);
     expect(sessions[0].mode).toBe("loopback");
+  });
+
+  describe("join by code", () => {
+    function codeInput(el: HTMLElement): HTMLInputElement {
+      const input = el.querySelector<HTMLInputElement>(".laas-code-input");
+      if (!input) throw new Error("no room-code input");
+      return input;
+    }
+    const statusOf = (el: HTMLElement): string =>
+      el.querySelector(".laas-code-status")?.textContent ?? "";
+
+    it("renders no code input when the host app wires no handler", async () => {
+      const { el } = await build();
+      expect(el.querySelector(".laas-code-input")).toBeNull();
+    });
+
+    it("passes a valid code (normalized uppercase) to onJoinByCode", async () => {
+      const codes: string[] = [];
+      const { el } = await build((code) => {
+        codes.push(code);
+        return Promise.resolve(true);
+      });
+      codeInput(el).value = "abcd2345";
+      buttonByText(el, "Join with code").click();
+      await flush();
+      expect(codes).toEqual(["ABCD2345"]);
+    });
+
+    it("rejects a malformed code with an aria-live error and no callback", async () => {
+      const codes: string[] = [];
+      const { el } = await build((code) => {
+        codes.push(code);
+        return Promise.resolve(true);
+      });
+      codeInput(el).value = "nope";
+      buttonByText(el, "Join with code").click();
+      await flush();
+      expect(codes).toEqual([]);
+      const status = el.querySelector(".laas-code-status");
+      expect(status?.getAttribute("aria-live")).toBe("polite");
+      expect(statusOf(el)).toContain("8 letters");
+    });
+
+    it("shows connecting while pending, then the failure message on false", async () => {
+      let resolve!: (v: boolean) => void;
+      const { el } = await build(() => new Promise<boolean>((r) => (resolve = r)));
+      codeInput(el).value = "ABCD2345";
+      const button = buttonByText(el, "Join with code");
+      button.click();
+      await flush();
+      expect(statusOf(el)).toContain("Connecting");
+      expect(button.disabled).toBe(true);
+
+      resolve(false);
+      await flush();
+      expect(statusOf(el)).toContain("Couldn't reach the host");
+      expect(button.disabled).toBe(false);
+    });
   });
 
   it("joins a hosted world and reports the session", async () => {
