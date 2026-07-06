@@ -51,7 +51,7 @@ export class SunSky {
       if (e.code === 'BracketLeft' || e.code === 'BracketRight') {
         const step = e.code === 'BracketLeft' ? -0.5 : 0.5;
         void this.setTimeOfDay((this.timeOfDay + step + 24) % 24);
-        // eslint-disable-next-line no-console
+         
         console.log(`[laas] T=${this.timeOfDay.toFixed(2)}`);
       }
     });

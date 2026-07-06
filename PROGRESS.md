@@ -13,7 +13,9 @@ Live: https://vodkadav.github.io/minecraft3d/ (desktop Chrome + WebGPU).
 - [x] Repo connected to Vodkadav/minecraft3d (origin); upstream kept for provenance
 - [x] CI gate (typecheck + build) — green
 - [x] Deploy to GitHub Pages (free) — live
-- [ ] M0.4 ESLint/Prettier (non-blocking → blocking) — deferred
+- [x] M0.4 ESLint blocking in CI (2026-07-06: flat config, js+ts recommended, --max-warnings 0,
+  in `ci` script + GH Actions; Prettier skipped deliberately — style churn on the engine tree,
+  review enforces consistency). npm audit clean (esbuild advisory fixed).
 - [x] M0.5 Vitest + dependency-cruiser (layer rules) wired into the CI gate — game-logic layers
 - [~] M1 Mobile PWA shell — manifest, service worker (offline precache), capability-tier gate,
   storage.persist done ([O]); M1.6 mobile-reduced render preset done ([F], 2026-07-06: engine

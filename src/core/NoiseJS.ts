@@ -25,22 +25,21 @@ export function valueNoise3(x: number, y: number, z: number, seed: number): numb
   const xf = smooth(x - xi);
   const yf = smooth(y - yi);
   const zf = smooth(z - zi);
-  let v = 0;
-  let n000 = hash3(xi, yi, zi, seed);
-  let n100 = hash3(xi + 1, yi, zi, seed);
-  let n010 = hash3(xi, yi + 1, zi, seed);
-  let n110 = hash3(xi + 1, yi + 1, zi, seed);
-  let n001 = hash3(xi, yi, zi + 1, seed);
-  let n101 = hash3(xi + 1, yi, zi + 1, seed);
-  let n011 = hash3(xi, yi + 1, zi + 1, seed);
-  let n111 = hash3(xi + 1, yi + 1, zi + 1, seed);
+  const n000 = hash3(xi, yi, zi, seed);
+  const n100 = hash3(xi + 1, yi, zi, seed);
+  const n010 = hash3(xi, yi + 1, zi, seed);
+  const n110 = hash3(xi + 1, yi + 1, zi, seed);
+  const n001 = hash3(xi, yi, zi + 1, seed);
+  const n101 = hash3(xi + 1, yi, zi + 1, seed);
+  const n011 = hash3(xi, yi + 1, zi + 1, seed);
+  const n111 = hash3(xi + 1, yi + 1, zi + 1, seed);
   const nx00 = n000 + (n100 - n000) * xf;
   const nx10 = n010 + (n110 - n010) * xf;
   const nx01 = n001 + (n101 - n001) * xf;
   const nx11 = n011 + (n111 - n011) * xf;
   const nxy0 = nx00 + (nx10 - nx00) * yf;
   const nxy1 = nx01 + (nx11 - nx01) * yf;
-  v = nxy0 + (nxy1 - nxy0) * zf;
+  const v = nxy0 + (nxy1 - nxy0) * zf;
   return v * 2 - 1;
 }
 

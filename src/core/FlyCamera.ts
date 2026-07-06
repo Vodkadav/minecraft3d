@@ -159,7 +159,7 @@ export class FlyCamera {
     });
     window.addEventListener('keydown', (e) => {
       if (e.code === 'KeyP') {
-        // eslint-disable-next-line no-console
+         
         console.log(`[pose] cam=${this.toCamString()}`);
       }
       if (e.code === 'KeyV' && this.enabled) {
@@ -195,7 +195,7 @@ export class FlyCamera {
     if (mode === this.modeV) return;
     if (mode === 'walk') {
       if (!this.groundProbe) {
-        // eslint-disable-next-line no-console
+         
         console.warn('[laas] walk mode unavailable — no terrain in this scene');
         return;
       }
@@ -213,7 +213,7 @@ export class FlyCamera {
     this.modeV = mode;
     this.applyRotation(0);
     this.camera.updateMatrixWorld();
-    // eslint-disable-next-line no-console
+     
     console.log(`[laas] camera mode: ${mode} (V toggles)`);
   }
 

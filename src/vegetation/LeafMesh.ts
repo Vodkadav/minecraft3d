@@ -97,7 +97,7 @@ export function buildNeedleSpray(
   const L = scale;
   // stem: thin two-sided strip (cheaper than a tube, reads as twig)
   const stemPts: Vector3[] = [];
-  let dz = 1;
+  const dz = 1;
   let dy = 0;
   let z = 0;
   let y = 0;

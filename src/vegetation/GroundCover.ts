@@ -41,11 +41,10 @@ export function grassBladeGeometry(SEG = 4): BufferGeometry {
   // instead of a flat card — interpolation does the curving per-pixel
   const SN = 0.616;
   const CS = 0.788;
-  let bendZ = 0;
   for (let i = 0; i <= SEG; i++) {
     const t = i / SEG;
     const w = W * (1 - t * 0.85);
-    bendZ = t * t * 0.28;
+    const bendZ = t * t * 0.28;
     const y = t * H * (1 - t * t * 0.06);
     if (i < SEG) {
       pos.push(-w, y, bendZ, w, y, bendZ);

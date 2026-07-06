@@ -100,7 +100,7 @@ export class VoxelTerrain {
     const loaded = await this.store.load(this.worldId);
     if (!loaded.ok) {
       if (loaded.error.kind !== 'NotFound') {
-        // eslint-disable-next-line no-console
+         
         console.warn('[voxel] save load failed — starting fresh', loaded.error);
       }
       return;
@@ -116,7 +116,7 @@ export class VoxelTerrain {
     };
     const restored = this.volume.loadFromDeltas(loaded.value.modifiedChunks);
     if (!restored.ok) {
-      // eslint-disable-next-line no-console
+       
       console.warn('[voxel] corrupt chunk delta — starting fresh', restored.error);
       return;
     }
@@ -326,7 +326,7 @@ export class VoxelTerrain {
     this.createdAt = save.createdAt;
     const result = await this.store.save(save);
     if (!result.ok) {
-      // eslint-disable-next-line no-console
+       
       console.warn('[voxel] save failed — digs may not survive reload', result.error);
     }
   }

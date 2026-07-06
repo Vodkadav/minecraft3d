@@ -134,7 +134,7 @@ export function mountGameUi(
     // just-created world is an unexpected I/O fault — log it, don't transition.
     void lifecycle.launch(session.worldId).then((resolved) => {
       if (resolved.ok) options.onLaunch?.(resolved.value);
-      // eslint-disable-next-line no-console
+       
       else console.warn("[game] world launch failed", resolved.error);
     });
   };

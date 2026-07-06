@@ -359,7 +359,7 @@ export async function runScatter(
   // boot-diagnostic trail: the scatter passes are the historical TDR
   // device-loss site — pass-level marks localize a loss to one kernel
   const mark = (m: string): void => {
-    // eslint-disable-next-line no-console
+     
     console.log(`[laas] scatter: ${m}`);
   };
   const sT = seed.sub('scatter/trees') & 0x7fffffff;

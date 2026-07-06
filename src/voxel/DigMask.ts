@@ -36,7 +36,7 @@ export class DigMask {
   /** Record a carved sphere. Beyond capacity the oldest survives visually — logged, not silent. */
   add(x: number, y: number, z: number, radius: number): void {
     if (this.count >= MAX_DIG_SPHERES) {
-      // eslint-disable-next-line no-console
+       
       console.warn(
         `[voxel] dig mask full (${MAX_DIG_SPHERES}) — new surface holes will not render until the mask goes field-derived`,
       );

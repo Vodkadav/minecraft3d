@@ -52,7 +52,7 @@ async function bootFallbackPreset(): Promise<QualityPreset> {
       const loaded = await new LocalStorageSettingsStore().load();
       if (!isErr(loaded)) persisted = loaded.value.graphicsPreset;
     } catch (e) {
-      // eslint-disable-next-line no-console
+       
       console.warn('[laas] settings unavailable, using default preset:', e);
     }
   }
@@ -143,7 +143,7 @@ async function bootEngine(hooks: LaasHooks, launch: MenuLaunch | null): Promise<
     ]);
     return;
   }
-  // eslint-disable-next-line no-console
+   
   console.log('[laas] webgpu ok\n' + describeDiagnostics(diag).join('\n'));
 
   bootUI.set(0.08, 'creating renderer');
@@ -233,7 +233,7 @@ async function bootEngine(hooks: LaasHooks, launch: MenuLaunch | null): Promise<
   await engine.settle(6);
   bootUI.hide();
   hooks.ready = true;
-  // eslint-disable-next-line no-console
+   
   console.log('[laas] ready');
 }
 

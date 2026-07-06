@@ -50,7 +50,7 @@ export async function probeWebGPU(): Promise<GpuDiagnostics> {
       limits: {},
     };
   }
-  let adapter: GPUAdapter | null = null;
+  let adapter: GPUAdapter | null;
   try {
     adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' });
   } catch (e) {
@@ -92,7 +92,7 @@ let failShown = false;
 /** Render an unmissable full-screen failure overlay and record it on hooks. */
 export function failLoud(title: string, details: string[]): void {
   if (window.__laas) window.__laas.error = `${title}\n${details.join('\n')}`;
-  // eslint-disable-next-line no-console
+   
   console.error('[LAAS FATAL]', title, details);
   if (failShown) return;
   failShown = true;

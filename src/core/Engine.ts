@@ -81,7 +81,7 @@ export class Engine {
       let reported = 0;
       device.onuncapturederror = (e: GPUUncapturedErrorEvent): void => {
         if (reported++ < 8) {
-          // eslint-disable-next-line no-console
+           
           console.error('[laas] WebGPU uncaptured error:', e.error.message);
         }
       };
