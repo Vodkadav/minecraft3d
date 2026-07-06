@@ -21,7 +21,8 @@ import { VoxelVolume } from '../game/domain/voxel/VoxelVolume';
 import type { WorldSaveStore } from '../game/application/ports/WorldSaveStore';
 import type { DigMask } from './DigMask';
 import { extractChunkMesh, type GridSampler } from './SurfaceExtractor';
-import { depthBandSampler, VOXEL_MATERIAL_RGB } from './VoxelMaterials';
+import { oreGemMaterialSampler } from '../game/domain/voxel/OreGemSeeding';
+import { VOXEL_MATERIAL_RGB } from './VoxelMaterials';
 
 /** Port: the surface the voxel baseline hangs off (heightfield or analytic). */
 export interface VoxelSurface {
@@ -54,7 +55,7 @@ export class VoxelTerrain {
     this.worldId = `${worldIdPrefix}-${seed}`;
     this.volume = new VoxelVolume(
       { sdfAt: (x, y, z) => y - surface.heightAt(x, z) },
-      depthBandSampler(surface),
+      oreGemMaterialSampler(seed, surface),
     );
     this.sampler = {
       sdf: (ix, iy, iz) => this.volume.sdfAtGrid(ix, iy, iz),
