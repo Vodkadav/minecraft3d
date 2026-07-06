@@ -154,6 +154,12 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
   let lastCz: number | null = null;
   let sinceStep = Infinity; // first update always steps
   let clockMs = 0;
+  // M6.5 ride: the walk controller stays the mover; the mount is glued under
+  // the camera and animated by player speed. ponytail: no controller surgery,
+  // no speed boost yet - add when riding should outrun running.
+  let ridingId: string | null = null;
+  let lastPx: number | null = null;
+  let lastPz: number | null = null;
 
   const locked = (): boolean =>
     deps.dom === undefined || document.pointerLockElement === deps.dom;
@@ -277,6 +283,16 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
         if (duration > 0) target.dying = duration;
         else remove(target.entity.id);
       }
+    } else if (ev.code === "KeyG") {
+      // G = mount/dismount (R belongs to the placement tool's rotate)
+      if (ridingId !== null) {
+        ridingId = null;
+        return;
+      }
+      const target = pickTarget(creatures);
+      if (target && target.dying === null && target.taming.phase === "tamed") {
+        ridingId = target.entity.id;
+      }
     } else if (ev.code === "KeyT") {
       const target = pickTarget(creatures);
       if (!target || target.dying !== null || target.taming.phase === "tamed") return;
@@ -304,8 +320,21 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
     for (const c of creatures.values()) {
       c.instance?.update(dt);
       if (c.dying !== null) {
+        if (ridingId === c.entity.id) ridingId = null;
         c.dying -= dt;
         if (c.dying <= 0) remove(c.entity.id);
+        continue;
+      }
+      if (ridingId === c.entity.id) {
+        const speed =
+          lastPx === null || lastPz === null || dt <= 0
+            ? 0
+            : Math.hypot(px - lastPx, pz - lastPz) / dt;
+        c.obj.position.set(px, deps.ground.heightAt(px, pz) + c.lift, pz);
+        if (speed > 0.3 && lastPx !== null && lastPz !== null) {
+          c.obj.rotation.y = Math.atan2(px - lastPx, pz - lastPz);
+        }
+        c.instance?.setBehavior(speed > 4 ? "flee" : speed > 0.3 ? "follow" : "idle");
         continue;
       }
       const x = c.obj.position.x;
@@ -354,6 +383,8 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
         for (const s of enter) materialize(s);
       }
       stepCreatures(dt);
+      lastPx = px;
+      lastPz = pz;
     },
 
     dispose(): void {
