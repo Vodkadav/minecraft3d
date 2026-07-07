@@ -144,6 +144,7 @@ export async function buildVoxelDevScene(ctx: WorldContext): Promise<void> {
         healthBar.set(1);
       }
     },
+    setMoveSpeedScale: (s) => ctx.hooks.setMoveSpeedScale?.(s),
     save: {
       entity: (k) => voxels.entity(k),
       setEntity: (k, v) => voxels.setEntity(k, v),

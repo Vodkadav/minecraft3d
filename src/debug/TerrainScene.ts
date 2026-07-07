@@ -421,6 +421,7 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
           healthBar.set(1);
         }
       },
+      setMoveSpeedScale: (s) => ctx.hooks.setMoveSpeedScale?.(s),
       ...(voxelsRef
         ? {
             save: {

@@ -62,6 +62,8 @@ const CONTACT_RANGE_M = 2.2;
 const BITE_COOLDOWN_S = 1.2;
 /** Wander waypoints change every this many ms. */
 const WANDER_EPOCH_MS = 8000;
+/** Walk-speed multiplier while mounted — a mount outpaces jogging (M6.5). */
+const RIDE_SPEED_MULT = 1.6;
 
 export interface SpawnSave {
   entity(key: string): unknown;
@@ -83,6 +85,8 @@ export interface SpawnFieldDeps {
   onLoot?(stacks: readonly ItemStack[]): void;
   /** An aggressive creature bit the player (M6 player health). */
   onPlayerHit?(amount: number): void;
+  /** Set the player's walk-speed multiplier (mount boost; 1 = on foot). */
+  setMoveSpeedScale?(scale: number): void;
 }
 
 export interface SpawnFieldHandle {
@@ -168,6 +172,12 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
   let ridingId: string | null = null;
   let lastPx: number | null = null;
   let lastPz: number | null = null;
+
+  // mounting/dismounting also toggles the ride speed boost through the controller
+  const setRiding = (id: string | null): void => {
+    ridingId = id;
+    deps.setMoveSpeedScale?.(id !== null ? RIDE_SPEED_MULT : 1);
+  };
 
   const locked = (): boolean =>
     deps.dom === undefined || document.pointerLockElement === deps.dom;
@@ -295,12 +305,12 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
     } else if (ev.code === "KeyG") {
       // G = mount/dismount (R belongs to the placement tool's rotate)
       if (ridingId !== null) {
-        ridingId = null;
+        setRiding(null);
         return;
       }
       const target = pickTarget(creatures);
       if (target && target.dying === null && target.taming.phase === "tamed") {
-        ridingId = target.entity.id;
+        setRiding(target.entity.id);
       }
     } else if (ev.code === "KeyT") {
       const target = pickTarget(creatures);
@@ -329,7 +339,7 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
     for (const c of creatures.values()) {
       c.instance?.update(dt);
       if (c.dying !== null) {
-        if (ridingId === c.entity.id) ridingId = null;
+        if (ridingId === c.entity.id) setRiding(null);
         c.dying -= dt;
         if (c.dying <= 0) remove(c.entity.id);
         continue;

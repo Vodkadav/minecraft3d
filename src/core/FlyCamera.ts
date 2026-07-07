@@ -60,6 +60,8 @@ export class FlyCamera {
   pitch = 0;
   /** base FLY speed in m/s, scroll-scaled (walk speeds are fixed) */
   speed = 24;
+  /** walk-speed multiplier — 1 on foot, raised while mounted (M6.5 ride). */
+  speedScale = 1;
   enabled = true;
   /** terrain probe — walk mode is unavailable until the scene installs it */
   groundProbe: GroundProbe | null = null;
@@ -345,7 +347,7 @@ export class FlyCamera {
     let target = 0;
     if (MOVE.lengthSq() > 0) {
       MOVE.normalize();
-      target = WALK_SPEED * (sprinting ? SPRINT_MULT : 1);
+      target = WALK_SPEED * (sprinting ? SPRINT_MULT : 1) * this.speedScale;
       if (this.keys.has('AltLeft')) target *= 0.35;
     }
     const accel = this.grounded ? GROUND_ACCEL : AIR_ACCEL;

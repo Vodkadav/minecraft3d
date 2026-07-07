@@ -63,6 +63,8 @@ export interface LaasHooks {
   settle: ((frames?: number) => Promise<void>) | null;
   /** enable/disable fly-camera input (flythrough takes the wheel) */
   flyCamEnabled: ((on: boolean) => void) | null;
+  /** scale the walk speed — 1 on foot, >1 while mounted (M6.5 ride boost) */
+  setMoveSpeedScale: ((scale: number) => void) | null;
 }
 
 declare global {
@@ -87,6 +89,7 @@ export function initHooks(): LaasHooks {
     setTimeOfDay: null,
     settle: null,
     flyCamEnabled: null,
+    setMoveSpeedScale: null,
   };
   window.__laas = hooks;
   return hooks;

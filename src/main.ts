@@ -250,6 +250,9 @@ async function bootEngine(hooks: LaasHooks, launch: MenuLaunch | null): Promise<
 
   hooks.setPose = (p) => fly.setPose(p);
   hooks.getPose = () => fly.getPose();
+  hooks.setMoveSpeedScale = (s) => {
+    fly.speedScale = s;
+  };
   hooks.settle = (frames?: number) => engine.settle(frames ?? 8);
   hooks.flyCamEnabled = (on) => {
     fly.enabled = on;
