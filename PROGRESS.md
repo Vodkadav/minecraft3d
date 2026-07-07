@@ -52,8 +52,9 @@ Live: https://vodkadav.github.io/minecraft3d/ (desktop Chrome + WebGPU).
   (2026-07-06): `domain/combat/PlayerVitals` (TDD: damage, single death, grace-period
   full-heal regen, respawn), aggressive-creature contact damage in SpawnFieldView, a11y
   health-bar HUD, scene respawn via the fly-camera setPose seam; verified voxeldev boots
-  with the bar mounted. Remaining: player humanoid model (KayKit — remote avatars are
-  capsules today), ride speed boost.
+  with the bar mounted. Ride speed boost done (2026-07-07): mounts move 1.6× on-foot speed
+  via FlyCamera.speedScale + a setMoveSpeedScale hook, toggled on mount/dismount/death.
+  Remaining: player humanoid model (KayKit — remote avatars are capsules today).
 - [x] M7 Multiplayer — 7.1 research resolved + ADR 0002 (trystero/Nostr signaling, Metered TURN,
   room-code lobby, pause-on-host-offline, host validates intents); 7.2/7.5 [O] done TDD
   (`domain/net`: RoomCode/Protocol/IntentRules; `application`: NetTransport port, HostSession
