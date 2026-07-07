@@ -148,7 +148,10 @@ export interface JoinWorldDeps {
   getPose(): PlayerState;
   readonly voxels: EditableVoxels | null;
   readonly parent: Object3D;
+  /** The host left — clean close OR a dropped connection (ADR 0002 §5). */
   onHostGone?(): void;
+  /** The host's peer came back before the joiner gave up (transient drop). */
+  onHostReturned?(): void;
 }
 
 export interface JoinWorldHandle {
@@ -195,6 +198,7 @@ export function createJoinNet(code: string, opts: JoinNetOptions = {}): JoinNetH
     readonly voxels: EditableVoxels | null;
     readonly remote: RemotePlayers;
     readonly onHostGone?: () => void;
+    readonly onHostReturned?: () => void;
   } | null = null;
   let applyingRemote = false;
 
@@ -220,6 +224,18 @@ export function createJoinNet(code: string, opts: JoinNetOptions = {}): JoinNetH
     }
   };
 
+  // the joiner's only peer is the host; its departure — whether a clean
+  // hostClosing or a dropped WebRTC connection — means the host is gone
+  // (ADR 0002 §5). Idempotent: the two signals can both fire on a clean exit.
+  let hostGone = false;
+  const onHostLost = (): void => {
+    if (hostGone) return;
+    hostGone = true;
+    stopAnnouncing();
+    if (world) world.onHostGone?.();
+    else resolveWelcome?.(null); // dropped mid-boot ⇒ the join simply fails
+  };
+
   const hooks = {
     onWelcome: (msg: WelcomeMsg): void => {
       if (welcome) return; // re-announced joins can draw duplicate welcomes
@@ -230,10 +246,7 @@ export function createJoinNet(code: string, opts: JoinNetOptions = {}): JoinNetH
     onPeerPose: (peerId: string, state: PlayerState): void => world?.remote.upsert(peerId, state),
     onPeerLeft: (peerId: string): void => world?.remote.remove(peerId),
     onWorldEdit: applyRemoteEdit,
-    onHostClosing: (): void => {
-      console.warn("[net] host closed the session");
-      world?.onHostGone?.();
-    },
+    onHostClosing: onHostLost,
   };
 
   // trystero peers appear seconds after joinRoom, in no particular order in a
@@ -244,6 +257,12 @@ export function createJoinNet(code: string, opts: JoinNetOptions = {}): JoinNetH
     else session = new JoinSession(transport, playerName, hooks); // ctor sends the first join
   };
   transport.onPeerJoin(() => {
+    // a transient drop that reconnects re-fires onPeerJoin: resume, don't re-handshake
+    if (hostGone && welcome) {
+      hostGone = false;
+      world?.onHostReturned?.();
+      return;
+    }
     if (welcome) return;
     announceJoin();
     // A 2-peer session fires onPeerJoin exactly once, so a single join packet
@@ -254,6 +273,7 @@ export function createJoinNet(code: string, opts: JoinNetOptions = {}): JoinNetH
       announceTimer = setInterval(announceJoin, announceIntervalMs);
     }
   });
+  transport.onPeerLeave(onHostLost);
 
   return {
     waitForWelcome(timeoutMs = WELCOME_TIMEOUT_MS): Promise<WelcomeMsg | null> {
@@ -266,7 +286,12 @@ export function createJoinNet(code: string, opts: JoinNetOptions = {}): JoinNetH
 
     attachWorld(deps: JoinWorldDeps): JoinWorldHandle {
       const remote = new RemotePlayers(deps.parent);
-      const attached = { voxels: deps.voxels, remote, ...(deps.onHostGone ? { onHostGone: deps.onHostGone } : {}) };
+      const attached = {
+        voxels: deps.voxels,
+        remote,
+        ...(deps.onHostGone ? { onHostGone: deps.onHostGone } : {}),
+        ...(deps.onHostReturned ? { onHostReturned: deps.onHostReturned } : {}),
+      };
       world = attached;
       for (const edit of pendingEdits.splice(0)) applyRemoteEdit(edit);
       // the M8 DigTool applies locally (optimistic — SDF edits are

@@ -11,6 +11,8 @@ import {
 import { Engine } from './core/Engine';
 import { FlyCamera } from './core/FlyCamera';
 import { initHooks, type LaasHooks } from './core/Hooks';
+import { createLocalizer } from './game/ui/i18n/strings';
+import type { Locale } from './game/domain/i18n/translate';
 import { parseCamString, parseParams, type QualityPreset } from './core/Params';
 import { WorldSeed } from './core/Seed';
 import { resolveRenderPreset } from './game/domain/capability/RenderPreset';
@@ -263,13 +265,15 @@ async function bootEngine(hooks: LaasHooks, launch: MenuLaunch | null): Promise<
   // M7 multiplayer glue: every menu-launched world is joinable (host), and a
   // join boot binds its pre-created session to the now-live scene (joiner)
   if (launch?.join) {
+    // ADR 0002 §5: when the host drops, freeze the joiner and wait a grace
+    // window for a transient reconnect; if it doesn't return, go to the menu.
+    const hostWatch = installHostOfflineWatch(hooks);
     const world = launch.join.attachWorld({
       voxels: ctx.world?.voxels ?? null,
       parent: engine.scene,
       getPose: () => camPoseToPlayerState(fly.getPose()),
-      // ponytail: freeze-and-wait UX (ADR 0002 §5) is a follow-up; today the
-      // host vanishing just warns — the joiner can keep walking the frozen world
-      onHostGone: () => console.warn('[laas] host left — exit to menu to rejoin later'),
+      onHostGone: hostWatch.onGone,
+      onHostReturned: hostWatch.onReturned,
     });
     engine.onUpdate((dt) => world.update(dt));
   } else if (launch) {
@@ -306,6 +310,70 @@ async function bootEngine(hooks: LaasHooks, launch: MenuLaunch | null): Promise<
   hooks.ready = true;
    
   console.log('[laas] ready');
+}
+
+function browserLocale(): Locale {
+  const l = (navigator.language || 'en').slice(0, 2).toLowerCase();
+  return l === 'es' ? 'es' : l === 'da' ? 'da' : 'en';
+}
+
+/**
+ * ADR 0002 §5 host-offline UX: when the host drops, freeze the joiner and show
+ * a grace-window countdown; a transient reconnect cancels it, otherwise reload
+ * to the menu (a joiner's URL is the plain menu — reload boots straight to it).
+ */
+function installHostOfflineWatch(hooks: LaasHooks): { onGone: () => void; onReturned: () => void } {
+  const loc = createLocalizer(browserLocale());
+  const GRACE_S = 30;
+  let overlay: HTMLDivElement | null = null;
+  let timer: ReturnType<typeof setInterval> | null = null;
+
+  const clear = (): void => {
+    if (timer !== null) {
+      clearInterval(timer);
+      timer = null;
+    }
+    overlay?.remove();
+    overlay = null;
+  };
+
+  return {
+    onGone(): void {
+      if (overlay) return; // already counting down
+      hooks.flyCamEnabled?.(false); // freeze input while we wait
+      let remaining = GRACE_S;
+      overlay = document.createElement('div');
+      overlay.id = 'laas-host-offline';
+      overlay.setAttribute('role', 'alertdialog');
+      overlay.setAttribute('aria-live', 'assertive');
+      overlay.style.cssText =
+        'position:fixed;inset:0;z-index:40;display:flex;flex-direction:column;' +
+        'align-items:center;justify-content:center;gap:8px;text-align:center;' +
+        'background:rgba(6,10,14,0.82);color:#f2f6fa;padding:24px;' +
+        "font:600 20px/1.4 system-ui,-apple-system,'Segoe UI',sans-serif;";
+      const render = (): void => {
+        if (overlay) {
+          overlay.textContent = `${loc.t('net.hostLeft')}\n${loc.t('net.returningIn', { n: remaining })}`;
+          overlay.style.whiteSpace = 'pre-line';
+        }
+      };
+      render();
+      document.body.appendChild(overlay);
+      timer = setInterval(() => {
+        remaining -= 1;
+        if (remaining <= 0) {
+          clear();
+          window.location.reload();
+          return;
+        }
+        render();
+      }, 1000);
+    },
+    onReturned(): void {
+      clear();
+      hooks.flyCamEnabled?.(true);
+    },
+  };
 }
 
 /** Playtesters read the invite code off this badge (also on the console). */

@@ -51,6 +51,8 @@ export const UI_STRINGS: Catalog = {
     "lobby.code.invalid": "That code doesn't look right — it's 8 letters and digits.",
     "lobby.code.connecting": "Connecting to the host…",
     "lobby.code.failed": "Couldn't reach the host — check the code and try again.",
+    "net.hostLeft": "The host left — trying to reconnect…",
+    "net.returningIn": "Returning to the menu in {n}s",
 
     "storage.persisted": "Storage is protected — your worlds won't be evicted.",
     "storage.notPersisted": "Storage is best-effort — worlds may be evicted under pressure.",
@@ -97,6 +99,8 @@ export const UI_STRINGS: Catalog = {
     "lobby.code.invalid": "Ese código no parece correcto: son 8 letras y números.",
     "lobby.code.connecting": "Conectando con el anfitrión…",
     "lobby.code.failed": "No se pudo contactar con el anfitrión; revisa el código e inténtalo de nuevo.",
+    "net.hostLeft": "El anfitrión se fue; intentando reconectar…",
+    "net.returningIn": "Volviendo al menú en {n} s",
 
     "storage.persisted": "El almacenamiento está protegido: tus mundos no se eliminarán.",
     "storage.notPersisted": "Almacenamiento de mejor esfuerzo: los mundos podrían eliminarse.",
@@ -143,6 +147,8 @@ export const UI_STRINGS: Catalog = {
     "lobby.code.invalid": "Den kode ser ikke rigtig ud — den er på 8 bogstaver og tal.",
     "lobby.code.connecting": "Forbinder til værten…",
     "lobby.code.failed": "Kunne ikke nå værten — tjek koden og prøv igen.",
+    "net.hostLeft": "Værten forlod spillet — prøver at genoprette forbindelsen…",
+    "net.returningIn": "Vender tilbage til menuen om {n} s",
 
     "storage.persisted": "Lageret er beskyttet — dine verdener bliver ikke slettet.",
     "storage.notPersisted": "Bedste forsøg-lager — verdener kan blive slettet ved pladsmangel.",

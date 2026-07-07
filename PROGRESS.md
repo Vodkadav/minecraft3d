@@ -65,8 +65,12 @@ Live: https://vodkadav.github.io/minecraft3d/ (desktop Chrome + WebGPU).
   smoothed remote-player avatars, WireCodec for trystero's JSON transport. Root-caused + fixed a
   live 2-peer join deadlock (single dropped join packet → no welcome; now re-announced on a timer).
   Verified end-to-end over public Nostr rails (`tools/net-probe.ts`): B joins by code, boots with
-  A's seed, mutual avatars. Follow-ups: KayKit humanoid avatars, interact-intent sync, freeze-and-
-  wait host-offline UX (ADR 0002 §5, warns today).
+  A's seed, mutual avatars. Host-offline UX done (2026-07-07, ADR 0002 §5): the joiner now detects
+  a host drop (clean hostClosing OR a dropped connection via peerLeave, idempotent), freezes input,
+  and shows a localized (EN/ES/DA) grace-window countdown → returns to the menu; a transient
+  reconnect within the window cancels it and resumes (unit-tested). Follow-ups: KayKit humanoid
+  avatars; interact/creature sync (needs host-authoritative creature streaming — creature AI is
+  player-relative and diverges per client, so it's an M7.x milestone, not a quick follow-up).
 - [~] M8 Hybrid voxel terrain (Fable-led) — Fable [F] core done (2026-07-06): 8.1 SDF chunk store
   (TDD, delta persistence via M2 save), 8.2 Transvoxel regular-cell mesher (TDD; MIT Lengyel tables,
   see CREDITS.md), 8.3 break-ground seam (`?voxel=1`: dig-mask hole punch, dig/fill tool, walkable

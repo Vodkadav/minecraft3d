@@ -293,4 +293,71 @@ describe("createJoinNet", () => {
     expect(onHostGone).toHaveBeenCalledOnce();
     warn.mockRestore();
   });
+
+  // A controllable transport to drive the host-offline state machine directly —
+  // the in-memory network models the JOINER dropping, not the host.
+  function controllable() {
+    const cbs = {
+      msg: [] as ((id: string, m: unknown) => void)[],
+      join: [] as ((id: string) => void)[],
+      leave: [] as ((id: string) => void)[],
+    };
+    const transport: NetTransport = {
+      send: () => {},
+      broadcast: () => {},
+      onMessage: (cb) => cbs.msg.push(cb),
+      onPeerJoin: (cb) => cbs.join.push(cb),
+      onPeerLeave: (cb) => cbs.leave.push(cb),
+      close: () => {},
+    };
+    const welcome = {
+      kind: "welcome",
+      seed: 42,
+      worldId: "w1",
+      name: "Home World",
+      modifiedChunks: [{ key: "0,0,0", rev: 1, data: new Uint8Array([9]) }],
+      entities: {},
+    };
+    return {
+      transport,
+      fireJoin: (id = "host") => cbs.join.forEach((cb) => cb(id)),
+      fireLeave: (id = "host") => cbs.leave.forEach((cb) => cb(id)),
+      deliverWelcome: (id = "host") => cbs.msg.forEach((cb) => cb(id, welcome)),
+    };
+  }
+
+  it("fires onHostGone on a host connection drop (no clean close)", async () => {
+    const c = controllable();
+    const join = createJoinNet("ABCDEFGH", { transportFactory: () => c.transport });
+    c.fireJoin();
+    c.deliverWelcome();
+    await join.waitForWelcome(50);
+    const onHostGone = vi.fn();
+    join.attachWorld({ voxels: null, parent: new Group(), getPose: () => POSE, onHostGone });
+
+    c.fireLeave(); // host vanished — no hostClosing message, just the drop
+    expect(onHostGone).toHaveBeenCalledOnce();
+  });
+
+  it("fires onHostReturned when the host reconnects within the window", async () => {
+    const c = controllable();
+    const join = createJoinNet("ABCDEFGH", { transportFactory: () => c.transport });
+    c.fireJoin();
+    c.deliverWelcome();
+    await join.waitForWelcome(50);
+    const onHostGone = vi.fn();
+    const onHostReturned = vi.fn();
+    join.attachWorld({
+      voxels: null,
+      parent: new Group(),
+      getPose: () => POSE,
+      onHostGone,
+      onHostReturned,
+    });
+
+    c.fireLeave(); // drop
+    c.fireJoin(); // transient reconnect — welcome already held, so resume
+    expect(onHostGone).toHaveBeenCalledOnce();
+    expect(onHostReturned).toHaveBeenCalledOnce();
+  });
 });
