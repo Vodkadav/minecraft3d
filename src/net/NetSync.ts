@@ -23,10 +23,11 @@ import { HostSession, type WorldSnapshot } from "../game/application/HostSession
 import { JoinSession } from "../game/application/JoinSession";
 import type { NetTransport } from "../game/application/ports/NetTransport";
 import type { WorldSaveStore } from "../game/application/ports/WorldSaveStore";
-import type { WelcomeMsg, WorldEdit } from "../game/domain/net/Protocol";
+import type { CreatureEntity, WelcomeMsg, WorldEdit } from "../game/domain/net/Protocol";
 import { makeRoomCode } from "../game/domain/net/RoomCode";
 import type { PlayerState } from "../game/domain/world/WorldSaveData";
 import { makeTrysteroTransport } from "../game/infrastructure/net/TrysteroTransport";
+import type { SpawnFieldHandle } from "../spawn/SpawnFieldView";
 import { RemotePlayers } from "./RemotePlayers";
 
 /** Structural slice of VoxelTerrain the net glue needs (null until M8 boots it). */
@@ -55,6 +56,8 @@ export interface HostNetDeps {
   readonly store: WorldSaveStore;
   getPose(): PlayerState;
   readonly voxels: EditableVoxels | null;
+  /** The host's spawn field — streamed to joiners, joiner intents applied to it. */
+  readonly spawns?: SpawnFieldHandle | null;
   readonly parent: Object3D;
   /** Test seam; defaults to the live trystero adapter. */
   readonly transportFactory?: (code: string) => NetTransport;
@@ -106,6 +109,7 @@ export async function attachHostNet(deps: HostNetDeps): Promise<HostNetHandle> {
     },
     onPeerPose: (peerId, state) => remote.upsert(peerId, state),
     onPeerLeft: (peerId) => remote.remove(peerId),
+    onInteract: (action, targetId) => deps.spawns?.applyInteract(action, targetId),
   });
 
   // the host's own digs reach joiners as resolved world truth
@@ -113,6 +117,11 @@ export async function attachHostNet(deps: HostNetDeps): Promise<HostNetHandle> {
     deps.voxels.onLocalEdit = (edit) => {
       if (!applyingRemote) transport.broadcast({ kind: "worldEdit", edit });
     };
+  }
+
+  // stream the host's live spawn field to joiners (~10 Hz; ADR 0003)
+  if (deps.spawns) {
+    deps.spawns.onSnapshot = (entities) => transport.broadcast({ kind: "creatures", entities });
   }
 
   let poseAcc = 0;
@@ -136,6 +145,7 @@ export async function attachHostNet(deps: HostNetDeps): Promise<HostNetHandle> {
     },
     dispose(): void {
       if (deps.voxels) deps.voxels.onLocalEdit = null;
+      if (deps.spawns) deps.spawns.onSnapshot = null;
       remote.dispose();
       session.close();
     },
@@ -147,6 +157,8 @@ export async function attachHostNet(deps: HostNetDeps): Promise<HostNetHandle> {
 export interface JoinWorldDeps {
   getPose(): PlayerState;
   readonly voxels: EditableVoxels | null;
+  /** The joiner's spawn field — puppeted by the host's stream (ADR 0003). */
+  readonly spawns?: SpawnFieldHandle | null;
   readonly parent: Object3D;
   /** The host left — clean close OR a dropped connection (ADR 0002 §5). */
   onHostGone?(): void;
@@ -196,6 +208,7 @@ export function createJoinNet(code: string, opts: JoinNetOptions = {}): JoinNetH
   const pendingEdits: WorldEdit[] = [];
   let world: {
     readonly voxels: EditableVoxels | null;
+    readonly spawns: SpawnFieldHandle | null;
     readonly remote: RemotePlayers;
     readonly onHostGone?: () => void;
     readonly onHostReturned?: () => void;
@@ -246,6 +259,10 @@ export function createJoinNet(code: string, opts: JoinNetOptions = {}): JoinNetH
     onPeerPose: (peerId: string, state: PlayerState): void => world?.remote.upsert(peerId, state),
     onPeerLeft: (peerId: string): void => world?.remote.remove(peerId),
     onWorldEdit: applyRemoteEdit,
+    // snapshots arriving before attachWorld are dropped — the next 10 Hz frame
+    // re-sends the full active set, so there's nothing to buffer (ADR 0003).
+    onCreatures: (entities: readonly CreatureEntity[]): void =>
+      world?.spawns?.applySnapshot(entities),
     onHostClosing: onHostLost,
   };
 
@@ -288,11 +305,18 @@ export function createJoinNet(code: string, opts: JoinNetOptions = {}): JoinNetH
       const remote = new RemotePlayers(deps.parent);
       const attached = {
         voxels: deps.voxels,
+        spawns: deps.spawns ?? null,
         remote,
         ...(deps.onHostGone ? { onHostGone: deps.onHostGone } : {}),
         ...(deps.onHostReturned ? { onHostReturned: deps.onHostReturned } : {}),
       };
       world = attached;
+      // joiner: no local sim; F/E/T become intents the host resolves (ADR 0003)
+      if (deps.spawns) {
+        deps.spawns.remote = true;
+        deps.spawns.onInteractIntent = (action, targetId) =>
+          session?.sendInteract(action, targetId);
+      }
       for (const edit of pendingEdits.splice(0)) applyRemoteEdit(edit);
       // the M8 DigTool applies locally (optimistic — SDF edits are
       // idempotent); the same edit rides to the host as an intent
@@ -315,6 +339,7 @@ export function createJoinNet(code: string, opts: JoinNetOptions = {}): JoinNetH
         },
         dispose(): void {
           if (deps.voxels) deps.voxels.onLocalEdit = null;
+          if (deps.spawns) deps.spawns.onInteractIntent = null;
           remote.dispose();
           world = null;
         },

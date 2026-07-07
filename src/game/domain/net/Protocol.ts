@@ -87,6 +87,26 @@ export interface EntityRemovedMsg {
   readonly id: string;
 }
 
+/** One streamed spawn-field entity (creature or node) — the host's live truth
+ *  the joiner mirrors (ADR 0003). `y` is already ground-resolved by the host. */
+export interface CreatureEntity {
+  readonly id: string;
+  readonly species: string;
+  readonly kind: "creature" | "node";
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
+  readonly yaw: number;
+  readonly behavior?: string;
+  readonly health?: number;
+}
+
+/** The host's full active spawn-field set, streamed ~10 Hz (ADR 0003). */
+export interface CreaturesMsg {
+  readonly kind: "creatures";
+  readonly entities: readonly CreatureEntity[];
+}
+
 export interface PeerJoinedMsg {
   readonly kind: "peerJoined";
   readonly peerId: string;
@@ -107,6 +127,7 @@ export type HostMessage =
   | PeerPoseMsg
   | WorldEditMsg
   | EntityRemovedMsg
+  | CreaturesMsg
   | PeerJoinedMsg
   | PeerLeftMsg
   | HostClosingMsg;
@@ -157,6 +178,21 @@ function isWorldEdit(v: unknown): v is WorldEdit {
 
 const INTERACT_ACTIONS: readonly string[] = ["attack", "harvest", "feed"];
 
+function isCreatureEntity(v: unknown): v is CreatureEntity {
+  return (
+    isRecord(v) &&
+    isStr(v.id) &&
+    isStr(v.species) &&
+    (v.kind === "creature" || v.kind === "node") &&
+    isNum(v.x) &&
+    isNum(v.y) &&
+    isNum(v.z) &&
+    isNum(v.yaw) &&
+    (v.behavior === undefined || isStr(v.behavior)) &&
+    (v.health === undefined || isNum(v.health))
+  );
+}
+
 /** Per-kind shape validators; each returns true iff the record is that message. */
 const VALIDATORS: Record<string, (m: Record<string, unknown>) => boolean> = {
   join: (m) => isStr(m.playerName),
@@ -176,6 +212,7 @@ const VALIDATORS: Record<string, (m: Record<string, unknown>) => boolean> = {
   peerPose: (m) => isStr(m.peerId) && isPlayerState(m.state),
   worldEdit: (m) => isWorldEdit(m.edit),
   entityRemoved: (m) => isStr(m.id),
+  creatures: (m) => Array.isArray(m.entities) && m.entities.every(isCreatureEntity),
   peerJoined: (m) => isStr(m.peerId) && isStr(m.playerName),
   peerLeft: (m) => isStr(m.peerId),
   hostClosing: () => true,

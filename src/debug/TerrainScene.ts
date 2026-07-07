@@ -431,6 +431,7 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
           }
         : {}),
     });
+    if (ctx.world) ctx.world.spawns = spawns; // M7.x net glue streams creatures here
     engine.onUpdate((dt) => {
       spawns.update(dt);
       if (!respawnPose) respawnPose = ctx.hooks.getPose?.() ?? null; // spawn = respawn

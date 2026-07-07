@@ -7,7 +7,12 @@
  */
 
 import { isErr } from "../domain/Result";
-import type { WelcomeMsg, WorldEdit } from "../domain/net/Protocol";
+import type {
+  CreatureEntity,
+  InteractAction,
+  WelcomeMsg,
+  WorldEdit,
+} from "../domain/net/Protocol";
 import { parseMessage } from "../domain/net/Protocol";
 import type { PlayerState } from "../domain/world/WorldSaveData";
 import type { NetTransport } from "./ports/NetTransport";
@@ -17,6 +22,7 @@ export interface JoinSessionHooks {
   onPeerPose?(peerId: string, state: PlayerState): void;
   onWorldEdit?(edit: WorldEdit): void;
   onEntityRemoved?(id: string): void;
+  onCreatures?(entities: readonly CreatureEntity[]): void;
   onPeerJoined?(peerId: string, playerName: string): void;
   onPeerLeft?(peerId: string): void;
   onHostClosing?(): void;
@@ -48,6 +54,9 @@ export class JoinSession {
         case "entityRemoved":
           hooks.onEntityRemoved?.(msg.id);
           return;
+        case "creatures":
+          hooks.onCreatures?.(msg.entities);
+          return;
         case "peerJoined":
           hooks.onPeerJoined?.(msg.peerId, msg.playerName);
           return;
@@ -75,5 +84,9 @@ export class JoinSession {
 
   sendFill(x: number, y: number, z: number, radius: number, materialId: number): void {
     this.transport.broadcast({ kind: "fill", x, y, z, radius, materialId });
+  }
+
+  sendInteract(action: InteractAction, targetId: string): void {
+    this.transport.broadcast({ kind: "interact", action, targetId });
   }
 }

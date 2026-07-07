@@ -24,6 +24,25 @@ const HAPPY: NetMessage[] = [
   { kind: "worldEdit", edit: { op: "dig", x: 1, y: 2, z: 3, radius: 1 } },
   { kind: "worldEdit", edit: { op: "fill", x: 1, y: 2, z: 3, radius: 1, materialId: 2 } },
   { kind: "entityRemoved", id: "e:1" },
+  {
+    kind: "creatures",
+    entities: [
+      { id: "spawn:1", species: "deer", kind: "creature", x: 1, y: 2, z: 3, yaw: 0.5 },
+      { id: "spawn:2", species: "stone-node", kind: "node", x: 4, y: 5, z: 6, yaw: 0 },
+      {
+        id: "spawn:3",
+        species: "wolf",
+        kind: "creature",
+        x: 0,
+        y: 0,
+        z: 0,
+        yaw: 1,
+        behavior: "flee",
+        health: 12,
+      },
+    ],
+  },
+  { kind: "creatures", entities: [] },
   { kind: "peerJoined", peerId: "p2", playerName: "Andrea" },
   { kind: "peerLeft", peerId: "p2" },
   { kind: "hostClosing" },
@@ -59,6 +78,13 @@ describe("parseMessage — malformed input is an error value", () => {
     { kind: "worldEdit", edit: { op: "fill", x: 0, y: 0, z: 0, radius: 1 } }, // fill needs materialId
     { kind: "peerPose", peerId: "p1" }, // missing state
     { kind: "peerLeft" }, // missing peerId
+    { kind: "creatures" }, // missing entities
+    { kind: "creatures", entities: {} }, // not an array
+    { kind: "creatures", entities: [{ id: "x", species: "deer", kind: "creature" }] }, // no coords
+    {
+      kind: "creatures",
+      entities: [{ id: "x", species: "deer", kind: "creature", x: 1, y: 2, z: "3", yaw: 0 }],
+    }, // z wrong type
   ];
 
   it.each(BAD.map((m) => [JSON.stringify(m) ?? String(m), m] as const))(

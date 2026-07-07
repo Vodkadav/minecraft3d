@@ -195,6 +195,38 @@ describe("HostSession", () => {
     warn.mockRestore();
   });
 
+  it("routes a valid interact intent to the onInteract hook", () => {
+    const interacts: Array<{ action: string; targetId: string }> = [];
+    net = makeTransportNetwork();
+    session = new HostSession(net.host, () => SNAPSHOT, {
+      onWorldEdit: () => {},
+      onInteract: (action, targetId) => interacts.push({ action, targetId }),
+    });
+    const alice = net.addPeer("alice");
+
+    alice.broadcast({ kind: "interact", action: "attack", targetId: "spawn:7" });
+    alice.broadcast({ kind: "interact", action: "feed", targetId: "spawn:8" });
+
+    expect(interacts).toEqual([
+      { action: "attack", targetId: "spawn:7" },
+      { action: "feed", targetId: "spawn:8" },
+    ]);
+  });
+
+  it("drops an interact with an unknown action (no hook call)", () => {
+    const interacts: string[] = [];
+    net = makeTransportNetwork();
+    session = new HostSession(net.host, () => SNAPSHOT, {
+      onWorldEdit: () => {},
+      onInteract: (action) => interacts.push(action),
+    });
+    const alice = net.addPeer("alice");
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    alice.broadcast({ kind: "interact", action: "dance", targetId: "spawn:7" });
+    expect(interacts).toEqual([]);
+    warn.mockRestore();
+  });
+
   it("broadcasts hostClosing on close", () => {
     const alice = net.addPeer("alice");
     const inbox = collect(alice);

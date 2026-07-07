@@ -73,6 +73,34 @@ describe("JoinSession", () => {
     expect(edits).toEqual([{ op: "fill", x: 1, y: 2, z: 3, radius: 1, materialId: 4 }]);
   });
 
+  it("surfaces a host creatures snapshot via onCreatures", () => {
+    const net = makeTransportNetwork();
+    new HostSession(net.host, () => SNAPSHOT, { onWorldEdit: () => {} });
+    const onCreatures = vi.fn();
+    new JoinSession(net.addPeer("alice"), "Alice", { onCreatures });
+
+    const entities = [
+      { id: "spawn:1", species: "deer", kind: "creature", x: 1, y: 0, z: 2, yaw: 0.3 },
+    ];
+    net.host.send("alice", { kind: "creatures", entities });
+
+    expect(onCreatures).toHaveBeenCalledExactlyOnceWith(entities);
+  });
+
+  it("sendInteract reaches the host's onInteract hook", () => {
+    const net = makeTransportNetwork();
+    const interacts: Array<[string, string]> = [];
+    new HostSession(net.host, () => SNAPSHOT, {
+      onWorldEdit: () => {},
+      onInteract: (action, targetId) => interacts.push([action, targetId]),
+    });
+    const alice = new JoinSession(net.addPeer("alice"), "Alice", {});
+
+    alice.sendInteract("attack", "spawn:7");
+
+    expect(interacts).toEqual([["attack", "spawn:7"]]);
+  });
+
   it("surfaces peerJoined and peerLeft", () => {
     const { net } = makeHostedNetwork();
     const onPeerJoined = vi.fn();

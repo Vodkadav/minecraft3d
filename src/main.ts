@@ -270,6 +270,7 @@ async function bootEngine(hooks: LaasHooks, launch: MenuLaunch | null): Promise<
     const hostWatch = installHostOfflineWatch(hooks);
     const world = launch.join.attachWorld({
       voxels: ctx.world?.voxels ?? null,
+      spawns: ctx.world?.spawns ?? null,
       parent: engine.scene,
       getPose: () => camPoseToPlayerState(fly.getPose()),
       onHostGone: hostWatch.onGone,
@@ -283,6 +284,7 @@ async function bootEngine(hooks: LaasHooks, launch: MenuLaunch | null): Promise<
       store: launch.store,
       getPose: () => camPoseToPlayerState(fly.getPose()),
       voxels: ctx.world?.voxels ?? null,
+      spawns: ctx.world?.spawns ?? null,
       parent: engine.scene,
     });
     engine.onUpdate((dt) => net.update(dt));

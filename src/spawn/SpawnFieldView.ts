@@ -37,7 +37,10 @@ import {
   decideBehavior,
   steer,
   wanderWaypoint,
+  type Behavior,
 } from "../game/domain/ai/CreatureBrain";
+import type { CreatureEntity, InteractAction } from "../game/domain/net/Protocol";
+import { reconcileEntities } from "../game/domain/spawn/CreatureStream";
 import {
   applyDamage,
   CREATURE_STATS,
@@ -64,6 +67,8 @@ const BITE_COOLDOWN_S = 1.2;
 const WANDER_EPOCH_MS = 8000;
 /** Walk-speed multiplier while mounted — a mount outpaces jogging (M6.5). */
 const RIDE_SPEED_MULT = 1.6;
+/** Host→joiner snapshot cadence (ADR 0003) — matches the pose loop's 10 Hz. */
+const SNAPSHOT_INTERVAL_S = 0.1;
 
 export interface SpawnSave {
   entity(key: string): unknown;
@@ -93,6 +98,17 @@ export interface SpawnFieldHandle {
   update(dt: number): void;
   dispose(): void;
   readonly activeCount: number;
+  /** Joiner mode (ADR 0003): no local AI/proximity/resolution — puppet the
+   *  host's stream. Set by the net glue before the first frame. */
+  remote: boolean;
+  /** Host: called ~10 Hz with the full active set for the net glue to stream. */
+  onSnapshot: ((entities: readonly CreatureEntity[]) => void) | null;
+  /** Joiner: an F/E/T press becomes an intent for the host to resolve. */
+  onInteractIntent: ((action: InteractAction, targetId: string) => void) | null;
+  /** Joiner: apply a host snapshot (add/move/remove via the pure reconciler). */
+  applySnapshot(entities: readonly CreatureEntity[]): void;
+  /** Host: resolve a joiner's interaction against this field, keyed by id. */
+  applyInteract(action: InteractAction, targetId: string): void;
 }
 
 interface CreatureEntry {
@@ -105,6 +121,8 @@ interface CreatureEntry {
   readonly lift: number;
   combat: CombatState;
   taming: TamingState;
+  /** Last streamed behavior (host emits it; joiner drives the clip from it). */
+  behavior: Behavior;
   /** Seconds left of the death clip; set when killed, removed at zero. */
   dying: number | null;
   /** clockMs of this creature's last bite on the player (bite cooldown). */
@@ -172,6 +190,11 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
   let ridingId: string | null = null;
   let lastPx: number | null = null;
   let lastPz: number | null = null;
+  let snapAcc = 0;
+  // ADR 0003 net seams — flipped/wired by the net glue after attach.
+  let remote = false;
+  let onSnapshot: ((entities: readonly CreatureEntity[]) => void) | null = null;
+  let onInteractIntent: ((action: InteractAction, targetId: string) => void) | null = null;
 
   // mounting/dismounting also toggles the ride speed boost through the controller
   const setRiding = (id: string | null): void => {
@@ -182,18 +205,34 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
   const locked = (): boolean =>
     deps.dom === undefined || document.pointerLockElement === deps.dom;
 
+  // creature visual (rigged instance if its model has loaded, else primitive)
+  function makeCreatureObj(species: string): {
+    obj: Object3D;
+    instance: CreatureInstance | null;
+    lift: number;
+  } {
+    const instance = models.instantiate(species);
+    const obj: Object3D =
+      instance?.root ?? new Mesh(geometries.get(species), materials.get(species));
+    if (obj instanceof Mesh) obj.castShadow = true;
+    return { obj, instance, lift: instance ? instance.lift : SPECIES_VISUAL[species].lift };
+  }
+
+  function makeNodeMesh(s: SpawnEntity): Mesh {
+    const mesh = new Mesh(geometries.get(s.species), materials.get(s.species));
+    mesh.castShadow = true;
+    mesh.name = s.id;
+    return mesh;
+  }
+
   function materialize(s: SpawnEntity): void {
     const [x, , z] = s.position;
     if (!validGround(deps.ground, x, z)) return;
     const v = SPECIES_VISUAL[s.species];
     if (!v) return;
     if (s.kind === "creature") {
-      const instance = models.instantiate(s.species);
-      const obj: Object3D =
-        instance?.root ?? new Mesh(geometries.get(s.species), materials.get(s.species));
-      const lift = instance ? instance.lift : v.lift;
+      const { obj, instance, lift } = makeCreatureObj(s.species);
       obj.position.set(x, deps.ground.heightAt(x, z) + lift, z);
-      if (obj instanceof Mesh) obj.castShadow = true;
       obj.name = s.id;
       group.add(obj);
       const taming = startTaming(s.species);
@@ -205,15 +244,14 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
         lift,
         combat: spawnCombatState(s.species),
         taming: tamed.has(s.id) ? { ...taming, phase: "tamed" } : taming,
+        behavior: "idle",
         dying: null,
         lastBiteMs: -Infinity,
       });
       return;
     }
-    const mesh = new Mesh(geometries.get(s.species), materials.get(s.species));
+    const mesh = makeNodeMesh(s);
     mesh.position.set(x, deps.ground.heightAt(x, z) + v.lift, z);
-    mesh.castShadow = true;
-    mesh.name = s.id;
     group.add(mesh);
     nodes.set(s.id, { entity: s, obj: mesh });
   }
@@ -285,24 +323,52 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
     return nearestWithin(flat, px, pz, REACH_M)?.e ?? null;
   }
 
+  // Interaction resolution — reused by the local keydown (host/solo) AND by the
+  // host's applyInteract when a joiner's intent arrives (ADR 0003).
+  function resolveAttack(target: CreatureEntry): void {
+    if (target.dying !== null) return;
+    const r = applyDamage(target.combat, ATTACK_DAMAGE);
+    target.combat = r.state;
+    if (!r.died) return;
+    const roll = hashUnitFloat(deps.seed, clockMs | 0, 0x6f00);
+    grantLoot(lootFor(target.entity.species, roll));
+    persistRemoved(target.entity.id);
+    if (tamed.delete(target.entity.id)) deps.save?.setEntity("taming.tamed", [...tamed]);
+    // rigged creatures fall over first; primitives vanish immediately
+    const duration = target.instance?.playDeath() ?? 0;
+    if (duration > 0) target.dying = duration;
+    else remove(target.entity.id);
+  }
+
+  function resolveFeed(target: CreatureEntry): void {
+    if (target.dying !== null || target.taming.phase === "tamed") return;
+    const rules = TAMING_RULES[target.entity.species];
+    if (!rules || !consumeFood(rules.foodItemId)) return;
+    const r = feed(target.taming, rules.foodItemId, clockMs);
+    target.taming = r.state;
+    if (r.becameTamed) {
+      tamed.add(target.entity.id);
+      deps.save?.setEntity("taming.tamed", [...tamed]);
+    }
+  }
+
+  function resolveHarvest(target: { entity: SpawnEntity; obj: Object3D }): void {
+    grantLoot(NODE_YIELD[target.entity.species] ?? []);
+    remove(target.entity.id);
+    persistRemoved(target.entity.id);
+  }
+
   const onKeyDown = (ev: KeyboardEvent): void => {
     if (!locked()) return;
+    // Joiner: an F/E/T press is an intent for the host to resolve, not a local
+    // mutation. Mounting (G) stays host-controlled, so it's deferred (ADR 0003).
     if (ev.code === "KeyF") {
       const target = pickTarget(creatures);
       if (!target || target.dying !== null) return;
-      const r = applyDamage(target.combat, ATTACK_DAMAGE);
-      target.combat = r.state;
-      if (r.died) {
-        const roll = hashUnitFloat(deps.seed, clockMs | 0, 0x6f00);
-        grantLoot(lootFor(target.entity.species, roll));
-        persistRemoved(target.entity.id);
-        if (tamed.delete(target.entity.id)) deps.save?.setEntity("taming.tamed", [...tamed]);
-        // rigged creatures fall over first; primitives vanish immediately
-        const duration = target.instance?.playDeath() ?? 0;
-        if (duration > 0) target.dying = duration;
-        else remove(target.entity.id);
-      }
+      if (remote) onInteractIntent?.("attack", target.entity.id);
+      else resolveAttack(target);
     } else if (ev.code === "KeyG") {
+      if (remote) return;
       // G = mount/dismount (R belongs to the placement tool's rotate)
       if (ridingId !== null) {
         setRiding(null);
@@ -315,23 +381,28 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
     } else if (ev.code === "KeyT") {
       const target = pickTarget(creatures);
       if (!target || target.dying !== null || target.taming.phase === "tamed") return;
-      const rules = TAMING_RULES[target.entity.species];
-      if (!rules || !consumeFood(rules.foodItemId)) return;
-      const r = feed(target.taming, rules.foodItemId, clockMs);
-      target.taming = r.state;
-      if (r.becameTamed) {
-        tamed.add(target.entity.id);
-        deps.save?.setEntity("taming.tamed", [...tamed]);
-      }
+      if (remote) onInteractIntent?.("feed", target.entity.id);
+      else resolveFeed(target);
     } else if (ev.code === "KeyE") {
       const target = pickTarget(nodes);
       if (!target) return;
-      grantLoot(NODE_YIELD[target.entity.species] ?? []);
-      remove(target.entity.id);
-      persistRemoved(target.entity.id);
+      if (remote) onInteractIntent?.("harvest", target.entity.id);
+      else resolveHarvest(target);
     }
   };
   window.addEventListener("keydown", onKeyDown);
+
+  function applyInteract(action: InteractAction, targetId: string): void {
+    if (action === "harvest") {
+      const n = nodes.get(targetId);
+      if (n) resolveHarvest(n);
+      return;
+    }
+    const c = creatures.get(targetId);
+    if (!c) return;
+    if (action === "attack") resolveAttack(c);
+    else resolveFeed(c);
+  }
 
   function stepCreatures(dt: number): void {
     const [px, pz] = deps.getPlayerXZ();
@@ -353,7 +424,8 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
         if (speed > 0.3 && lastPx !== null && lastPz !== null) {
           c.obj.rotation.y = Math.atan2(px - lastPx, pz - lastPz);
         }
-        c.instance?.setBehavior(speed > 4 ? "flee" : speed > 0.3 ? "follow" : "idle");
+        c.behavior = speed > 4 ? "flee" : speed > 0.3 ? "follow" : "idle";
+        c.instance?.setBehavior(c.behavior);
         continue;
       }
       const x = c.obj.position.x;
@@ -380,7 +452,8 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
       );
       const wp = wanderWaypoint(c.entity.id, c.anchor, epoch);
       const [vx, vz] = steer(behavior, [x, z], [px, pz], wp);
-      c.instance?.setBehavior(vx === 0 && vz === 0 ? "idle" : behavior);
+      c.behavior = vx === 0 && vz === 0 ? "idle" : behavior;
+      c.instance?.setBehavior(c.behavior);
       if (vx === 0 && vz === 0) continue;
       const nx = x + vx * dt;
       const nz = z + vz * dt;
@@ -390,9 +463,131 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
     }
   }
 
+  // ---- host: build the streamed snapshot (dying creatures leave the set) ----
+  function buildSnapshot(): CreatureEntity[] {
+    const out: CreatureEntity[] = [];
+    for (const c of creatures.values()) {
+      if (c.dying !== null) continue;
+      const stats = CREATURE_STATS[c.entity.species];
+      out.push({
+        id: c.entity.id,
+        species: c.entity.species,
+        kind: "creature",
+        x: c.obj.position.x,
+        y: c.obj.position.y,
+        z: c.obj.position.z,
+        yaw: c.obj.rotation.y,
+        behavior: c.behavior,
+        ...(stats ? { health: c.combat.health } : {}),
+      });
+    }
+    for (const n of nodes.values()) {
+      out.push({
+        id: n.entity.id,
+        species: n.entity.species,
+        kind: "node",
+        x: n.obj.position.x,
+        y: n.obj.position.y,
+        z: n.obj.position.z,
+        yaw: 0,
+      });
+    }
+    return out;
+  }
+
+  // ---- joiner: materialize/move from the host's stream (trusts wire coords) --
+  function materializeRemote(e: CreatureEntity): void {
+    if (!SPECIES_VISUAL[e.species]) return;
+    if (e.kind === "creature") {
+      const { obj, instance, lift } = makeCreatureObj(e.species);
+      obj.position.set(e.x, e.y, e.z);
+      obj.rotation.y = e.yaw;
+      obj.name = e.id;
+      group.add(obj);
+      const behavior = (e.behavior as Behavior | undefined) ?? "idle";
+      instance?.setBehavior(behavior);
+      creatures.set(e.id, {
+        entity: { id: e.id, species: e.species, kind: "creature", position: [e.x, e.y, e.z] },
+        obj,
+        anchor: [e.x, e.z],
+        instance,
+        lift,
+        combat: spawnCombatState(e.species),
+        taming: startTaming(e.species),
+        behavior,
+        dying: null,
+        lastBiteMs: -Infinity,
+      });
+      return;
+    }
+    const entity: SpawnEntity = {
+      id: e.id,
+      species: e.species,
+      kind: "node",
+      position: [e.x, e.y, e.z],
+    };
+    const mesh = makeNodeMesh(entity);
+    mesh.position.set(e.x, e.y, e.z);
+    group.add(mesh);
+    nodes.set(e.id, { entity, obj: mesh });
+  }
+
+  function updateRemote(e: CreatureEntity): void {
+    const c = creatures.get(e.id);
+    if (c) {
+      c.obj.position.set(e.x, e.y, e.z);
+      c.obj.rotation.y = e.yaw;
+      const behavior = (e.behavior as Behavior | undefined) ?? c.behavior;
+      if (behavior !== c.behavior) {
+        c.behavior = behavior;
+        c.instance?.setBehavior(behavior);
+      }
+      return;
+    }
+    nodes.get(e.id)?.obj.position.set(e.x, e.y, e.z);
+  }
+
+  function applySnapshot(entities: readonly CreatureEntity[]): void {
+    const { add, update, remove: gone } = reconcileEntities(
+      [...creatures.keys(), ...nodes.keys()],
+      entities,
+    );
+    for (const id of gone) remove(id);
+    for (const e of add) materializeRemote(e);
+    for (const e of update) updateRemote(e);
+  }
+
   return {
+    applySnapshot,
+    applyInteract,
+    // net seams delegate to the closure vars onKeyDown/update actually read
+    get remote() {
+      return remote;
+    },
+    set remote(v: boolean) {
+      remote = v;
+    },
+    get onSnapshot() {
+      return onSnapshot;
+    },
+    set onSnapshot(v: ((entities: readonly CreatureEntity[]) => void) | null) {
+      onSnapshot = v;
+    },
+    get onInteractIntent() {
+      return onInteractIntent;
+    },
+    set onInteractIntent(v: ((action: InteractAction, targetId: string) => void) | null) {
+      onInteractIntent = v;
+    },
+
     update(dt: number): void {
       clockMs += dt * 1000;
+      // Joiner puppets the host's stream: no proximity, no AI — only advance
+      // the animation mixers so the streamed poses stay animated (ADR 0003).
+      if (remote) {
+        for (const c of creatures.values()) c.instance?.update(dt);
+        return;
+      }
       sinceStep += dt;
       const [px, pz] = deps.getPlayerXZ();
       const cx = worldToSpawnCell(px);
@@ -416,6 +611,14 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
       stepCreatures(dt);
       lastPx = px;
       lastPz = pz;
+      // stream the active set to joiners at ~10 Hz (host only)
+      if (onSnapshot) {
+        snapAcc += dt;
+        if (snapAcc >= SNAPSHOT_INTERVAL_S) {
+          snapAcc = 0;
+          onSnapshot(buildSnapshot());
+        }
+      }
     },
 
     dispose(): void {

@@ -14,6 +14,7 @@ import {
   parseMessage,
   type DigMsg,
   type FillMsg,
+  type InteractAction,
   type PoseMsg,
   type WorldEdit,
 } from "../domain/net/Protocol";
@@ -33,6 +34,8 @@ export interface HostSessionHooks {
   /** Apply a validated edit to the host's live world. */
   onWorldEdit(edit: WorldEdit): void;
   onEntityRemoved?(id: string): void;
+  /** A validated joiner interaction — the host resolves it on its spawn field. */
+  onInteract?(action: InteractAction, targetId: string): void;
   /** A validated peer pose — lets the host app render remote avatars. */
   onPeerPose?(peerId: string, state: PlayerState): void;
   onPeerJoined?(peerId: string, playerName: string): void;
@@ -102,8 +105,11 @@ export class HostSession {
           materialId: msg.materialId,
         });
         return;
+      case "interact":
+        this.hooks.onInteract?.(msg.action, msg.targetId);
+        return;
       default:
-        // interact resolution and host->joiner kinds echoed at the host: no-op for now.
+        // host->joiner kinds echoed back at the host: no-op.
         return;
     }
   }
