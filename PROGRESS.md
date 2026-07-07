@@ -68,10 +68,18 @@ Live: https://vodkadav.github.io/minecraft3d/ (desktop Chrome + WebGPU).
   A's seed, mutual avatars. Host-offline UX done (2026-07-07, ADR 0002 §5): the joiner now detects
   a host drop (clean hostClosing OR a dropped connection via peerLeave, idempotent), freezes input,
   and shows a localized (EN/ES/DA) grace-window countdown → returns to the menu; a transient
-  reconnect within the window cancels it and resumes (unit-tested). Follow-ups: KayKit humanoid
-  avatars; interact/creature sync (needs host-authoritative creature streaming — creature AI is
-  player-relative and diverges per client, so it's an M7.x milestone, not a quick follow-up;
-  designed + sliced in `docs/HANDOFF-M7X-CREATURE-SYNC.md`, ready to implement as ADR 0003).
+  reconnect within the window cancels it and resumes (unit-tested). M7.x host-authoritative
+  creature streaming done (2026-07-07, ADR 0003): creature AI was player-relative and diverged per
+  client, so the host is now authoritative for every spawn-field entity — it streams the full active
+  set ~10 Hz (`creatures` msg) and resolves joiner F/E/T intents, while joiners run no local spawn
+  AI/proximity/resolution and puppet the stream via a pure `reconcileEntities` diff. TDD: Protocol
+  snapshot msg, `domain/spawn/CreatureStream` reconciler, HostSession interact routing, JoinSession
+  onCreatures/sendInteract; SpawnFieldView remote mode + 10 Hz emit + applySnapshot/applyInteract
+  (F/E/T resolution extracted, reused by keydown and intents). Live-verified end-to-end
+  (`tools/net-probe.ts`): B mirrored A's 10 creatures, a host kill and a joiner attack intent each
+  despawned on BOTH peers over public Nostr rails. Follow-ups: KayKit humanoid avatars; creature
+  interpolation (10 Hz is un-smoothed today) + death-clip sync on the joiner; move the snapshot to
+  the unreliable channel (ADR 0002 §3); joiner-side mounting.
 - [~] M8 Hybrid voxel terrain (Fable-led) — Fable [F] core done (2026-07-06): 8.1 SDF chunk store
   (TDD, delta persistence via M2 save), 8.2 Transvoxel regular-cell mesher (TDD; MIT Lengyel tables,
   see CREDITS.md), 8.3 break-ground seam (`?voxel=1`: dig-mask hole punch, dig/fill tool, walkable

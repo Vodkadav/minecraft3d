@@ -432,6 +432,11 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
         : {}),
     });
     if (ctx.world) ctx.world.spawns = spawns; // M7.x net glue streams creatures here
+    // creature-sync probe seam (tools/net-probe.ts)
+    (window as unknown as { __laasDbg?: Record<string, unknown> }).__laasDbg = Object.assign(
+      (window as unknown as { __laasDbg?: Record<string, unknown> }).__laasDbg ?? {},
+      { spawnField: spawns },
+    );
     engine.onUpdate((dt) => {
       spawns.update(dt);
       if (!respawnPose) respawnPose = ctx.hooks.getPose?.() ?? null; // spawn = respawn

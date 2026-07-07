@@ -98,6 +98,8 @@ export interface SpawnFieldHandle {
   update(dt: number): void;
   dispose(): void;
   readonly activeCount: number;
+  /** Live creature ids (probe/tooling seam — tools/net-probe.ts). */
+  readonly creatureIds: readonly string[];
   /** Joiner mode (ADR 0003): no local AI/proximity/resolution — puppet the
    *  host's stream. Set by the net glue before the first frame. */
   remote: boolean;
@@ -631,6 +633,10 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
 
     get activeCount(): number {
       return nodes.size + creatures.size;
+    },
+
+    get creatureIds(): readonly string[] {
+      return [...creatures.keys()];
     },
   };
 }

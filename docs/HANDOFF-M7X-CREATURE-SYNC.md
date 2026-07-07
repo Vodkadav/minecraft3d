@@ -1,8 +1,10 @@
 # M7.x handoff — host-authoritative creature streaming (design + plan)
 
-Status: **designed, not started.** Next session: write ADR 0003 from the design
-below, then implement in the tested slices listed. Working tree is clean at
-commit `50b5bb7`.
+Status: **DONE (2026-07-07).** Implemented as ADR 0003
+(`docs/adr/0003-host-authoritative-creature-streaming.md`) across the 7 slices
+below; live-verified via the extended `tools/net-probe.ts` (host kill + joiner
+attack intent both despawn on both peers). This doc is kept as the design
+record — see PROGRESS.md M7 for the outcome. The notes below are historical.
 
 ## Why this exists (the problem)
 

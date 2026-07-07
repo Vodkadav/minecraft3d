@@ -6,6 +6,10 @@
  *   B: menu → Online → enter code → join → READY
  *   Assert: B booted with A's seed; each side sees one remote avatar.
  *
+ * Creature sync (ADR 0003): B mirrors A's host-streamed creatures; a host kill
+ * despawns on B; a joiner attack intent kills on the host. Driven through the
+ * exposed spawn-field handle (__laasDbg.spawnField) so no input simulation.
+ *
  * Timings are generous by design: trystero connects over public Nostr rails
  * (5–20 s) and the world scene takes ~45–75 s to boot on this box. The first
  * page load warms vite's dep optimizer (it reloads on first import of a new
@@ -109,6 +113,73 @@ async function waitForAvatar(page: Page, tag: string): Promise<number> {
   }
 }
 
+async function creatureIds(page: Page): Promise<string[]> {
+  return page
+    .evaluate(() => {
+      const sf = (window as unknown as { __laasDbg?: { spawnField?: { creatureIds: string[] } } })
+        .__laasDbg?.spawnField;
+      return sf ? [...sf.creatureIds] : [];
+    })
+    .catch(() => []);
+}
+
+/** Poll until a creature id present on A is also mirrored on B (or time out). */
+async function waitSharedCreature(a: Page, b: Page): Promise<string> {
+  const t0 = Date.now();
+  for (;;) {
+    const [ia, ib] = await Promise.all([creatureIds(a), creatureIds(b)]);
+    const shared = ia.find((id) => ib.includes(id));
+    if (shared) {
+      console.log(`[probe] shared creature ${shared} (A=${ia.length} B=${ib.length})`);
+      return shared;
+    }
+    if (Date.now() - t0 > 30_000) {
+      throw new Error(`no shared creature after 30s (A=${ia.length} B=${ib.length})`);
+    }
+    await new Promise((r) => setTimeout(r, 500));
+  }
+}
+
+/** Fire N attacks at `id` through `page`'s spawn-field handle (host or joiner). */
+async function attack(page: Page, id: string, via: 'applyInteract' | 'onInteractIntent'): Promise<void> {
+  await page.evaluate(
+    ({ id, via }) => {
+      const sf = (
+        window as unknown as {
+          __laasDbg?: {
+            spawnField?: {
+              applyInteract(a: string, t: string): void;
+              onInteractIntent?: ((a: string, t: string) => void) | null;
+            };
+          };
+        }
+      ).__laasDbg?.spawnField;
+      if (!sf) return;
+      for (let i = 0; i < 24; i++) {
+        if (via === 'applyInteract') sf.applyInteract('attack', id);
+        else sf.onInteractIntent?.('attack', id);
+      }
+    },
+    { id, via },
+  );
+}
+
+/** Poll until `id` is absent from BOTH sides' creature sets (host death-clip lag). */
+async function waitGone(a: Page, b: Page, id: string, label: string): Promise<void> {
+  const t0 = Date.now();
+  for (;;) {
+    const [ia, ib] = await Promise.all([creatureIds(a), creatureIds(b)]);
+    if (!ia.includes(id) && !ib.includes(id)) {
+      console.log(`[probe] PASS ${label}: ${id} despawned on both (+${((Date.now() - t0) / 1000).toFixed(1)}s)`);
+      return;
+    }
+    if (Date.now() - t0 > 15_000) {
+      throw new Error(`${label}: ${id} still present after 15s (A=${ia.includes(id)} B=${ib.includes(id)})`);
+    }
+    await new Promise((r) => setTimeout(r, 400));
+  }
+}
+
 async function main(): Promise<void> {
   const started = Date.now();
   const { browser } = await launchWebGPU();
@@ -170,6 +241,22 @@ async function main(): Promise<void> {
   try {
     await waitForAvatar(pageA, 'A');
     console.log('[probe] PASS avatar: A sees the joiner');
+  } catch (e) {
+    failures.push(String(e instanceof Error ? e.message : e));
+  }
+
+  // ---- creature sync (ADR 0003) ----
+  try {
+    // host kills one of its creatures → despawns on A (after its death clip)
+    // and on B (dropped from the stream)
+    const hostTarget = await waitSharedCreature(pageA, pageB);
+    await attack(pageA, hostTarget, 'applyInteract');
+    await waitGone(pageA, pageB, hostTarget, 'host-kill');
+
+    // B fires an attack intent → the host resolves it, the kill streams back
+    const joinTarget = await waitSharedCreature(pageA, pageB);
+    await attack(pageB, joinTarget, 'onInteractIntent');
+    await waitGone(pageA, pageB, joinTarget, 'joiner-intent-kill');
   } catch (e) {
     failures.push(String(e instanceof Error ? e.message : e));
   }
