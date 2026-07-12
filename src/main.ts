@@ -298,6 +298,14 @@ async function bootEngine(hooks: LaasHooks, launch: MenuLaunch | null): Promise<
   if (launch && !launch.join) {
     const lifecycle = new WorldLifecycle(launch.store);
     const savePose = (): void => {
+      // when the voxel subsystem owns the save, flush IT (one write of live
+      // chunks + live pose) — the load-modify-write below would race a
+      // debounced voxel save and clobber freshly-written chunk deltas
+      const voxels = ctx.world?.voxels;
+      if (voxels) {
+        void voxels.flushSave();
+        return;
+      }
       void lifecycle.savePlayerState(launch.worldId, camPoseToPlayerState(fly.getPose()));
     };
     window.addEventListener('pagehide', savePose);

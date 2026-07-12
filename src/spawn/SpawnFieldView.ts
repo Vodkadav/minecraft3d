@@ -165,6 +165,9 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
       instance.root.rotation.y = c.obj.rotation.y;
       instance.root.name = id;
       group.add(instance.root);
+      // start the current behavior's clip — a joiner (remote mode) never
+      // re-applies an unchanged behavior, so the upgrade would stay unanimated
+      instance.setBehavior(c.behavior);
       creatures.set(id, { ...c, obj: instance.root, instance, lift: instance.lift });
     }
   });
