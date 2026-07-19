@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { colorForPeer, smoothingFactor, stepToward, stepYaw } from "./RemotePlayerMath";
+import {
+  clipForSpeed,
+  colorForPeer,
+  heightScale,
+  smoothingFactor,
+  stepToward,
+  stepYaw,
+} from "./RemotePlayerMath";
 
 describe("colorForPeer", () => {
   it("is deterministic per peerId", () => {
@@ -64,5 +71,36 @@ describe("stepYaw", () => {
     // -3 and 3 are ~0.28 rad apart across the wrap
     const diff = Math.atan2(Math.sin(3 - yaw), Math.cos(3 - yaw));
     expect(Math.abs(diff)).toBeLessThan(1e-3);
+  });
+});
+
+describe("clipForSpeed", () => {
+  it("is Idle when standing still", () => {
+    expect(clipForSpeed(0)).toBe("Idle");
+    expect(clipForSpeed(0.1)).toBe("Idle");
+  });
+
+  it("is Walking_A at on-foot walk speed", () => {
+    expect(clipForSpeed(0.3)).toBe("Walking_A");
+    expect(clipForSpeed(4.6)).toBe("Walking_A");
+  });
+
+  it("is Running_A once past the run threshold", () => {
+    expect(clipForSpeed(6)).toBe("Running_A");
+    expect(clipForSpeed(9.2)).toBe("Running_A");
+  });
+});
+
+describe("heightScale", () => {
+  it("scales a model to the target height", () => {
+    expect(heightScale(2, 1.8)).toBeCloseTo(0.9, 10);
+  });
+
+  it("is 1 for a degenerate zero-height model (no divide-by-zero)", () => {
+    expect(heightScale(0, 1.8)).toBe(1);
+  });
+
+  it("is identity when the model is already at the target height", () => {
+    expect(heightScale(1.8, 1.8)).toBe(1);
   });
 });

@@ -39,6 +39,24 @@ export function stepYaw(current: number, target: number, k: number): number {
   return current + diff * k;
 }
 
+/** Clip driven by smoothed horizontal speed (m/s), keyed off FlyCamera's
+ *  on-foot walk speed (4.6 m/s) and sprint multiplier (2x). */
+export type PlayerClip = "Idle" | "Walking_A" | "Running_A";
+
+const WALK_MIN_MPS = 0.3; // matches FlyCamera's stride-cadence gate
+const RUN_MIN_MPS = 6; // between walk (4.6) and sprint (9.2) speeds
+
+export function clipForSpeed(speedMps: number): PlayerClip {
+  if (speedMps < WALK_MIN_MPS) return "Idle";
+  if (speedMps < RUN_MIN_MPS) return "Walking_A";
+  return "Running_A";
+}
+
+/** Uniform scale so a model measuring `modelHeightM` renders at `targetHeightM`. */
+export function heightScale(modelHeightM: number, targetHeightM: number): number {
+  return modelHeightM > 0 ? targetHeightM / modelHeightM : 1;
+}
+
 function hslToRgbInt(h: number, s: number, l: number): number {
   const f = (n: number): number => {
     const kk = (n + h * 12) % 12;
