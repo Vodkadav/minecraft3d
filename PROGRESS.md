@@ -77,9 +77,17 @@ Live: https://vodkadav.github.io/minecraft3d/ (desktop Chrome + WebGPU).
   onCreatures/sendInteract; SpawnFieldView remote mode + 10 Hz emit + applySnapshot/applyInteract
   (F/E/T resolution extracted, reused by keydown and intents). Live-verified end-to-end
   (`tools/net-probe.ts`): B mirrored A's 10 creatures, a host kill and a joiner attack intent each
-  despawned on BOTH peers over public Nostr rails. Follow-ups: KayKit humanoid avatars; creature
-  interpolation (10 Hz is un-smoothed today) + death-clip sync on the joiner; move the snapshot to
-  the unreliable channel (ADR 0002 §3); joiner-side mounting.
+  despawned on BOTH peers over public Nostr rails. Joiner creature interpolation + death-clip sync
+  done (2026-07-19): the 10 Hz `creatures` stream now smooths joiner-side positions/yaw via
+  exponential smoothing (`domain/spawn/CreatureSmoothing`, TDD, same shape as the remote-player
+  avatar smoothing but kept domain-pure); a dying creature keeps streaming (`dying: true`) through
+  its death clip instead of vanishing from the set immediately, and the pure reconciler
+  (`domain/spawn/CreatureStream`) surfaces a `died` diff so the joiner triggers the one-shot death
+  clip once and only removes the instance when the host's own removal drops the id (TDD:
+  Protocol/CreatureStream). `tools/net-probe.ts` extended to assert B actually saw the dying flag
+  before removal (`dyingIds` probe seam) — not yet re-run live (needs GPU + P2P Nostr rails).
+  Follow-ups: KayKit humanoid avatars; move the snapshot to the unreliable channel (ADR 0002 §3);
+  joiner-side mounting.
 - [~] M8 Hybrid voxel terrain (Fable-led) — Fable [F] core done (2026-07-06): 8.1 SDF chunk store
   (TDD, delta persistence via M2 save), 8.2 Transvoxel regular-cell mesher (TDD; MIT Lengyel tables,
   see CREDITS.md), 8.3 break-ground seam (`?voxel=1`: dig-mask hole punch, dig/fill tool, walkable

@@ -99,6 +99,9 @@ export interface CreatureEntity {
   readonly yaw: number;
   readonly behavior?: string;
   readonly health?: number;
+  /** Playing its one-shot death clip — still streamed so joiners can mirror
+   *  it before the host actually removes the entity (ADR 0003 follow-up). */
+  readonly dying?: boolean;
 }
 
 /** The host's full active spawn-field set, streamed ~10 Hz (ADR 0003). */
@@ -189,7 +192,8 @@ function isCreatureEntity(v: unknown): v is CreatureEntity {
     isNum(v.z) &&
     isNum(v.yaw) &&
     (v.behavior === undefined || isStr(v.behavior)) &&
-    (v.health === undefined || isNum(v.health))
+    (v.health === undefined || isNum(v.health)) &&
+    (v.dying === undefined || typeof v.dying === "boolean")
   );
 }
 

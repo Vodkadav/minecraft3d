@@ -164,13 +164,32 @@ async function attack(page: Page, id: string, via: 'applyInteract' | 'onInteract
   );
 }
 
-/** Poll until `id` is absent from BOTH sides' creature sets (host death-clip lag). */
+async function dyingIds(page: Page): Promise<string[]> {
+  return page
+    .evaluate(() => {
+      const sf = (window as unknown as { __laasDbg?: { spawnField?: { dyingIds: string[] } } })
+        .__laasDbg?.spawnField;
+      return sf ? [...sf.dyingIds] : [];
+    })
+    .catch(() => []);
+}
+
+/** Poll until `id` is absent from BOTH sides' creature sets (host death-clip lag).
+ *  Also asserts the joiner (B) played the death clip — i.e. it saw `id` in
+ *  `dyingIds` at some point before the id was fully removed — so a kill isn't
+ *  just an instant vanish on the joiner (ADR 0003 follow-up). */
 async function waitGone(a: Page, b: Page, id: string, label: string): Promise<void> {
   const t0 = Date.now();
+  let sawDyingOnB = false;
   for (;;) {
-    const [ia, ib] = await Promise.all([creatureIds(a), creatureIds(b)]);
+    const [ia, ib, dyingB] = await Promise.all([creatureIds(a), creatureIds(b), dyingIds(b)]);
+    if (dyingB.includes(id)) sawDyingOnB = true;
     if (!ia.includes(id) && !ib.includes(id)) {
       console.log(`[probe] PASS ${label}: ${id} despawned on both (+${((Date.now() - t0) / 1000).toFixed(1)}s)`);
+      if (!sawDyingOnB) {
+        throw new Error(`${label}: ${id} vanished on B without ever playing the death clip`);
+      }
+      console.log(`[probe] PASS ${label}-death-clip: B played the death clip before ${id} was removed`);
       return;
     }
     if (Date.now() - t0 > 15_000) {
