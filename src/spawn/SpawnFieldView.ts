@@ -51,7 +51,7 @@ import {
 } from "../game/domain/ai/CreatureBrain";
 import type { CreatureEntity, InteractAction } from "../game/domain/net/Protocol";
 import { reconcileEntities } from "../game/domain/spawn/CreatureStream";
-import { smoothingFactor, stepToward, stepYaw } from "../game/domain/spawn/CreatureSmoothing";
+import { lerpToward, smoothingFactor, stepYaw } from "../game/domain/spawn/CreatureSmoothing";
 import {
   applyDamage,
   CREATURE_STATS,
@@ -66,7 +66,7 @@ import type { ItemStack } from "../game/domain/inventory/Inventory";
 import type { AudioPort } from "../game/application/ports/AudioPort";
 import type { FeelPort } from "../game/application/ports/FeelPort";
 import type { ProgressionEventId } from "../game/domain/progression/ProgressionEvents";
-import { nearestWithin, SPECIES_VISUAL, validGround, type SpawnGround } from "./SpawnPlacement";
+import { SPECIES_VISUAL, validGround, type SpawnGround } from "./SpawnPlacement";
 
 /** Seconds between proximity re-steps when no cell is crossed. */
 const STEP_INTERVAL_S = 1.0;
@@ -132,6 +132,10 @@ export interface SpawnFieldDeps {
   /** Workstream 5.6: difficulty multiplier on contact-bite damage (peaceful
    *  = 0 disables player-facing creature damage entirely). Defaults to 1. */
   creatureDamageMult?: number;
+  /** Workstream 9.4 streaming pop-in smoothing: true suppresses the
+   *  materialize scale-up (an instant pop instead) — defaults to the OS
+   *  prefers-reduced-motion query when omitted. */
+  reducedMotion?(): boolean;
 }
 
 export interface SpawnFieldHandle {
@@ -203,6 +207,41 @@ interface CreatureEntry {
 export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
   const group = new Group();
   deps.parent.add(group);
+
+  // Workstream 9.4 streaming pop-in smoothing: a newly-materialized creature
+  // or node scales up from ~0 to full size over GROW_DURATION_S instead of
+  // popping in instantly at the spawn-cell-crossing boundary. Cheap (a Map
+  // that's normally empty — nothing streams in most frames — iterated once
+  // per update tick) and additive: the underlying spawn/streaming logic is
+  // unchanged, this only touches the visual's Object3D.scale. The actual
+  // vegetation/terrain-tile pop-in the AAA plan also flags lives entirely in
+  // off-limits engine dirs (src/world/TerrainTiles.ts, src/vegetation) — see
+  // the slice report for that deferral.
+  const GROW_DURATION_S = 0.35;
+  const growing = new Map<Object3D, number>(); // obj -> elapsed seconds
+  const reducedMotion =
+    deps.reducedMotion ??
+    ((): boolean => window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false);
+  function beginGrow(obj: Object3D): void {
+    if (reducedMotion()) return;
+    obj.scale.setScalar(0.05);
+    growing.set(obj, 0);
+  }
+  function stepGrowth(dt: number): void {
+    if (growing.size === 0) return;
+    for (const [obj, elapsed] of growing) {
+      const t = elapsed + dt;
+      if (t >= GROW_DURATION_S) {
+        obj.scale.setScalar(1);
+        growing.delete(obj);
+        continue;
+      }
+      // ease-out cubic — a snappy grow, not a linear pop
+      const p = t / GROW_DURATION_S;
+      obj.scale.setScalar(0.05 + 0.95 * (1 - Math.pow(1 - p, 3)));
+      growing.set(obj, t);
+    }
+  }
 
   const geometries = new Map<string, BufferGeometry>();
   const materials = new Map<string, MeshStandardMaterial>();
@@ -332,6 +371,7 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
       obj.position.set(x, deps.ground.heightAt(x, z) + lift, z);
       obj.name = s.id;
       group.add(obj);
+      beginGrow(obj);
       const taming = startTaming(s.species);
       creatures.set(s.id, {
         entity: s,
@@ -352,18 +392,21 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
     const mesh = makeNodeMesh(s);
     mesh.position.set(x, deps.ground.heightAt(x, z) + v.lift, z);
     group.add(mesh);
+    beginGrow(mesh);
     nodes.set(s.id, { entity: s, obj: mesh });
   }
 
   function remove(id: string): void {
     const creature = creatures.get(id);
     if (creature) {
+      growing.delete(creature.obj);
       group.remove(creature.obj);
       creatures.delete(id);
       return;
     }
     const node = nodes.get(id);
     if (!node) return;
+    growing.delete(node.obj);
     group.remove(node.obj);
     nodes.delete(id);
   }
@@ -410,16 +453,27 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
     return true;
   }
 
+  // Workstream 9.1 GC-hitch audit: this used to build a flat array of {x,z,e}
+  // objects via spread+map every call — called 3x/frame from the crosshair
+  // state update in TerrainScene (attack + interact targets), i.e. tens of
+  // thousands of small object/array allocations per minute of normal play.
+  // A direct nearest-scan over the pool's own values allocates nothing.
   function pickTarget<E extends { entity: SpawnEntity; obj: Object3D }>(
     pool: ReadonlyMap<string, E>,
   ): E | null {
     const [px, pz] = deps.getPlayerXZ();
-    const flat = [...pool.values()].map((e) => ({
-      x: e.obj.position.x,
-      z: e.obj.position.z,
-      e,
-    }));
-    return nearestWithin(flat, px, pz, REACH_M)?.e ?? null;
+    let best: E | null = null;
+    let bestSq = REACH_M * REACH_M;
+    for (const e of pool.values()) {
+      const dx = e.obj.position.x - px;
+      const dz = e.obj.position.z - pz;
+      const d = dx * dx + dz * dz;
+      if (d <= bestSq) {
+        best = e;
+        bestSq = d;
+      }
+    }
+    return best;
   }
 
   // Interaction resolution — reused by the local keydown (host/solo) AND by the
@@ -699,6 +753,7 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
       obj.rotation.y = e.yaw;
       obj.name = e.id;
       group.add(obj);
+      beginGrow(obj);
       const behavior = (e.behavior as Behavior | undefined) ?? "idle";
       instance?.setBehavior(behavior);
       const taming = startTaming(e.species);
@@ -729,6 +784,7 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
     const mesh = makeNodeMesh(entity);
     mesh.position.set(e.x, e.y, e.z);
     group.add(mesh);
+    beginGrow(mesh);
     nodes.set(e.id, { entity, obj: mesh });
   }
 
@@ -803,6 +859,7 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
 
     update(dt: number): void {
       clockMs += dt * 1000;
+      stepGrowth(dt);
       // Joiner puppets the host's stream: no proximity, no AI. Advance the
       // animation mixers so the streamed poses stay animated, and smooth each
       // creature's rendered transform toward the latest snapshot (`remoteTarget`)
@@ -826,12 +883,15 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
           }
           if (!c.remoteTarget) continue;
           const [tx, ty, tz, tyaw] = c.remoteTarget;
-          const [nx, ny, nz] = stepToward(
-            [c.obj.position.x, c.obj.position.y, c.obj.position.z],
-            [tx, ty, tz],
-            k,
+          // Workstream 9.1 GC-hitch audit: was `stepToward([...], [...], k)`,
+          // allocating two input tuples + one output tuple per creature every
+          // frame on every joiner — scalar lerpToward writes straight into
+          // the existing Vector3, zero allocation.
+          c.obj.position.set(
+            lerpToward(c.obj.position.x, tx, k),
+            lerpToward(c.obj.position.y, ty, k),
+            lerpToward(c.obj.position.z, tz, k),
           );
-          c.obj.position.set(nx, ny, nz);
           c.obj.rotation.y = stepYaw(c.obj.rotation.y, tyaw, k);
         }
         lastPx = px;

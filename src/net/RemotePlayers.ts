@@ -11,7 +11,7 @@
 
 import { CapsuleGeometry, Group, Mesh, MeshStandardMaterial, type Object3D } from "three";
 import type { PlayerState } from "../game/domain/world/WorldSaveData";
-import { colorForPeer, smoothingFactor, stepToward, stepYaw } from "./RemotePlayerMath";
+import { colorForPeer, lerpToward, smoothingFactor, stepYaw } from "./RemotePlayerMath";
 import { PlayerAvatarInstance, PlayerModelLibrary } from "./PlayerModel";
 
 /** Networked position is the eye; ground = eye - eye height (matches FlyCamera). */
@@ -78,11 +78,12 @@ export class RemotePlayers {
       const oldX = root.position.x;
       const oldZ = root.position.z;
       const groundOffset = instance ? instance.lift - EYE_HEIGHT_M : -CAPSULE_EYE_TO_CENTER_M;
-      const [x, y, z] = stepToward(
-        [root.position.x, root.position.y, root.position.z],
-        [target.position[0], target.position[1] + groundOffset, target.position[2]],
-        k,
-      );
+      // Workstream 9.1 GC-hitch audit: was `stepToward([...], [...], k)`,
+      // allocating two input tuples + one output tuple per avatar every
+      // frame — scalar lerpToward avoids all three.
+      const x = lerpToward(root.position.x, target.position[0], k);
+      const y = lerpToward(root.position.y, target.position[1] + groundOffset, k);
+      const z = lerpToward(root.position.z, target.position[2], k);
       root.position.set(x, y, z);
       root.rotation.y = stepYaw(root.rotation.y, target.yaw, k);
       if (instance) {

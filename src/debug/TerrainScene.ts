@@ -71,6 +71,7 @@ import type { ProgressionEventId } from '../game/domain/progression/ProgressionE
 import { STARTER_RECIPES } from '../game/domain/crafting/starterRecipes';
 import { isNight, MORNING_HOUR } from '../game/domain/time/DayNight';
 import { Crosshair } from '../game/ui/components/Crosshair';
+import { mountPerfHud } from '../game/ui/components/PerfHud';
 import { createLocalizer } from '../game/ui/i18n/strings';
 import { LocalStorageSettingsStore } from '../game/infrastructure/persistence/LocalStorageSettingsStore';
 import { SettingsController } from '../game/application/SettingsController';
@@ -91,6 +92,14 @@ const LOW_HEALTH_FRACTION = 0.25;
 export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
   const { engine, params, seed } = ctx;
 
+  // Workstream 9.2: opt-in frame-time percentile overlay — mounted hidden on
+  // every scene (dev/tooling included, same as the F3 debug HUD) so F4 works
+  // everywhere; sampling `engine.stats.frameMs` every tick costs one array
+  // write (FrameTimeBuffer.push is allocation-free) whether or not it's
+  // visible, and the DOM never re-renders while hidden.
+  const perfHud = mountPerfHud();
+  engine.onUpdate(() => perfHud.sample(engine.stats.frameMs));
+
   // Workstream 1.4/1.6: apply persisted bus volumes as soon as there's an
   // audio port, and start the ambient wind bed + calm music loop for a real
   // game boot. The spawn block below reuses this same loaded controller.
@@ -102,6 +111,10 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
   // Workstream 5.5: hoisted so the spawnsOn block below can trigger the
   // sleep-fade transition without re-mounting a second overlay.
   let screenEffectsRef: ReturnType<typeof mountScreenEffects> | null = null;
+  // Workstream 9.4: hoisted so attachSpawnField's streaming pop-in fade below
+  // can honor the settings-aware reducedMotion (not just the OS media query
+  // its own default fallback uses) — same hoist reason as feel/screenEffects.
+  let reducedMotionRef: (() => boolean) | null = null;
   if (ctx.audio) {
     settingsController = new SettingsController(new LocalStorageSettingsStore());
     await settingsController.load();
@@ -117,6 +130,7 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
     const reducedMotion = (): boolean =>
       settingsRef.settings.reducedMotion ||
       (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false);
+    reducedMotionRef = reducedMotion;
     const damageNumbers = mountDamageNumbers(document, engine.camera, engine.renderer.domElement);
     const screenEffects = mountScreenEffects(document, reducedMotion);
     screenEffectsRef = screenEffects;
@@ -721,6 +735,7 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
       },
       isNight: () => isNight(sunSky.timeOfDay),
       creatureDamageMult: difficultyRules(settings.settings.difficulty).creatureDamage,
+      ...(reducedMotionRef ? { reducedMotion: reducedMotionRef } : {}),
       ...(voxelsRef
         ? {
             save: {

@@ -1,5 +1,23 @@
 import { describe, expect, it } from "vitest";
-import { smoothingFactor, stepToward, stepYaw } from "./CreatureSmoothing";
+import { lerpToward, smoothingFactor, stepToward, stepYaw } from "./CreatureSmoothing";
+
+describe("lerpToward", () => {
+  it("moves the fraction toward the target", () => {
+    expect(lerpToward(0, 10, 0.5)).toBe(5);
+  });
+
+  it("stays put at k=0 and lands at k=1", () => {
+    expect(lerpToward(1, 7, 0)).toBe(1);
+    expect(lerpToward(1, 7, 1)).toBe(7);
+  });
+
+  it("stepToward is lerpToward applied per axis", () => {
+    const [x, y, z] = stepToward([1, 2, 3], [7, 8, 9], 0.3);
+    expect(x).toBe(lerpToward(1, 7, 0.3));
+    expect(y).toBe(lerpToward(2, 8, 0.3));
+    expect(z).toBe(lerpToward(3, 9, 0.3));
+  });
+});
 
 describe("smoothingFactor", () => {
   it("is 0 for a zero timestep (no snap)", () => {

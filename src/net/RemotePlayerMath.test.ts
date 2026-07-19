@@ -3,10 +3,22 @@ import {
   clipForSpeed,
   colorForPeer,
   heightScale,
+  lerpToward,
   smoothingFactor,
   stepToward,
   stepYaw,
 } from "./RemotePlayerMath";
+
+describe("lerpToward", () => {
+  it("moves the fraction toward the target", () => {
+    expect(lerpToward(0, 10, 0.5)).toBe(5);
+  });
+
+  it("stays put at k=0 and lands at k=1", () => {
+    expect(lerpToward(1, 7, 0)).toBe(1);
+    expect(lerpToward(1, 7, 1)).toBe(7);
+  });
+});
 
 describe("colorForPeer", () => {
   it("is deterministic per peerId", () => {

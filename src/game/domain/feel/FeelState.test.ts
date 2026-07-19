@@ -65,6 +65,18 @@ describe("FeelState decay/stacking", () => {
     expect(s.vignettePulses).toHaveLength(0);
   });
 
+  it("tickFeel returns the SAME reference at idle — zero allocation on the steady-state per-frame path (Workstream 9.1)", () => {
+    const idle = emptyFeelState();
+    const next = tickFeel(idle, 1 / 60);
+    expect(next).toBe(idle);
+  });
+
+  it("tickFeel still allocates fresh state once anything is actually decaying", () => {
+    const active = applyFeedback(emptyFeelState(), resolveFeedback("kill"));
+    const next = tickFeel(active, 1 / 60);
+    expect(next).not.toBe(active);
+  });
+
   it("shakeMagnitude is trauma^2 (punchier falloff than linear)", () => {
     expect(shakeMagnitude({ trauma: 0.5, hitStopMs: 0, vignettePulses: [] })).toBeCloseTo(0.25);
     expect(shakeMagnitude({ trauma: 1, hitStopMs: 0, vignettePulses: [] })).toBe(1);

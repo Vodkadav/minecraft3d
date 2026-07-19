@@ -17,15 +17,23 @@ export function smoothingFactor(dt: number, halfLifeS = 0.1): number {
   return 1 - Math.pow(0.5, dt / halfLifeS);
 }
 
+/** Scalar step toward `target` — the per-axis math `stepToward` composes.
+ *  Exposed separately (Workstream 9.1 GC-hitch audit) so a hot per-frame,
+ *  per-entity render loop can call it 3x on raw numbers instead of building
+ *  throwaway `[x, y, z]` tuples just to unpack them again a line later. */
+export function lerpToward(current: number, target: number, k: number): number {
+  return current + (target - current) * k;
+}
+
 export function stepToward(
   current: readonly [number, number, number],
   target: readonly [number, number, number],
   k: number,
 ): [number, number, number] {
   return [
-    current[0] + (target[0] - current[0]) * k,
-    current[1] + (target[1] - current[1]) * k,
-    current[2] + (target[2] - current[2]) * k,
+    lerpToward(current[0], target[0], k),
+    lerpToward(current[1], target[1], k),
+    lerpToward(current[2], target[2], k),
   ];
 }
 
