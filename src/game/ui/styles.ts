@@ -471,6 +471,18 @@ ${THEME_CSS_VARS}
   text-align: center;
 }
 
+/* Perf HUD (Workstream 9.2) — opt-in, F4-toggled, OFF by default */
+.lw-perf-hud {
+  position: fixed;
+  top: var(--lw-space-4);
+  right: var(--lw-space-4);
+  z-index: 60;
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: var(--lw-font-xs);
+  white-space: pre;
+  pointer-events: none;
+}
+
 .laas-ui button,
 .laas-ui select,
 .laas-ui input[type="range"],

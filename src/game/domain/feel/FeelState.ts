@@ -51,13 +51,24 @@ export function applyFeedback(state: FeelState, bundle: FeedbackBundle): FeelSta
   return { trauma, hitStopMs, vignettePulses };
 }
 
-/** Advance decay by `dt` seconds. */
+/** Advance decay by `dt` seconds. Called every frame of every real game boot
+ *  (FeelDirector.tick) regardless of whether anything is actually happening
+ *  — the idle case (nothing decaying, no pulses) is by far the most common,
+ *  so it returns the SAME state reference with zero allocation instead of
+ *  running `.map().filter()` over an empty array 60 times a second
+ *  (Workstream 9.1 GC-hitch audit finding). */
 export function tickFeel(state: FeelState, dt: number): FeelState {
+  if (state.trauma === 0 && state.hitStopMs === 0 && state.vignettePulses.length === 0) {
+    return state;
+  }
   const trauma = Math.max(0, state.trauma - TRAUMA_DECAY_PER_S * dt);
   const hitStopMs = Math.max(0, state.hitStopMs - dt * 1000);
-  const vignettePulses = state.vignettePulses
-    .map((p) => ({ ...p, ageS: p.ageS + dt }))
-    .filter((p) => p.ageS < VIGNETTE_PULSE_LIFE_S);
+  const vignettePulses =
+    state.vignettePulses.length === 0
+      ? state.vignettePulses
+      : state.vignettePulses
+          .map((p) => ({ ...p, ageS: p.ageS + dt }))
+          .filter((p) => p.ageS < VIGNETTE_PULSE_LIFE_S);
   return { trauma, hitStopMs, vignettePulses };
 }
 

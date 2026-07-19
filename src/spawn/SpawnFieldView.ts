@@ -51,7 +51,7 @@ import {
 } from "../game/domain/ai/CreatureBrain";
 import type { CreatureEntity, InteractAction } from "../game/domain/net/Protocol";
 import { reconcileEntities } from "../game/domain/spawn/CreatureStream";
-import { smoothingFactor, stepToward, stepYaw } from "../game/domain/spawn/CreatureSmoothing";
+import { lerpToward, smoothingFactor, stepYaw } from "../game/domain/spawn/CreatureSmoothing";
 import {
   applyDamage,
   CREATURE_STATS,
@@ -66,7 +66,7 @@ import type { ItemStack } from "../game/domain/inventory/Inventory";
 import type { AudioPort } from "../game/application/ports/AudioPort";
 import type { FeelPort } from "../game/application/ports/FeelPort";
 import type { ProgressionEventId } from "../game/domain/progression/ProgressionEvents";
-import { nearestWithin, SPECIES_VISUAL, validGround, type SpawnGround } from "./SpawnPlacement";
+import { SPECIES_VISUAL, validGround, type SpawnGround } from "./SpawnPlacement";
 
 /** Seconds between proximity re-steps when no cell is crossed. */
 const STEP_INTERVAL_S = 1.0;
@@ -410,16 +410,27 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
     return true;
   }
 
+  // Workstream 9.1 GC-hitch audit: this used to build a flat array of {x,z,e}
+  // objects via spread+map every call — called 3x/frame from the crosshair
+  // state update in TerrainScene (attack + interact targets), i.e. tens of
+  // thousands of small object/array allocations per minute of normal play.
+  // A direct nearest-scan over the pool's own values allocates nothing.
   function pickTarget<E extends { entity: SpawnEntity; obj: Object3D }>(
     pool: ReadonlyMap<string, E>,
   ): E | null {
     const [px, pz] = deps.getPlayerXZ();
-    const flat = [...pool.values()].map((e) => ({
-      x: e.obj.position.x,
-      z: e.obj.position.z,
-      e,
-    }));
-    return nearestWithin(flat, px, pz, REACH_M)?.e ?? null;
+    let best: E | null = null;
+    let bestSq = REACH_M * REACH_M;
+    for (const e of pool.values()) {
+      const dx = e.obj.position.x - px;
+      const dz = e.obj.position.z - pz;
+      const d = dx * dx + dz * dz;
+      if (d <= bestSq) {
+        best = e;
+        bestSq = d;
+      }
+    }
+    return best;
   }
 
   // Interaction resolution — reused by the local keydown (host/solo) AND by the
@@ -826,12 +837,15 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
           }
           if (!c.remoteTarget) continue;
           const [tx, ty, tz, tyaw] = c.remoteTarget;
-          const [nx, ny, nz] = stepToward(
-            [c.obj.position.x, c.obj.position.y, c.obj.position.z],
-            [tx, ty, tz],
-            k,
+          // Workstream 9.1 GC-hitch audit: was `stepToward([...], [...], k)`,
+          // allocating two input tuples + one output tuple per creature every
+          // frame on every joiner — scalar lerpToward writes straight into
+          // the existing Vector3, zero allocation.
+          c.obj.position.set(
+            lerpToward(c.obj.position.x, tx, k),
+            lerpToward(c.obj.position.y, ty, k),
+            lerpToward(c.obj.position.z, tz, k),
           );
-          c.obj.position.set(nx, ny, nz);
           c.obj.rotation.y = stepYaw(c.obj.rotation.y, tyaw, k);
         }
         lastPx = px;
