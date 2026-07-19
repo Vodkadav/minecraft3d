@@ -60,6 +60,14 @@ export const UI_STRINGS: Catalog = {
 
     "storage.persisted": "Storage is protected — your worlds won't be evicted.",
     "storage.notPersisted": "Storage is best-effort — worlds may be evicted under pressure.",
+
+    "hud.notifications": "Notifications",
+    "hud.hotbar": "Hotbar",
+    "hud.hotbar.slot": "Slot {n}",
+    "hud.hotbar.empty": "Empty",
+    "hud.vitals.health": "Health",
+    "hud.vitals.health.label": "HP {n}/{max}",
+    "hud.toast.loot": "Picked up {name} x{count}",
   },
   es: {
     "app.title": "Diggy World",
@@ -112,6 +120,14 @@ export const UI_STRINGS: Catalog = {
 
     "storage.persisted": "El almacenamiento está protegido: tus mundos no se eliminarán.",
     "storage.notPersisted": "Almacenamiento de mejor esfuerzo: los mundos podrían eliminarse.",
+
+    "hud.notifications": "Notificaciones",
+    "hud.hotbar": "Barra de acceso rápido",
+    "hud.hotbar.slot": "Ranura {n}",
+    "hud.hotbar.empty": "Vacío",
+    "hud.vitals.health": "Salud",
+    "hud.vitals.health.label": "PS {n}/{max}",
+    "hud.toast.loot": "Conseguiste {name} x{count}",
   },
   da: {
     "app.title": "Diggy World",
@@ -164,6 +180,14 @@ export const UI_STRINGS: Catalog = {
 
     "storage.persisted": "Lageret er beskyttet — dine verdener bliver ikke slettet.",
     "storage.notPersisted": "Bedste forsøg-lager — verdener kan blive slettet ved pladsmangel.",
+
+    "hud.notifications": "Notifikationer",
+    "hud.hotbar": "Genvejsbjælke",
+    "hud.hotbar.slot": "Plads {n}",
+    "hud.hotbar.empty": "Tom",
+    "hud.vitals.health": "Helbred",
+    "hud.vitals.health.label": "HP {n}/{max}",
+    "hud.toast.loot": "Samlede {name} x{count}",
   },
 };
 

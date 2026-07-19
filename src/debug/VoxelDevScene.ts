@@ -16,12 +16,13 @@ import { IndexedDbKeyValueStore } from '../game/infrastructure/persistence/Index
 import { OpfsBlobStore } from '../game/infrastructure/persistence/OpfsBlobStore';
 import { PersistentWorldSaveStore } from '../game/infrastructure/persistence/PersistentWorldSaveStore';
 import { DigMask } from '../voxel/DigMask';
-import { DigTool } from '../voxel/DigTool';
+import { DigTool, REACH_M as DIG_REACH_M } from '../voxel/DigTool';
 import { VoxelTerrain, type VoxelSurface } from '../voxel/VoxelTerrain';
 import { attachPlacementTool } from '../voxel/placement/PlacementTool';
 import { attachTreasureField } from '../voxel/treasure/TreasureField';
 import { attachSpawnField } from '../spawn/SpawnFieldView';
 import { createPlayerHealthBar } from '../spawn/PlayerHealthBar';
+import { mountGameHud } from '../spawn/GameHud';
 import {
   PLAYER_MAX_HEALTH,
   damagePlayer,
@@ -29,6 +30,13 @@ import {
   spawnPlayerVitals,
   tickVitals,
 } from '../game/domain/combat/PlayerVitals';
+import { isOk } from '../game/domain/Result';
+import { ItemRegistry } from '../game/domain/items/ItemRegistry';
+import { STARTER_ITEMS } from '../game/domain/items/starterItems';
+import { resolveCrosshairState } from '../game/domain/ui/CrosshairState';
+import { createLocalizer } from '../game/ui/i18n/strings';
+import { LocalStorageSettingsStore } from '../game/infrastructure/persistence/LocalStorageSettingsStore';
+import { SettingsController } from '../game/application/SettingsController';
 import type { WorldContext } from './Scenes';
 import type { CamPose } from '../core/Hooks';
 
@@ -93,6 +101,16 @@ export async function buildVoxelDevScene(ctx: WorldContext): Promise<void> {
   new DigTool(voxels, engine.camera, engine.renderer.domElement);
   window.addEventListener('pagehide', () => voxels.flushSave());
 
+  // themed HUD (Workstream 3): hotbar + toasts + crosshair. Locale follows
+  // the same persisted settings the menu/settings screen uses.
+  const hudSettings = new SettingsController(new LocalStorageSettingsStore());
+  await hudSettings.load();
+  const loc = createLocalizer(hudSettings.settings.locale);
+  const itemsReg = ItemRegistry.create(STARTER_ITEMS);
+  if (!isOk(itemsReg)) throw new Error(`bad starter item table: ${itemsReg.error.kind}`);
+  const hud = mountGameHud({ loc, registry: itemsReg.value });
+  const AIM_DIR = new Vector3();
+
   // build mode (B) — capture-phase listener suppresses DigTool while active
   const placement = attachPlacementTool({
     terrain: voxels,
@@ -145,6 +163,7 @@ export async function buildVoxelDevScene(ctx: WorldContext): Promise<void> {
       }
     },
     setMoveSpeedScale: (s) => ctx.hooks.setMoveSpeedScale?.(s),
+    onLoot: (stacks) => hud?.addLoot(stacks),
     save: {
       entity: (k) => voxels.entity(k),
       setEntity: (k, v) => voxels.setEntity(k, v),
@@ -156,6 +175,28 @@ export async function buildVoxelDevScene(ctx: WorldContext): Promise<void> {
     const before = vitals.health;
     vitals = tickVitals(vitals, dt);
     if (vitals.health !== before) healthBar.set(vitals.health / PLAYER_MAX_HEALTH);
+  });
+  engine.onUpdate(() => {
+    if (!hud) return;
+    const placing = placement.isBuildMode();
+    let hasMineTarget = false;
+    if (!placing) {
+      AIM_DIR.set(0, 0, -1).applyQuaternion(engine.camera.quaternion).normalize();
+      const hit = voxels.raycastSolid(
+        [engine.camera.position.x, engine.camera.position.y, engine.camera.position.z],
+        [AIM_DIR.x, AIM_DIR.y, AIM_DIR.z],
+        DIG_REACH_M,
+      );
+      hasMineTarget = hit !== null;
+    }
+    hud.setCrosshairState(
+      resolveCrosshairState({
+        placing,
+        hasAttackTarget: spawns.hasAttackTarget(),
+        hasInteractTarget: spawns.hasInteractTarget(),
+        hasMineTarget,
+      }),
+    );
   });
   (window as unknown as { __laasDbg?: Record<string, unknown> }).__laasDbg = {
     engine,
