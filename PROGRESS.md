@@ -182,3 +182,17 @@ Live: https://vodkadav.github.io/minecraft3d/ (desktop Chrome + WebGPU).
   the prime directive) — the footstep event/synth exists, unwired; craft SFX — no crafting UI/
   call site exists yet (arrives with Workstream 4). `npm run ci` green: 74 files/635 tests
   (was 69/605), lint/typecheck/arch/build all pass.
+- **AAA polish — Workstream 10 (Presentation & identity), Slice S9 — DONE (2026-07-19):** a
+  procedural wordmark (SVG text + theme gradient, zero image/font assets) on the main menu; the
+  boot-screen title (`index.html`, `BootUI.ts` untouched — engine dir) now shares the same brand
+  palette for cross-surface identity. A cheap parallax hill-silhouette backdrop
+  (`domain/presentation/Skyline`, seeded via the existing `hash32`/`hashUnitFloat`, drifted with
+  CSS keyframes — reduced-motion-safe for free) replaces the deferred live-3D flythrough: booting
+  the full world behind the menu costs ~48 s (see M8 above), far too slow for a menu, and the
+  engine dirs are off-limits to this slice. New Credits screen (menu-reachable, EN/ES/DA) lists
+  runtime tech + CC0/MIT assets mirrored from CREDITS.md. A localStorage-backed first-run touch
+  gently highlights "Solo" on first load (CSS pulse only, no text change). Consistency sweep:
+  MainMenuView/LobbyView/SettingsView had never received the S2 theme kit since M4 (unstyled
+  default DOM) — themed via CSS on their existing root classes; `src/main.ts`'s host-offline
+  overlay + room-code badge moved off hardcoded hex onto theme tokens. `npm run ci` green:
+  129 files/1032 tests (was 124/1010), lint/typecheck/arch/build all pass.
