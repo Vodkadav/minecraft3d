@@ -13,9 +13,30 @@ import type { ChunkDelta, PlayerState } from "../world/WorldSaveData";
 
 // ---- Joiner → Host intents ----
 
+/** A stack on the wire — the same shape as domain `ItemStack`, but Protocol
+ *  stays decoupled from the inventory module (parity with `PlayerState`
+ *  living in `world/WorldSaveData`, not here). */
+export interface InventoryStackWire {
+  readonly itemId: string;
+  readonly count: number;
+}
+
+/** A whole inventory on the wire (E0.4) — capacity + one slot per index. */
+export interface SerializedInventoryWire {
+  readonly capacity: number;
+  readonly slots: readonly (InventoryStackWire | null)[];
+}
+
 export interface JoinMsg {
   readonly kind: "join";
   readonly playerName: string;
+  /** The joiner's own saved inventory (E0.4) — seeds the host's authoritative
+   *  copy of THIS peer. Omitted or malformed ⇒ the host seeds a fresh empty
+   *  inventory (a brand-new player's default boot state); a claimed item the
+   *  registry doesn't know is never trusted at face value (IntentRules/
+   *  HostSession revalidate against the real registry, not just this shape
+   *  check). */
+  readonly inventory?: SerializedInventoryWire;
 }
 
 export interface PoseMsg {
@@ -71,7 +92,47 @@ export interface PlaceableInteractMsg {
   readonly count?: number;
 }
 
-export type JoinerMessage = JoinMsg | PoseMsg | DigMsg | FillMsg | InteractMsg | PlaceableInteractMsg;
+/**
+ * Direct manipulation of the SENDER's own authoritative inventory (E0.4).
+ * `move`/`split`/`use` need no other party — pure reorg of the peer's own
+ * slots. `deposit`/`withdraw` target a placeable container (a chest today;
+ * the same shape a future non-placeable container — e.g. the E4.4 account
+ * bank — can reuse) and are resolved atomically against BOTH the container
+ * and the sender's inventory, so a rejection on either side commits neither.
+ */
+export type InventoryOp =
+  | { readonly op: "move"; readonly from: number; readonly to: number }
+  | { readonly op: "split"; readonly from: number; readonly count: number }
+  /** Removes one unit from `index` — a generic consume hook; what "using" an
+   *  item DOES (heal, buff, craft) is a later slice's concern, this only
+   *  keeps the authoritative inventory in sync with a future consume UI. */
+  | { readonly op: "use"; readonly index: number }
+  | {
+      readonly op: "deposit";
+      readonly placeableId: string;
+      readonly itemId: string;
+      readonly count: number;
+    }
+  | {
+      readonly op: "withdraw";
+      readonly placeableId: string;
+      readonly itemId: string;
+      readonly count: number;
+    };
+
+export interface InventoryOpMsg {
+  readonly kind: "inventoryOp";
+  readonly inventoryOp: InventoryOp;
+}
+
+export type JoinerMessage =
+  | JoinMsg
+  | PoseMsg
+  | DigMsg
+  | FillMsg
+  | InteractMsg
+  | PlaceableInteractMsg
+  | InventoryOpMsg;
 
 // ---- Host → Joiner ----
 
@@ -161,6 +222,16 @@ export interface PlaceableStateMsg {
   readonly state: unknown;
 }
 
+/** The host's resolved authoritative inventory for the RECEIVING peer only
+ *  (E0.4) — sent (never broadcast: an inventory is private), after any
+ *  `inventoryOp`/inventory-touching `placeableInteract` that mutated it, and
+ *  once right after `join` so the peer learns its real starting state. */
+export interface InventoryStateMsg {
+  readonly kind: "inventoryState";
+  readonly capacity: number;
+  readonly slots: readonly (InventoryStackWire | null)[];
+}
+
 export type HostMessage =
   | WelcomeMsg
   | PeerPoseMsg
@@ -170,7 +241,8 @@ export type HostMessage =
   | PeerJoinedMsg
   | PeerLeftMsg
   | HostClosingMsg
-  | PlaceableStateMsg;
+  | PlaceableStateMsg
+  | InventoryStateMsg;
 
 export type NetMessage = JoinerMessage | HostMessage;
 
@@ -228,6 +300,77 @@ const PLACEABLE_ACTIONS: readonly string[] = [
   "harvestCrop",
 ];
 
+/** Ceilings for E0.4 inventory wire shapes — generous over real capacities
+ *  (27 player / 20 chest, see GameHud.ts / PlaceableInteraction.ts) but
+ *  bounded so a hostile peer can't DoS `parseMessage` with a huge payload.
+ *  Deeper semantic checks (known item, real per-item stack limits) happen at
+ *  `Inventory.fromSlots` against the live registry, not here. */
+const MAX_WIRE_INVENTORY_SLOTS = 64;
+const MAX_WIRE_ITEM_ID_LEN = 64;
+const MAX_WIRE_STACK_COUNT = 999;
+
+function isInventoryStackWire(v: unknown): v is InventoryStackWire {
+  return (
+    isRecord(v) &&
+    isStr(v.itemId) &&
+    v.itemId.length > 0 &&
+    v.itemId.length <= MAX_WIRE_ITEM_ID_LEN &&
+    isNum(v.count) &&
+    Number.isInteger(v.count) &&
+    v.count > 0 &&
+    v.count <= MAX_WIRE_STACK_COUNT
+  );
+}
+
+function isInventorySlots(v: unknown): v is readonly (InventoryStackWire | null)[] {
+  return (
+    Array.isArray(v) &&
+    v.length <= MAX_WIRE_INVENTORY_SLOTS &&
+    v.every((s) => s === null || isInventoryStackWire(s))
+  );
+}
+
+function isSerializedInventoryWire(v: unknown): v is SerializedInventoryWire {
+  return (
+    isRecord(v) &&
+    isNum(v.capacity) &&
+    Number.isInteger(v.capacity) &&
+    v.capacity >= 0 &&
+    v.capacity <= MAX_WIRE_INVENTORY_SLOTS &&
+    isInventorySlots(v.slots) &&
+    v.slots.length === v.capacity
+  );
+}
+
+function isIndex(v: unknown): v is number {
+  return isNum(v) && Number.isInteger(v) && v >= 0;
+}
+
+function isWireCount(v: unknown): v is number {
+  return isNum(v) && Number.isInteger(v) && v > 0 && v <= MAX_WIRE_STACK_COUNT;
+}
+
+function isWireItemId(v: unknown): v is string {
+  return isStr(v) && v.length > 0 && v.length <= MAX_WIRE_ITEM_ID_LEN;
+}
+
+function isInventoryOp(v: unknown): v is InventoryOp {
+  if (!isRecord(v)) return false;
+  switch (v.op) {
+    case "move":
+      return isIndex(v.from) && isIndex(v.to);
+    case "split":
+      return isIndex(v.from) && isWireCount(v.count);
+    case "use":
+      return isIndex(v.index);
+    case "deposit":
+    case "withdraw":
+      return isWireItemId(v.placeableId) && isWireItemId(v.itemId) && isWireCount(v.count);
+    default:
+      return false;
+  }
+}
+
 function isCreatureEntity(v: unknown): v is CreatureEntity {
   return (
     isRecord(v) &&
@@ -247,7 +390,8 @@ function isCreatureEntity(v: unknown): v is CreatureEntity {
 
 /** Per-kind shape validators; each returns true iff the record is that message. */
 const VALIDATORS: Record<string, (m: Record<string, unknown>) => boolean> = {
-  join: (m) => isStr(m.playerName),
+  join: (m) =>
+    isStr(m.playerName) && (m.inventory === undefined || isSerializedInventoryWire(m.inventory)),
   pose: (m) => isPlayerState(m.state),
   dig: (m) => isNum(m.x) && isNum(m.y) && isNum(m.z) && isNum(m.radius),
   fill: (m) =>
@@ -261,6 +405,8 @@ const VALIDATORS: Record<string, (m: Record<string, unknown>) => boolean> = {
     (m.itemId === undefined || isStr(m.itemId)) &&
     (m.count === undefined || isNum(m.count)),
   placeableState: (m) => isStr(m.placeableId) && "state" in m,
+  inventoryOp: (m) => isInventoryOp(m.inventoryOp),
+  inventoryState: (m) => isSerializedInventoryWire(m),
   welcome: (m) =>
     isNum(m.seed) &&
     isStr(m.worldId) &&

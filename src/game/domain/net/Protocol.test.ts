@@ -79,6 +79,24 @@ const HAPPY: NetMessage[] = [
   { kind: "placeableInteract", action: "plantCrop", placeableId: "piece:3", itemId: "wheat-seed" },
   { kind: "placeableState", placeableId: "piece:1", state: { open: true, ownerId: null, locked: false } },
   { kind: "placeableState", placeableId: "piece:2", state: null },
+  {
+    kind: "join",
+    playerName: "Luna",
+    inventory: { capacity: 2, slots: [{ itemId: "wood", count: 4 }, null] },
+  },
+  { kind: "inventoryOp", inventoryOp: { op: "move", from: 0, to: 1 } },
+  { kind: "inventoryOp", inventoryOp: { op: "split", from: 0, count: 4 } },
+  { kind: "inventoryOp", inventoryOp: { op: "use", index: 2 } },
+  {
+    kind: "inventoryOp",
+    inventoryOp: { op: "deposit", placeableId: "piece:2", itemId: "wood", count: 4 },
+  },
+  {
+    kind: "inventoryOp",
+    inventoryOp: { op: "withdraw", placeableId: "piece:2", itemId: "wood", count: 4 },
+  },
+  { kind: "inventoryState", capacity: 2, slots: [{ itemId: "wood", count: 4 }, null] },
+  { kind: "inventoryState", capacity: 0, slots: [] },
 ];
 
 describe("parseMessage — happy paths", () => {
@@ -138,6 +156,57 @@ describe("parseMessage — malformed input is an error value", () => {
     { kind: "placeableState", state: {} }, // missing placeableId
     { kind: "placeableState", placeableId: 7, state: {} }, // wrong type
     { kind: "placeableState", placeableId: "p:1" }, // missing state key entirely
+    { kind: "join", playerName: "Luna", inventory: { capacity: 1, slots: [] } }, // slots length mismatch
+    {
+      kind: "join",
+      playerName: "Luna",
+      inventory: { capacity: 1, slots: [{ itemId: "", count: 1 }] },
+    }, // empty itemId
+    {
+      kind: "join",
+      playerName: "Luna",
+      inventory: { capacity: 1, slots: [{ itemId: "wood", count: 0 }] },
+    }, // non-positive count
+    {
+      kind: "join",
+      playerName: "Luna",
+      inventory: { capacity: 1, slots: [{ itemId: "wood", count: 1.5 }] },
+    }, // non-integer count
+    {
+      kind: "join",
+      playerName: "Luna",
+      inventory: { capacity: 1, slots: [{ itemId: "wood", count: 1000 }] },
+    }, // oversized count
+    { kind: "join", playerName: "Luna", inventory: { capacity: -1, slots: [] } }, // negative capacity
+    { kind: "join", playerName: "Luna", inventory: { capacity: 1, slots: "nope" } }, // slots not an array
+    { kind: "inventoryOp" }, // missing inventoryOp
+    { kind: "inventoryOp", inventoryOp: { op: "teleportItem", from: 0, to: 1 } }, // unknown op
+    { kind: "inventoryOp", inventoryOp: { op: "move", from: 0 } }, // missing `to`
+    { kind: "inventoryOp", inventoryOp: { op: "move", from: -1, to: 1 } }, // negative index
+    { kind: "inventoryOp", inventoryOp: { op: "move", from: 0.5, to: 1 } }, // non-integer index
+    { kind: "inventoryOp", inventoryOp: { op: "split", from: 0, count: 0 } }, // non-positive count
+    { kind: "inventoryOp", inventoryOp: { op: "split", from: 0, count: 1000 } }, // oversized count
+    { kind: "inventoryOp", inventoryOp: { op: "use", index: -1 } }, // negative index
+    {
+      kind: "inventoryOp",
+      inventoryOp: { op: "deposit", placeableId: "", itemId: "wood", count: 1 },
+    }, // empty placeableId
+    {
+      kind: "inventoryOp",
+      inventoryOp: { op: "withdraw", placeableId: "p:1", itemId: "", count: 1 },
+    }, // empty itemId
+    {
+      kind: "inventoryOp",
+      inventoryOp: { op: "withdraw", placeableId: "p:1", itemId: "wood", count: -1 },
+    }, // negative count
+    { kind: "inventoryState" }, // missing capacity/slots
+    { kind: "inventoryState", capacity: 1, slots: [] }, // slots length mismatch
+    { kind: "inventoryState", capacity: 1, slots: [{ itemId: "wood", count: -1 }] }, // bad stack
+    {
+      kind: "inventoryState",
+      capacity: 200,
+      slots: Array.from({ length: 200 }, () => null),
+    }, // oversized slot array (DoS-shaped payload)
   ];
 
   it.each(BAD.map((m) => [JSON.stringify(m) ?? String(m), m] as const))(

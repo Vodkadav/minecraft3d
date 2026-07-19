@@ -364,6 +364,7 @@ async function bootEngine(hooks: LaasHooks, launch: MenuLaunch | null): Promise<
       voxels: ctx.world?.voxels ?? null,
       spawns: ctx.world?.spawns ?? null,
       placeables: ctx.world?.placeables ?? null,
+      ...(ctx.world?.registry ? { registry: ctx.world.registry } : {}),
       parent: engine.scene,
     });
     engine.onUpdate((dt) => net.update(dt));

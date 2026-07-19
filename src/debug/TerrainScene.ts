@@ -595,6 +595,7 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
     const loc = createLocalizer(settings.settings.locale);
     const itemsReg = ItemRegistry.create(STARTER_ITEMS);
     if (!isOk(itemsReg)) throw new Error(`bad starter item table: ${itemsReg.error.kind}`);
+    if (ctx.world) ctx.world.registry = itemsReg.value; // E0.4: host net glue reaches it here
 
     // S7b: wire the tested-but-unwired InventoryPersistence/ProgressionPersistence
     // into the boot/save flow (closes the S4/S6 deferral). Only when there's a

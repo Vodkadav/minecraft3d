@@ -23,7 +23,14 @@ import { HostSession, type WorldSnapshot } from "../game/application/HostSession
 import { JoinSession } from "../game/application/JoinSession";
 import type { NetTransport } from "../game/application/ports/NetTransport";
 import type { WorldSaveStore } from "../game/application/ports/WorldSaveStore";
-import type { CreatureEntity, WelcomeMsg, WorldEdit } from "../game/domain/net/Protocol";
+import type { ItemRegistry } from "../game/domain/items/ItemRegistry";
+import type {
+  CreatureEntity,
+  InventoryOp,
+  SerializedInventoryWire,
+  WelcomeMsg,
+  WorldEdit,
+} from "../game/domain/net/Protocol";
 import { makeRoomCode } from "../game/domain/net/RoomCode";
 import type { PlayerState } from "../game/domain/world/WorldSaveData";
 import { makeTrysteroTransport } from "../game/infrastructure/net/TrysteroTransport";
@@ -62,6 +69,8 @@ export interface HostNetDeps {
   /** The host's functional placeables (Workstream 8.1, S7b) — joiner
    *  placeableInteract intents resolve against it. */
   readonly placeables?: PlaceableInteractionHandle | null;
+  /** The item catalogue peer inventories validate against (E0.4). */
+  readonly registry?: ItemRegistry;
   readonly parent: Object3D;
   /** Test seam; defaults to the live trystero adapter. */
   readonly transportFactory?: (code: string) => NetTransport;
@@ -102,30 +111,35 @@ export async function attachHostNet(deps: HostNetDeps): Promise<HostNetHandle> {
   await refreshSnapshot();
 
   let applyingRemote = false;
-  const session = new HostSession(transport, () => snapshot, {
-    onWorldEdit: (edit) => {
-      applyingRemote = true;
-      try {
-        applyEdit(deps.voxels, edit);
-      } finally {
-        applyingRemote = false;
-      }
+  const session = new HostSession(
+    transport,
+    () => snapshot,
+    {
+      onWorldEdit: (edit) => {
+        applyingRemote = true;
+        try {
+          applyEdit(deps.voxels, edit);
+        } finally {
+          applyingRemote = false;
+        }
+      },
+      onPeerPose: (peerId, state) => {
+        remote.upsert(peerId, state);
+        // a peer riding a creature streams its own pose ~10 Hz already — reuse
+        // it to glue the ridden creature's transform without new wire traffic
+        // (ADR 0003 addendum: host echoes the rider's streamed pose).
+        deps.spawns?.setPeerPose(peerId, state.position[0], state.position[2]);
+      },
+      onPeerLeft: (peerId) => {
+        remote.remove(peerId);
+        deps.spawns?.releaseRider(peerId);
+      },
+      onInteract: (action, targetId, peerId) => deps.spawns?.applyInteract(action, targetId, peerId),
+      onPlaceableInteract: (action, placeableId, peerId, itemId, count) =>
+        deps.placeables?.resolveHostIntent(action, placeableId, peerId, itemId, count),
     },
-    onPeerPose: (peerId, state) => {
-      remote.upsert(peerId, state);
-      // a peer riding a creature streams its own pose ~10 Hz already — reuse
-      // it to glue the ridden creature's transform without new wire traffic
-      // (ADR 0003 addendum: host echoes the rider's streamed pose).
-      deps.spawns?.setPeerPose(peerId, state.position[0], state.position[2]);
-    },
-    onPeerLeft: (peerId) => {
-      remote.remove(peerId);
-      deps.spawns?.releaseRider(peerId);
-    },
-    onInteract: (action, targetId, peerId) => deps.spawns?.applyInteract(action, targetId, peerId),
-    onPlaceableInteract: (action, placeableId, peerId, itemId, count) =>
-      deps.placeables?.resolveHostIntent(action, placeableId, peerId, itemId, count),
-  });
+    { ...(deps.registry ? { registry: deps.registry } : {}) },
+  );
 
   // the host's own digs reach joiners as resolved world truth
   if (deps.voxels) {
@@ -182,6 +196,10 @@ export interface JoinWorldDeps {
   onHostGone?(): void;
   /** The host's peer came back before the joiner gave up (transient drop). */
   onHostReturned?(): void;
+  /** The host's resolved authoritative copy of THIS joiner's own inventory
+   *  (E0.4) — the composition root reconciles its inventory UI from this,
+   *  never mutating it locally. */
+  onInventoryState?(wire: SerializedInventoryWire): void;
 }
 
 export interface JoinWorldHandle {
@@ -196,11 +214,16 @@ export interface JoinNetHandle {
   attachWorld(deps: JoinWorldDeps): JoinWorldHandle;
   sendDig(x: number, y: number, z: number, radius: number): void;
   sendFill(x: number, y: number, z: number, radius: number, materialId: number): void;
+  /** Direct manipulation of the joiner's own authoritative inventory (E0.4). */
+  sendInventoryOp(op: InventoryOp): void;
   dispose(): void;
 }
 
 export interface JoinNetOptions {
   readonly playerName?: string;
+  /** The joiner's own saved inventory (E0.4) — sent once at join to seed the
+   *  host's authoritative copy of this peer. */
+  readonly initialInventory?: SerializedInventoryWire;
   /** Test seam; defaults to the live trystero adapter. */
   readonly transportFactory?: (code: string) => NetTransport;
   /** Re-announce cadence while waiting for the host's welcome (ms). */
@@ -231,8 +254,13 @@ export function createJoinNet(code: string, opts: JoinNetOptions = {}): JoinNetH
     readonly remote: RemotePlayers;
     readonly onHostGone?: () => void;
     readonly onHostReturned?: () => void;
+    readonly onInventoryState?: (wire: SerializedInventoryWire) => void;
   } | null = null;
   let applyingRemote = false;
+  // an inventoryState can arrive before attachWorld (right after join, while
+  // the engine is still booting) — only the latest matters (full state, not
+  // a delta), so buffer just one and flush it once the world attaches.
+  let pendingInventoryState: SerializedInventoryWire | null = null;
 
   const applyRemoteEdit = (edit: WorldEdit): void => {
     if (!world) {
@@ -285,14 +313,26 @@ export function createJoinNet(code: string, opts: JoinNetOptions = {}): JoinNetH
     onHostClosing: onHostLost,
     onPlaceableState: (placeableId: string, state: unknown): void =>
       world?.placeables?.applyRemoteState(placeableId, state),
+    onInventoryState: (wire: SerializedInventoryWire): void => {
+      if (world?.onInventoryState) world.onInventoryState(wire);
+      else pendingInventoryState = wire;
+    },
   };
 
   // trystero peers appear seconds after joinRoom, in no particular order in a
   // mesh — announce (and re-announce) the join until the host's welcome lands
   const announceJoin = (): void => {
     if (welcome) return;
-    if (session) transport.broadcast({ kind: "join", playerName });
-    else session = new JoinSession(transport, playerName, hooks); // ctor sends the first join
+    if (session) {
+      transport.broadcast({
+        kind: "join",
+        playerName,
+        ...(opts.initialInventory ? { inventory: opts.initialInventory } : {}),
+      });
+    } else {
+      // ctor sends the first join (carrying the initial inventory, if any)
+      session = new JoinSession(transport, playerName, hooks, opts.initialInventory);
+    }
   };
   transport.onPeerJoin(() => {
     // a transient drop that reconnects re-fires onPeerJoin: resume, don't re-handshake
@@ -331,8 +371,13 @@ export function createJoinNet(code: string, opts: JoinNetOptions = {}): JoinNetH
         remote,
         ...(deps.onHostGone ? { onHostGone: deps.onHostGone } : {}),
         ...(deps.onHostReturned ? { onHostReturned: deps.onHostReturned } : {}),
+        ...(deps.onInventoryState ? { onInventoryState: deps.onInventoryState } : {}),
       };
       world = attached;
+      if (deps.onInventoryState && pendingInventoryState) {
+        deps.onInventoryState(pendingInventoryState);
+        pendingInventoryState = null;
+      }
       // joiner: no local sim; F/E/T become intents the host resolves (ADR 0003)
       if (deps.spawns) {
         deps.spawns.remote = true;
@@ -380,6 +425,9 @@ export function createJoinNet(code: string, opts: JoinNetOptions = {}): JoinNetH
     },
     sendFill(x, y, z, radius, materialId): void {
       session?.sendFill(x, y, z, radius, materialId);
+    },
+    sendInventoryOp(op): void {
+      session?.sendInventoryOp(op);
     },
 
     dispose(): void {

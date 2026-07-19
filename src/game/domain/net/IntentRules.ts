@@ -6,7 +6,7 @@
  * trivially testable.
  */
 
-import type { PlaceableAction, PlaceableInteractMsg } from "./Protocol";
+import type { InventoryOp, PlaceableAction, PlaceableInteractMsg } from "./Protocol";
 import type { PlayerState } from "../world/WorldSaveData";
 
 /** Generous sprint+knockback ceiling; anything faster is a teleport. */
@@ -80,16 +80,57 @@ export function validatePlaceableInteract(msg: PlaceableInteractMsg): boolean {
 }
 
 /**
- * Which placeable actions a REMOTE peer may perform (2026-07-19 security
- * review): the host holds no copy of a joiner's inventory, so any
- * input-consuming or item-granting action resolved from a network intent
- * either conjures items from nothing (deposit/plant/cook debit the sender
- * nothing) or routes the grant into the host's own inventory
- * (withdraw/harvest/collect). Until a host-side inventory-authority protocol
- * exists, only inventory-free actions are resolvable over the wire; the rest
- * are silently dropped like any invalid intent. Solo/host-local interaction
- * is unaffected — it never passes through this gate.
+ * Which placeable actions a REMOTE peer may perform. Until E0.4, the host
+ * held no copy of a joiner's inventory, so this gate allowed only
+ * inventory-free actions (`toggleDoor`) — everything else was dropped
+ * (2026-07-19 security review). As of E0.4, `HostSession` holds each
+ * connected peer's authoritative inventory: `depositChest` debits the
+ * sender's copy before the chest accepts it, `withdrawChest`/`collectCook`/
+ * `harvestCrop` credit it from the resolver's own grant (never the host's
+ * own inventory), and `startCook`/`plantCrop` consume no inventory at all
+ * (matching solo play — see `Campfire.ts`/`Farming.ts`). No wire intent can
+ * conjure or duplicate an item, so every known placeable action is safe to
+ * resolve remotely again.
  */
 export function remoteAllowedPlaceableAction(action: PlaceableAction): boolean {
-  return action === "toggleDoor";
+  void action;
+  return true;
+}
+
+/**
+ * Sanity for an `inventoryOp` intent (E0.4): shape was already checked by
+ * `parseMessage`; this adds the domain-level bound a `Protocol` validator
+ * can't know — the SENDER's actual inventory capacity. `move`/`split`/`use`
+ * indices must be in range; `deposit`/`withdraw` need non-empty ids and a
+ * sane count. Deeper checks (does the sender actually have the stack, does
+ * the placeable exist) are `HostSession`'s job against its live state.
+ */
+export function validateInventoryOp(op: InventoryOp, capacity: number): boolean {
+  switch (op.op) {
+    case "move":
+      return (
+        op.from >= 0 &&
+        op.from < capacity &&
+        op.to >= 0 &&
+        op.to < capacity &&
+        op.from !== op.to
+      );
+    case "split":
+      return (
+        op.from >= 0 &&
+        op.from < capacity &&
+        op.count > 0 &&
+        op.count <= MAX_STACK_COUNT
+      );
+    case "use":
+      return op.index >= 0 && op.index < capacity;
+    case "deposit":
+    case "withdraw":
+      return (
+        op.placeableId.length > 0 &&
+        op.itemId.length > 0 &&
+        op.count > 0 &&
+        op.count <= MAX_STACK_COUNT
+      );
+  }
 }
