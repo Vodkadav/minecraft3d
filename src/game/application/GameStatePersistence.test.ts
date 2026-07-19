@@ -7,8 +7,11 @@ import { emptyKeyhintState, markKeyhintShown } from "../domain/progression/Keyhi
 import { emptyProgression, recordProgressionEvent } from "../domain/progression/ProgressionState";
 import { TUTORIAL_OBJECTIVES } from "../domain/progression/Objectives";
 import { ACHIEVEMENTS } from "../domain/progression/Achievements";
+import { allocateStatPoint, grantCharacterXp, newCharacter } from "../domain/character/Character";
+import { xpForLevel } from "../domain/character/Leveling";
 import { summarize, type WorldId, type WorldSaveData, type WorldSummary } from "../domain/world/WorldSaveData";
 import type { SaveError, WorldSaveStore } from "./ports/WorldSaveStore";
+import { CharacterPersistence } from "./CharacterPersistence";
 import { GameStatePersistence } from "./GameStatePersistence";
 import { InventoryPersistence } from "./InventoryPersistence";
 import { ProgressionPersistence } from "./ProgressionPersistence";
@@ -75,7 +78,49 @@ describe("GameStatePersistence", () => {
     });
 
     const loaded = await persistence.load("w1", "local");
-    expect(loaded).toEqual({ inventory: null, progression: null, keyhints: null });
+    expect(loaded).toEqual({ inventory: null, progression: null, keyhints: null, character: null });
+  });
+
+  it("reports character: null when no characterPersistence dep is wired (TerrainScene's existing call site)", async () => {
+    const store = new FakeWorldSaveStore();
+    await store.save(aWorld());
+    const persistence = new GameStatePersistence({
+      inventoryPersistence: new InventoryPersistence(store, registry),
+      progressionPersistence: new ProgressionPersistence(store),
+    });
+
+    // save() with no character arg, and no characterPersistence dep, must not throw
+    await persistence.save("w1", "local", Inventory.empty(registry, 6), emptyProgression(), emptyKeyhintState());
+    const loaded = await persistence.load("w1", "local");
+    expect(loaded.character).toBeNull();
+  });
+
+  it("round-trips a character when characterPersistence is wired", async () => {
+    const store = new FakeWorldSaveStore();
+    await store.save(aWorld());
+    const persistence = new GameStatePersistence({
+      inventoryPersistence: new InventoryPersistence(store, registry),
+      progressionPersistence: new ProgressionPersistence(store),
+      characterPersistence: new CharacterPersistence(store),
+    });
+
+    let character = newCharacter();
+    character = grantCharacterXp(character, xpForLevel(1)).character;
+    const spent = allocateStatPoint(character, "might");
+    if (!isOk(spent)) throw new Error("setup");
+    character = spent.value;
+
+    await persistence.save(
+      "w1",
+      "local",
+      Inventory.empty(registry, 6),
+      emptyProgression(),
+      emptyKeyhintState(),
+      character,
+    );
+    const loaded = await persistence.load("w1", "local");
+    expect(loaded.character?.level.level).toBe(2);
+    expect(loaded.character?.stats.attributes.might).toBe(1);
   });
 
   it("round-trips inventory + progression + keyhints through save/load", async () => {

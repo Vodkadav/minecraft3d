@@ -49,6 +49,11 @@ export interface WorldSaveData {
    *  `inventories`, serialized by `ProgressionPersistence`. */
   readonly progression: Readonly<Record<string, unknown>>;
   readonly playerState: PlayerState;
+  /** Per-owner character (stats/level/talents) blobs (Phase E1) — optional so
+   *  every save literal written before this field existed (main.ts, older
+   *  tests, `createNewWorldSave`) keeps compiling and loading unchanged;
+   *  `CharacterPersistence` treats an absent record as "no character yet". */
+  readonly character?: Readonly<Record<string, unknown>>;
 }
 
 /** Lightweight index entry for the world-list / lobby, without the chunk blobs. */
