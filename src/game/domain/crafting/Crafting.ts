@@ -85,3 +85,18 @@ export function craftableRecipes(
 ): readonly Recipe[] {
   return recipes.filter((r) => isOk(canCraft(inventory, r, unlockedTier)));
 }
+
+export interface IngredientStatus extends MissingIngredient {
+  readonly satisfied: boolean;
+}
+
+/** Have/need per ingredient — the crafting screen's ingredient panel. */
+export function ingredientStatus(
+  inventory: Inventory,
+  recipe: Recipe,
+): readonly IngredientStatus[] {
+  return recipe.ingredients.map((ing) => {
+    const have = inventory.count(ing.itemId);
+    return { itemId: ing.itemId, need: ing.count, have, satisfied: have >= ing.count };
+  });
+}

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { isErr, isOk } from "../Result";
 import { Inventory } from "../inventory/Inventory";
 import { ItemRegistry } from "../items/ItemRegistry";
-import { canCraft, craftableRecipes, doCraft, type Recipe } from "./Crafting";
+import { canCraft, craftableRecipes, doCraft, ingredientStatus, type Recipe } from "./Crafting";
 
 const registry = (() => {
   const r = ItemRegistry.create([
@@ -126,5 +126,19 @@ describe("crafting", () => {
 
     const atTier1 = craftableRecipes(inv, all, 1).map((r) => r.id).sort();
     expect(atTier1).toEqual(["ingot", "planks", "sticks"]);
+  });
+
+  describe("ingredientStatus", () => {
+    it("reports have/need/satisfied per ingredient", () => {
+      const inv = invWith([["plank", 1]]);
+      const status = ingredientStatus(inv, STICKS);
+      expect(status).toEqual([{ itemId: "plank", need: 2, have: 1, satisfied: false }]);
+    });
+
+    it("marks satisfied when the inventory has enough", () => {
+      const inv = invWith([["plank", 2]]);
+      const status = ingredientStatus(inv, STICKS);
+      expect(status).toEqual([{ itemId: "plank", need: 2, have: 2, satisfied: true }]);
+    });
   });
 });
