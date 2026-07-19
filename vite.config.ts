@@ -10,10 +10,10 @@ export default defineConfig(({ command }) => ({
       registerType: "autoUpdate",
       includeAssets: ["icons/icon-192.png", "icons/icon-512.png"],
       manifest: {
-        name: "LAAS — Procedural Survival World",
-        short_name: "LAAS",
+        name: "Diggy World — Procedural Survival Sandbox",
+        short_name: "Diggy World",
         description:
-          "A fully procedural open world in the browser (WebGPU). Desktop-first, installable.",
+          "A free, procedural survival sandbox in the browser (WebGPU): dig, build, craft, tame, and explore. Desktop-first, installable.",
         display: "standalone",
         orientation: "landscape",
         background_color: "#06080a",

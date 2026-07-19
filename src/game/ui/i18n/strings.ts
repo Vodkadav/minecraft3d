@@ -10,7 +10,7 @@ import { Localizer } from "../../application/i18n/Localizer";
 
 export const UI_STRINGS: Catalog = {
   en: {
-    "app.title": "Survival Sandbox",
+    "app.title": "Diggy World",
 
     "menu.solo": "Solo (offline)",
     "menu.online": "Online",
@@ -58,7 +58,7 @@ export const UI_STRINGS: Catalog = {
     "storage.notPersisted": "Storage is best-effort — worlds may be evicted under pressure.",
   },
   es: {
-    "app.title": "Caja de Arena de Supervivencia",
+    "app.title": "Diggy World",
 
     "menu.solo": "Individual (sin conexión)",
     "menu.online": "En línea",
@@ -106,7 +106,7 @@ export const UI_STRINGS: Catalog = {
     "storage.notPersisted": "Almacenamiento de mejor esfuerzo: los mundos podrían eliminarse.",
   },
   da: {
-    "app.title": "Overlevelses-Sandkasse",
+    "app.title": "Diggy World",
 
     "menu.solo": "Solo (offline)",
     "menu.online": "Online",

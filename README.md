@@ -31,10 +31,11 @@ Current state: about 21,000 lines of strict TypeScript across 90+ commits, all p
 - Post: temporal AA with analytic camera-reprojection velocity, bloom, GPU auto-exposure, per-time-of-day filmic grade.
 - Exploration: walk mode with gravity, jumping, sprint and stride-matched camera motion; free-fly mode; nine composed bookmarks; a 90-second flythrough.
 
-## The minecraft3d game layer
+## The Diggy World game layer
 
-This repository also hosts `minecraft3d`, a free, desktop-first-with-mobile-PWA Minecraft-style
-survival game built additively on top of the LAAS engine below (voxel dig/build terrain,
+This repository also hosts **Diggy World** (working-title dir `minecraft3d`), a free,
+desktop-first-with-mobile-PWA survival sandbox built additively on top of the LAAS engine below
+(voxel dig/build terrain,
 crafting, spawning, creatures, taming, combat, and P2P multiplayer) — untouched LAAS engine code
 lives in `src/{core,render,gpu,world,sky,vegetation,debug}`, the game layer in
 `src/game/{domain,application,infrastructure,ui}`. Live: https://vodkadav.github.io/minecraft3d/

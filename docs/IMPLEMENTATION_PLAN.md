@@ -1,4 +1,4 @@
-# Implementation Plan — Minecraft-style Survival Sandbox on LAAS
+# Implementation Plan — Diggy World (survival sandbox on LAAS)
 
 > **Evidence base:** [`research/BUILD_ON_LAAS_RESEARCH.md`](research/BUILD_ON_LAAS_RESEARCH.md)
 > (deep-research pass, 2026-07-05). Read it first — every design choice here traces to a ✅/⚠️/🕳️ finding.

@@ -1,4 +1,4 @@
-# AAA Polish & Native Analysis — minecraft3d
+# AAA Polish & Native Analysis — Diggy World
 
 > **Purpose:** a self-contained brief another LLM can execute against without prior context.
 > It answers the native-vs-web question, defines what "feels like a AAA game" concretely
@@ -449,9 +449,11 @@ first-run.
 its absence is the most obvious "unfinished" signal.
 
 **Tasks.**
-- **10.1 [O]** **Name + logo** — pick a game name (currently the working title `minecraft3d` is a
-  placeholder and a trademark risk — **rename before any public release**); generate a logo (procedural
-  or `assetfactory` image, provenance recorded).
+- **10.1 [O]** **Logo + wordmark** — the game is named **Diggy World** (player-facing rename done
+  2026-07-19: menu title, `<title>`, PWA manifest). Remaining: generate a logo/wordmark (procedural or
+  `assetfactory` image, provenance recorded), and — a separate owner-gated infra step — migrate the
+  `minecraft3d` identifier layer (repo slug, `/minecraft3d/` deploy base + live URL, trystero `APP_ID`)
+  since that changes the public URL and needs a GitHub repo rename.
 - **10.2 [F]** **Main-menu backdrop** — the existing engine already renders a beautiful world; boot a
   slow cinematic camera orbit (reuse the flythrough/bookmark system) behind the menu instead of a static
   screen.

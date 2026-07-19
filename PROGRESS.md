@@ -1,4 +1,10 @@
-# Progress — minecraft3d (survival sandbox on LAAS)
+# Progress — Diggy World (survival sandbox on LAAS)
+
+> **Name:** the game is **Diggy World** (renamed 2026-07-19 from the `minecraft3d` working title —
+> placeholder + trademark risk). Player-facing name done: menu `app.title`, `<title>`, PWA manifest.
+> The GitHub repo slug, the `/minecraft3d/` deploy path + live URL, and the trystero `APP_ID`
+> (`vodkadav-minecraft3d`) still carry the old identifier — those are coupled to the public URL and a
+> GitHub repo rename, deferred to an explicit owner decision (they break the current live link).
 
 Building a free, desktop-first-with-mobile-PWA Minecraft-style survival game on the LAAS procedural
 WebGPU engine. Plan: [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md) ·
