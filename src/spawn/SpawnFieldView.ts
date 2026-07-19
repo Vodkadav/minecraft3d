@@ -41,6 +41,7 @@ import {
 } from "../game/domain/ai/CreatureBrain";
 import type { CreatureEntity, InteractAction } from "../game/domain/net/Protocol";
 import { reconcileEntities } from "../game/domain/spawn/CreatureStream";
+import { smoothingFactor, stepToward, stepYaw } from "../game/domain/spawn/CreatureSmoothing";
 import {
   applyDamage,
   CREATURE_STATS,
@@ -100,6 +101,10 @@ export interface SpawnFieldHandle {
   readonly activeCount: number;
   /** Live creature ids (probe/tooling seam — tools/net-probe.ts). */
   readonly creatureIds: readonly string[];
+  /** Ids currently playing their death clip, on either host or joiner
+   *  (probe/tooling seam — tools/net-probe.ts asserts the joiner sees this
+   *  before the id is actually removed, i.e. the death clip synced). */
+  readonly dyingIds: readonly string[];
   /** Joiner mode (ADR 0003): no local AI/proximity/resolution — puppet the
    *  host's stream. Set by the net glue before the first frame. */
   remote: boolean;
@@ -125,10 +130,15 @@ interface CreatureEntry {
   taming: TamingState;
   /** Last streamed behavior (host emits it; joiner drives the clip from it). */
   behavior: Behavior;
-  /** Seconds left of the death clip; set when killed, removed at zero. */
+  /** Seconds left of the death clip; set when killed, removed at zero.
+   *  Joiner (remote mode) instead uses this as a "death clip triggered"
+   *  sentinel — actual removal there is host-driven (ADR 0003 follow-up). */
   dying: number | null;
   /** clockMs of this creature's last bite on the player (bite cooldown). */
   lastBiteMs: number;
+  /** Joiner (remote mode): latest host-streamed transform, closed toward
+   *  per-frame by CreatureSmoothing rather than snapped on arrival. */
+  remoteTarget: readonly [number, number, number, number] | null;
 }
 
 export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
@@ -252,6 +262,7 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
         behavior: "idle",
         dying: null,
         lastBiteMs: -Infinity,
+        remoteTarget: null,
       });
       return;
     }
@@ -468,11 +479,12 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
     }
   }
 
-  // ---- host: build the streamed snapshot (dying creatures leave the set) ----
+  // ---- host: build the streamed snapshot. A dying creature keeps streaming
+  // (dying: true) through its death clip so joiners can play it too; it only
+  // leaves the set once stepCreatures() actually removes it. ----
   function buildSnapshot(): CreatureEntity[] {
     const out: CreatureEntity[] = [];
     for (const c of creatures.values()) {
-      if (c.dying !== null) continue;
       const stats = CREATURE_STATS[c.entity.species];
       out.push({
         id: c.entity.id,
@@ -484,6 +496,7 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
         yaw: c.obj.rotation.y,
         behavior: c.behavior,
         ...(stats ? { health: c.combat.health } : {}),
+        ...(c.dying !== null ? { dying: true } : {}),
       });
     }
     for (const n of nodes.values()) {
@@ -500,7 +513,9 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
     return out;
   }
 
-  // ---- joiner: materialize/move from the host's stream (trusts wire coords) --
+  // ---- joiner: materialize/move from the host's stream (trusts wire coords).
+  // Positions snap on arrival (spawn) but are smoothed toward on every
+  // following update via `remoteTarget` (see the remote branch of update()). --
   function materializeRemote(e: CreatureEntity): void {
     if (!SPECIES_VISUAL[e.species]) return;
     if (e.kind === "creature") {
@@ -522,6 +537,7 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
         behavior,
         dying: null,
         lastBiteMs: -Infinity,
+        remoteTarget: [e.x, e.y, e.z, e.yaw],
       });
       return;
     }
@@ -540,8 +556,7 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
   function updateRemote(e: CreatureEntity): void {
     const c = creatures.get(e.id);
     if (c) {
-      c.obj.position.set(e.x, e.y, e.z);
-      c.obj.rotation.y = e.yaw;
+      c.remoteTarget = [e.x, e.y, e.z, e.yaw];
       const behavior = (e.behavior as Behavior | undefined) ?? c.behavior;
       if (behavior !== c.behavior) {
         c.behavior = behavior;
@@ -552,14 +567,28 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
     nodes.get(e.id)?.obj.position.set(e.x, e.y, e.z);
   }
 
+  /** Joiner: the host just streamed this id as newly `dying` — play the
+   *  one-shot death clip once; the entity keeps updating (frozen position)
+   *  until the host's own removal drops it from the stream. */
+  function playDeathRemote(e: CreatureEntity): void {
+    const c = creatures.get(e.id);
+    if (!c || c.dying !== null) return;
+    c.dying = c.instance?.playDeath() ?? 0;
+  }
+
   function applySnapshot(entities: readonly CreatureEntity[]): void {
-    const { add, update, remove: gone } = reconcileEntities(
+    const prevDying = new Set(
+      [...creatures.entries()].filter(([, c]) => c.dying !== null).map(([id]) => id),
+    );
+    const { add, update, remove: gone, died } = reconcileEntities(
       [...creatures.keys(), ...nodes.keys()],
       entities,
+      prevDying,
     );
     for (const id of gone) remove(id);
     for (const e of add) materializeRemote(e);
     for (const e of update) updateRemote(e);
+    for (const e of died) playDeathRemote(e);
   }
 
   return {
@@ -587,10 +616,25 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
 
     update(dt: number): void {
       clockMs += dt * 1000;
-      // Joiner puppets the host's stream: no proximity, no AI — only advance
-      // the animation mixers so the streamed poses stay animated (ADR 0003).
+      // Joiner puppets the host's stream: no proximity, no AI. Advance the
+      // animation mixers so the streamed poses stay animated, and smooth each
+      // creature's rendered transform toward the latest snapshot (`remoteTarget`)
+      // rather than snapping on arrival — the 10 Hz stream would otherwise
+      // visibly step (ADR 0003 follow-up).
       if (remote) {
-        for (const c of creatures.values()) c.instance?.update(dt);
+        const k = smoothingFactor(dt);
+        for (const c of creatures.values()) {
+          c.instance?.update(dt);
+          if (!c.remoteTarget) continue;
+          const [tx, ty, tz, tyaw] = c.remoteTarget;
+          const [nx, ny, nz] = stepToward(
+            [c.obj.position.x, c.obj.position.y, c.obj.position.z],
+            [tx, ty, tz],
+            k,
+          );
+          c.obj.position.set(nx, ny, nz);
+          c.obj.rotation.y = stepYaw(c.obj.rotation.y, tyaw, k);
+        }
         return;
       }
       sinceStep += dt;
@@ -640,6 +684,10 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
 
     get creatureIds(): readonly string[] {
       return [...creatures.keys()];
+    },
+
+    get dyingIds(): readonly string[] {
+      return [...creatures.entries()].filter(([, c]) => c.dying !== null).map(([id]) => id);
     },
   };
 }

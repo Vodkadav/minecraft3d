@@ -12,22 +12,29 @@ export interface EntityReconcile {
   readonly add: readonly CreatureEntity[];
   /** Ids the joiner already shows — apply the fresh transform. */
   readonly update: readonly CreatureEntity[];
-  /** Ids the joiner shows that the snapshot dropped (despawn/kill). */
+  /** Ids the joiner shows that the snapshot dropped (despawn/kill, no clip). */
   readonly remove: readonly string[];
+  /** Entities newly marked `dying: true` this snapshot — play the death clip
+   *  once, then let the entity ride out its remaining ticks as an `update`
+   *  until the host actually drops it (a `remove`). */
+  readonly died: readonly CreatureEntity[];
 }
 
 export function reconcileEntities(
   prevIds: Iterable<string>,
   snapshot: readonly CreatureEntity[],
+  prevDyingIds: ReadonlySet<string> = new Set(),
 ): EntityReconcile {
   const prev = new Set(prevIds);
   const add: CreatureEntity[] = [];
   const update: CreatureEntity[] = [];
+  const died: CreatureEntity[] = [];
   const live = new Set<string>();
   for (const e of snapshot) {
     live.add(e.id);
     (prev.has(e.id) ? update : add).push(e);
+    if (e.dying && !prevDyingIds.has(e.id)) died.push(e);
   }
   const remove = [...prev].filter((id) => !live.has(id));
-  return { add, update, remove };
+  return { add, update, remove, died };
 }
