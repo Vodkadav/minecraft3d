@@ -57,3 +57,36 @@ a host-streamed entity snapshot and forward interaction intents.**
   mount is host-controlled in remote mode).
 - The snapshot sends the full active set every tick; deltas keyed off the stable
   deterministic id are a future optimization.
+
+## Addendum (2026-07-19) — joiner-side mounting
+
+Joiner-side mounting (deferred above) is now implemented, reusing the existing
+intent path rather than adding new wire shapes:
+
+- `InteractAction` gains `"mount"` / `"dismount"`, resolved by the host exactly
+  like `attack`/`harvest`/`feed` — `HostSessionHooks.onInteract` now also
+  passes the sender's `peerId` (mount/dismount are keyed by *rider*, not by
+  target, so the host needs to know who's asking).
+- `CreatureEntity` gains an optional `tamed` flag on the stream. The joiner
+  tracks no taming progress of its own (it never sees feed cooldowns), so a
+  joiner's G-mount gates on this streamed flag instead of a locally-fabricated
+  one — the host remains the sole source of taming truth.
+- **Ridden-creature transform authority** (the "host must not fight the rider"
+  question): the host tracks `riddenBy: peerId | null` per creature, freezes
+  its AI while ridden, and glues its transform to the SAME pose data the peer
+  already streams ~10 Hz for its own avatar (`PeerPoseMsg` → `setPeerPose`) —
+  no new wire traffic. This makes the mount's movement fall out of the
+  existing snapshot for free, visible to the host and any other peer.
+  Separately, the riding client (host or joiner) glues its OWN view locally
+  every frame for zero-lag first-person feel, ignoring the network-smoothed
+  stream target for that one id while it's riding — a straight network
+  round-trip through the echoed pose would otherwise show up as visible lag
+  on a mesh sitting right under the camera. This is a deliberate blend of the
+  two options the follow-up considered (host-echo vs. client-only glue): the
+  host-echo model gives other peers a moving mount almost for free, while the
+  local override keeps the rider's own feel identical to the host's original
+  M6.5 experience. Host-drop dismount needs no extra code: `flyCamEnabled`
+  freezes input and the existing grace-window flow reloads the page,
+  resetting `speedScale` along with everything else.
+- A departing rider (`onPeerLeave`) releases whatever creature it was riding
+  (`releaseRider`) so a dropped joiner never leaves a creature stuck frozen.

@@ -164,6 +164,32 @@ async function attack(page: Page, id: string, via: 'applyInteract' | 'onInteract
   );
 }
 
+/** B sends a mount intent for a WILD (untamed) shared creature over the real
+ *  wire — cheaply proves the mount/dismount plumbing round-trips (Protocol →
+ *  HostSession → SpawnFieldView) without needing a live multi-feed tame
+ *  sequence. The host must reject it (not tamed), so A's riddenIds stays
+ *  empty (ADR 0003 addendum). */
+async function mountIntent(page: Page, id: string): Promise<void> {
+  await page.evaluate((id) => {
+    const sf = (
+      window as unknown as {
+        __laasDbg?: { spawnField?: { onInteractIntent?: ((a: string, t: string) => void) | null } };
+      }
+    ).__laasDbg?.spawnField;
+    sf?.onInteractIntent?.('mount', id);
+  }, id);
+}
+
+async function riddenIds(page: Page): Promise<string[]> {
+  return page
+    .evaluate(() => {
+      const sf = (window as unknown as { __laasDbg?: { spawnField?: { riddenIds: string[] } } })
+        .__laasDbg?.spawnField;
+      return sf ? [...sf.riddenIds] : [];
+    })
+    .catch(() => []);
+}
+
 async function dyingIds(page: Page): Promise<string[]> {
   return page
     .evaluate(() => {
@@ -276,6 +302,20 @@ async function main(): Promise<void> {
     const joinTarget = await waitSharedCreature(pageA, pageB);
     await attack(pageB, joinTarget, 'onInteractIntent');
     await waitGone(pageA, pageB, joinTarget, 'joiner-intent-kill');
+  } catch (e) {
+    failures.push(String(e instanceof Error ? e.message : e));
+  }
+
+  // ---- joiner mounting wiring (ADR 0003 addendum) ----
+  try {
+    const mountTarget = await waitSharedCreature(pageA, pageB);
+    await mountIntent(pageB, mountTarget);
+    await new Promise((r) => setTimeout(r, 500)); // let the intent round-trip
+    const ridden = await riddenIds(pageA);
+    if (ridden.includes(mountTarget)) {
+      throw new Error(`mount-reject: host let B ride an untamed creature (${mountTarget})`);
+    }
+    console.log('[probe] PASS mount-reject: host rejected an untamed mount intent');
   } catch (e) {
     failures.push(String(e instanceof Error ? e.message : e));
   }

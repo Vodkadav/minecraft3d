@@ -40,7 +40,7 @@ export interface FillMsg {
   readonly materialId: number;
 }
 
-export type InteractAction = "attack" | "harvest" | "feed";
+export type InteractAction = "attack" | "harvest" | "feed" | "mount" | "dismount";
 
 export interface InteractMsg {
   readonly kind: "interact";
@@ -102,6 +102,9 @@ export interface CreatureEntity {
   /** Playing its one-shot death clip — still streamed so joiners can mirror
    *  it before the host actually removes the entity (ADR 0003 follow-up). */
   readonly dying?: boolean;
+  /** Tamed (rideable), streamed so a joiner's G-mount can gate on the host's
+   *  real taming state instead of the joiner's untracked local guess. */
+  readonly tamed?: boolean;
 }
 
 /** The host's full active spawn-field set, streamed ~10 Hz (ADR 0003). */
@@ -179,7 +182,7 @@ function isWorldEdit(v: unknown): v is WorldEdit {
   return v.materialId === undefined || isNum(v.materialId);
 }
 
-const INTERACT_ACTIONS: readonly string[] = ["attack", "harvest", "feed"];
+const INTERACT_ACTIONS: readonly string[] = ["attack", "harvest", "feed", "mount", "dismount"];
 
 function isCreatureEntity(v: unknown): v is CreatureEntity {
   return (
@@ -193,7 +196,8 @@ function isCreatureEntity(v: unknown): v is CreatureEntity {
     isNum(v.yaw) &&
     (v.behavior === undefined || isStr(v.behavior)) &&
     (v.health === undefined || isNum(v.health)) &&
-    (v.dying === undefined || typeof v.dying === "boolean")
+    (v.dying === undefined || typeof v.dying === "boolean") &&
+    (v.tamed === undefined || typeof v.tamed === "boolean")
   );
 }
 

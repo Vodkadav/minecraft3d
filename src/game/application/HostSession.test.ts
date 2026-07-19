@@ -195,21 +195,25 @@ describe("HostSession", () => {
     warn.mockRestore();
   });
 
-  it("routes a valid interact intent to the onInteract hook", () => {
-    const interacts: Array<{ action: string; targetId: string }> = [];
+  it("routes a valid interact intent to the onInteract hook, tagged with the sender", () => {
+    const interacts: Array<{ action: string; targetId: string; peerId: string }> = [];
     net = makeTransportNetwork();
     session = new HostSession(net.host, () => SNAPSHOT, {
       onWorldEdit: () => {},
-      onInteract: (action, targetId) => interacts.push({ action, targetId }),
+      onInteract: (action, targetId, peerId) => interacts.push({ action, targetId, peerId }),
     });
     const alice = net.addPeer("alice");
 
     alice.broadcast({ kind: "interact", action: "attack", targetId: "spawn:7" });
     alice.broadcast({ kind: "interact", action: "feed", targetId: "spawn:8" });
+    alice.broadcast({ kind: "interact", action: "mount", targetId: "spawn:9" });
+    alice.broadcast({ kind: "interact", action: "dismount", targetId: "spawn:9" });
 
     expect(interacts).toEqual([
-      { action: "attack", targetId: "spawn:7" },
-      { action: "feed", targetId: "spawn:8" },
+      { action: "attack", targetId: "spawn:7", peerId: "alice" },
+      { action: "feed", targetId: "spawn:8", peerId: "alice" },
+      { action: "mount", targetId: "spawn:9", peerId: "alice" },
+      { action: "dismount", targetId: "spawn:9", peerId: "alice" },
     ]);
   });
 

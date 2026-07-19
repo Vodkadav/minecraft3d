@@ -34,8 +34,10 @@ export interface HostSessionHooks {
   /** Apply a validated edit to the host's live world. */
   onWorldEdit(edit: WorldEdit): void;
   onEntityRemoved?(id: string): void;
-  /** A validated joiner interaction — the host resolves it on its spawn field. */
-  onInteract?(action: InteractAction, targetId: string): void;
+  /** A validated joiner interaction — the host resolves it on its spawn field.
+   *  peerId identifies the sender (needed for mount/dismount, which are keyed
+   *  by rider, not by target — attack/harvest/feed ignore it). */
+  onInteract?(action: InteractAction, targetId: string, peerId: string): void;
   /** A validated peer pose — lets the host app render remote avatars. */
   onPeerPose?(peerId: string, state: PlayerState): void;
   onPeerJoined?(peerId: string, playerName: string): void;
@@ -106,7 +108,7 @@ export class HostSession {
         });
         return;
       case "interact":
-        this.hooks.onInteract?.(msg.action, msg.targetId);
+        this.hooks.onInteract?.(msg.action, msg.targetId, peerId);
         return;
       default:
         // host->joiner kinds echoed back at the host: no-op.

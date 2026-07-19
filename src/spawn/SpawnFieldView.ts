@@ -14,6 +14,16 @@
  * The proximity step scans a ~13-cell window of hashes — cheap, but not
  * per-frame: it runs on spawn-cell crossings and a coarse timer. Creature
  * steering IS per-frame (it's a handful of active creatures).
+ *
+ * Mounting (G, host and joiner — ADR 0003 addendum): the host resolves both
+ * "who may ride" (tamed/dying/already-ridden checks) and "where the mount
+ * sits" — a peer's ridden creature is glued to that peer's own streamed pose
+ * instead of running AI, so the host never fights the rider over the
+ * transform, and the mount's movement rides the existing ~10 Hz creature
+ * snapshot for free (visible to any other peer). The riding client (host or
+ * joiner) additionally glues its OWN view locally every frame — zero added
+ * latency for the first-person mount feel — and ignores the network-smoothed
+ * stream target for that one id while riding.
  */
 
 import {
@@ -105,6 +115,9 @@ export interface SpawnFieldHandle {
    *  (probe/tooling seam — tools/net-probe.ts asserts the joiner sees this
    *  before the id is actually removed, i.e. the death clip synced). */
   readonly dyingIds: readonly string[];
+  /** Host: ids currently ridden by a peer (probe/tooling seam — asserts a
+   *  joiner's mount intent round-trips through the host, ADR 0003 addendum). */
+  readonly riddenIds: readonly string[];
   /** Joiner mode (ADR 0003): no local AI/proximity/resolution — puppet the
    *  host's stream. Set by the net glue before the first frame. */
   remote: boolean;
@@ -114,8 +127,16 @@ export interface SpawnFieldHandle {
   onInteractIntent: ((action: InteractAction, targetId: string) => void) | null;
   /** Joiner: apply a host snapshot (add/move/remove via the pure reconciler). */
   applySnapshot(entities: readonly CreatureEntity[]): void;
-  /** Host: resolve a joiner's interaction against this field, keyed by id. */
-  applyInteract(action: InteractAction, targetId: string): void;
+  /** Host: resolve a joiner's interaction against this field, keyed by id.
+   *  peerId is the sender — only mount/dismount use it (they're keyed by
+   *  rider, not by target). */
+  applyInteract(action: InteractAction, targetId: string, peerId?: string): void;
+  /** Host: the latest XZ position streamed by a riding peer's own pose
+   *  (ADR 0003 addendum) — used to glue a peer-ridden creature each tick. */
+  setPeerPose(peerId: string, x: number, z: number): void;
+  /** Host: a peer disconnected — drop whatever creature it was riding so a
+   *  vanished joiner doesn't leave a creature stuck frozen forever. */
+  releaseRider(peerId: string): void;
 }
 
 interface CreatureEntry {
@@ -139,6 +160,10 @@ interface CreatureEntry {
   /** Joiner (remote mode): latest host-streamed transform, closed toward
    *  per-frame by CreatureSmoothing rather than snapped on arrival. */
   remoteTarget: readonly [number, number, number, number] | null;
+  /** Host: peerId of the joiner riding this creature, or null. Distinct from
+   *  the host's own local `ridingId` — a peer mount is resolved via intents
+   *  and glued to that peer's streamed pose (ADR 0003 addendum). */
+  riddenBy: string | null;
 }
 
 export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
@@ -210,12 +235,35 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
   let remote = false;
   let onSnapshot: ((entities: readonly CreatureEntity[]) => void) | null = null;
   let onInteractIntent: ((action: InteractAction, targetId: string) => void) | null = null;
+  // Host: last XZ each riding peer streamed via its own pose (ADR 0003
+  // addendum — a peer-ridden creature is glued to this instead of AI steering).
+  const peerPositions = new Map<string, readonly [number, number]>();
+  const lastPeerXZ = new Map<string, readonly [number, number]>();
 
   // mounting/dismounting also toggles the ride speed boost through the controller
   const setRiding = (id: string | null): void => {
     ridingId = id;
     deps.setMoveSpeedScale?.(id !== null ? RIDE_SPEED_MULT : 1);
   };
+
+  /** Glue a mount's mesh under its rider's XZ each tick (host's own ride and a
+   *  peer's streamed pose both resolve through this — ADR 0003 addendum). */
+  function glueMount(
+    c: CreatureEntry,
+    rx: number,
+    rz: number,
+    lastRx: number | null,
+    lastRz: number | null,
+    dt: number,
+  ): void {
+    const speed = lastRx === null || lastRz === null || dt <= 0 ? 0 : Math.hypot(rx - lastRx, rz - lastRz) / dt;
+    c.obj.position.set(rx, deps.ground.heightAt(rx, rz) + c.lift, rz);
+    if (speed > 0.3 && lastRx !== null && lastRz !== null) {
+      c.obj.rotation.y = Math.atan2(rx - lastRx, rz - lastRz);
+    }
+    c.behavior = speed > 4 ? "flee" : speed > 0.3 ? "follow" : "idle";
+    c.instance?.setBehavior(c.behavior);
+  }
 
   const locked = (): boolean =>
     deps.dom === undefined || document.pointerLockElement === deps.dom;
@@ -263,6 +311,7 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
         dying: null,
         lastBiteMs: -Infinity,
         remoteTarget: null,
+        riddenBy: null,
       });
       return;
     }
@@ -350,6 +399,8 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
     grantLoot(lootFor(target.entity.species, roll));
     persistRemoved(target.entity.id);
     if (tamed.delete(target.entity.id)) deps.save?.setEntity("taming.tamed", [...tamed]);
+    if (ridingId === target.entity.id) setRiding(null);
+    if (target.riddenBy !== null) resolveDismountPeer(target.riddenBy);
     // rigged creatures fall over first; primitives vanish immediately
     const duration = target.instance?.playDeath() ?? 0;
     if (duration > 0) target.dying = duration;
@@ -374,24 +425,49 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
     persistRemoved(target.entity.id);
   }
 
+  /** Host: a joiner's mount intent. Rejects a dying/untamed/already-ridden
+   *  target — mirrors the local G-mount gate below. */
+  function resolveMount(target: CreatureEntry, riderId: string): void {
+    if (target.dying !== null) return;
+    if (target.taming.phase !== "tamed") return;
+    if (target.riddenBy !== null || ridingId === target.entity.id) return;
+    target.riddenBy = riderId;
+  }
+
+  /** Host: a joiner's dismount intent, or its disconnect (releaseRider). */
+  function resolveDismountPeer(riderId: string): void {
+    for (const c of creatures.values()) {
+      if (c.riddenBy === riderId) c.riddenBy = null;
+    }
+    peerPositions.delete(riderId);
+    lastPeerXZ.delete(riderId);
+  }
+
   const onKeyDown = (ev: KeyboardEvent): void => {
     if (!locked()) return;
-    // Joiner: an F/E/T press is an intent for the host to resolve, not a local
-    // mutation. Mounting (G) stays host-controlled, so it's deferred (ADR 0003).
+    // Joiner: an F/E/T/G press is an intent for the host to resolve — the
+    // local ride glue below is optimistic (mirrors host feel) but the host's
+    // resolution (tamed/dying/already-ridden) is the one that sticks (ADR
+    // 0003 addendum).
     if (ev.code === "KeyF") {
       const target = pickTarget(creatures);
       if (!target || target.dying !== null) return;
       if (remote) onInteractIntent?.("attack", target.entity.id);
       else resolveAttack(target);
     } else if (ev.code === "KeyG") {
-      if (remote) return;
       // G = mount/dismount (R belongs to the placement tool's rotate)
       if (ridingId !== null) {
+        const id = ridingId;
         setRiding(null);
+        if (remote) onInteractIntent?.("dismount", id);
         return;
       }
       const target = pickTarget(creatures);
-      if (target && target.dying === null && target.taming.phase === "tamed") {
+      if (!target || target.dying !== null || target.taming.phase !== "tamed") return;
+      if (remote) {
+        setRiding(target.entity.id); // optimistic local glue, zero-lag like the host
+        onInteractIntent?.("mount", target.entity.id);
+      } else if (target.riddenBy === null) {
         setRiding(target.entity.id);
       }
     } else if (ev.code === "KeyT") {
@@ -408,16 +484,29 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
   };
   window.addEventListener("keydown", onKeyDown);
 
-  function applyInteract(action: InteractAction, targetId: string): void {
+  function applyInteract(action: InteractAction, targetId: string, peerId = ""): void {
     if (action === "harvest") {
       const n = nodes.get(targetId);
       if (n) resolveHarvest(n);
       return;
     }
+    if (action === "dismount") {
+      resolveDismountPeer(peerId);
+      return;
+    }
     const c = creatures.get(targetId);
     if (!c) return;
     if (action === "attack") resolveAttack(c);
-    else resolveFeed(c);
+    else if (action === "feed") resolveFeed(c);
+    else if (action === "mount") resolveMount(c, peerId);
+  }
+
+  function setPeerPose(peerId: string, x: number, z: number): void {
+    peerPositions.set(peerId, [x, z]);
+  }
+
+  function releaseRider(peerId: string): void {
+    resolveDismountPeer(peerId);
   }
 
   function stepCreatures(dt: number): void {
@@ -427,22 +516,24 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
       c.instance?.update(dt);
       if (c.dying !== null) {
         if (ridingId === c.entity.id) setRiding(null);
+        if (c.riddenBy !== null) resolveDismountPeer(c.riddenBy);
         c.dying -= dt;
         if (c.dying <= 0) remove(c.entity.id);
         continue;
       }
       if (ridingId === c.entity.id) {
-        const speed =
-          lastPx === null || lastPz === null || dt <= 0
-            ? 0
-            : Math.hypot(px - lastPx, pz - lastPz) / dt;
-        c.obj.position.set(px, deps.ground.heightAt(px, pz) + c.lift, pz);
-        if (speed > 0.3 && lastPx !== null && lastPz !== null) {
-          c.obj.rotation.y = Math.atan2(px - lastPx, pz - lastPz);
-        }
-        c.behavior = speed > 4 ? "flee" : speed > 0.3 ? "follow" : "idle";
-        c.instance?.setBehavior(c.behavior);
+        glueMount(c, px, pz, lastPx, lastPz, dt);
         continue;
+      }
+      if (c.riddenBy !== null) {
+        const pos = peerPositions.get(c.riddenBy);
+        if (pos) {
+          const [rx, rz] = pos;
+          const last = lastPeerXZ.get(c.riddenBy) ?? null;
+          glueMount(c, rx, rz, last?.[0] ?? null, last?.[1] ?? null, dt);
+          lastPeerXZ.set(c.riddenBy, [rx, rz]);
+        }
+        continue; // frozen (no AI) until the peer's next pose lands
       }
       const x = c.obj.position.x;
       const z = c.obj.position.z;
@@ -497,6 +588,7 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
         behavior: c.behavior,
         ...(stats ? { health: c.combat.health } : {}),
         ...(c.dying !== null ? { dying: true } : {}),
+        ...(c.taming.phase === "tamed" ? { tamed: true } : {}),
       });
     }
     for (const n of nodes.values()) {
@@ -526,6 +618,7 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
       group.add(obj);
       const behavior = (e.behavior as Behavior | undefined) ?? "idle";
       instance?.setBehavior(behavior);
+      const taming = startTaming(e.species);
       creatures.set(e.id, {
         entity: { id: e.id, species: e.species, kind: "creature", position: [e.x, e.y, e.z] },
         obj,
@@ -533,11 +626,14 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
         instance,
         lift,
         combat: spawnCombatState(e.species),
-        taming: startTaming(e.species),
+        // the joiner tracks no taming progress of its own — the host's
+        // `tamed` flag on the stream is the only source of truth (ADR 0003)
+        taming: e.tamed ? { ...taming, phase: "tamed" } : taming,
         behavior,
         dying: null,
         lastBiteMs: -Infinity,
         remoteTarget: [e.x, e.y, e.z, e.yaw],
+        riddenBy: null,
       });
       return;
     }
@@ -562,6 +658,7 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
         c.behavior = behavior;
         c.instance?.setBehavior(behavior);
       }
+      if (e.tamed && c.taming.phase !== "tamed") c.taming = { ...c.taming, phase: "tamed" };
       return;
     }
     nodes.get(e.id)?.obj.position.set(e.x, e.y, e.z);
@@ -589,11 +686,18 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
     for (const e of add) materializeRemote(e);
     for (const e of update) updateRemote(e);
     for (const e of died) playDeathRemote(e);
+    // Joiner: the creature it's riding died or dropped out of the stream —
+    // unmount and reset the speed boost (host death/despawn edge, ADR 0003).
+    if (ridingId !== null && (gone.includes(ridingId) || died.some((e) => e.id === ridingId))) {
+      setRiding(null);
+    }
   }
 
   return {
     applySnapshot,
     applyInteract,
+    setPeerPose,
+    releaseRider,
     // net seams delegate to the closure vars onKeyDown/update actually read
     get remote() {
       return remote;
@@ -623,8 +727,17 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
       // visibly step (ADR 0003 follow-up).
       if (remote) {
         const k = smoothingFactor(dt);
+        const [px, pz] = deps.getPlayerXZ();
         for (const c of creatures.values()) {
           c.instance?.update(dt);
+          // Own mount: glue zero-lag to the local player instead of the
+          // network-smoothed stream target (ADR 0003 addendum) — the host
+          // echoes this creature's transform back too, but it would only add
+          // round-trip lag to what's already known locally.
+          if (c.entity.id === ridingId) {
+            glueMount(c, px, pz, lastPx, lastPz, dt);
+            continue;
+          }
           if (!c.remoteTarget) continue;
           const [tx, ty, tz, tyaw] = c.remoteTarget;
           const [nx, ny, nz] = stepToward(
@@ -635,6 +748,8 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
           c.obj.position.set(nx, ny, nz);
           c.obj.rotation.y = stepYaw(c.obj.rotation.y, tyaw, k);
         }
+        lastPx = px;
+        lastPz = pz;
         return;
       }
       sinceStep += dt;
@@ -688,6 +803,10 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
 
     get dyingIds(): readonly string[] {
       return [...creatures.entries()].filter(([, c]) => c.dying !== null).map(([id]) => id);
+    },
+
+    get riddenIds(): readonly string[] {
+      return [...creatures.entries()].filter(([, c]) => c.riddenBy !== null).map(([id]) => id);
     },
   };
 }
