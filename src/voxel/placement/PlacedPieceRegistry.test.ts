@@ -40,6 +40,13 @@ describe("PlacedPieceRegistry", () => {
     expect(reg.all().map((p) => p.pieceId)).toEqual(["block", "platform"]);
   });
 
+  it("get looks up a piece by id; unknown id is null", () => {
+    const reg = new PlacedPieceRegistry();
+    const placed = reg.add(CMD);
+    expect(reg.get(placed.id)).toEqual(placed);
+    expect(reg.get(999)).toBeNull();
+  });
+
   it("remove frees the piece's cells and forgets it; unknown id is a no-op", () => {
     const reg = new PlacedPieceRegistry();
     const placed = reg.add(CMD2);

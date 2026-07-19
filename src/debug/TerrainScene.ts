@@ -33,6 +33,10 @@ import { DigMask } from '../voxel/DigMask';
 import { DigTool, REACH_M as DIG_REACH_M } from '../voxel/DigTool';
 import { VoxelTerrain } from '../voxel/VoxelTerrain';
 import { attachPlacementTool, type PlacementToolHandle } from '../voxel/placement/PlacementTool';
+import {
+  attachPlaceableInteraction,
+  type PlaceableInteractionHandle,
+} from '../voxel/placement/PlaceableInteractionTool';
 import { attachTreasureField } from '../voxel/treasure/TreasureField';
 import { attachSpawnField } from '../spawn/SpawnFieldView';
 import { mountGameHud } from '../spawn/GameHud';
@@ -64,11 +68,16 @@ import {
 } from '../game/domain/survival/Survival';
 import { eat } from '../game/domain/survival/Eating';
 import type { ProgressionEventId } from '../game/domain/progression/ProgressionEvents';
+import { STARTER_RECIPES } from '../game/domain/crafting/starterRecipes';
 import { isNight, MORNING_HOUR } from '../game/domain/time/DayNight';
 import { Crosshair } from '../game/ui/components/Crosshair';
 import { createLocalizer } from '../game/ui/i18n/strings';
 import { LocalStorageSettingsStore } from '../game/infrastructure/persistence/LocalStorageSettingsStore';
 import { SettingsController } from '../game/application/SettingsController';
+import { GameStatePersistence } from '../game/application/GameStatePersistence';
+import { InventoryPersistence } from '../game/application/InventoryPersistence';
+import { ProgressionPersistence } from '../game/application/ProgressionPersistence';
+import type { WorldSaveStore } from '../game/application/ports/WorldSaveStore';
 import { createPlayerSurvivalBar } from '../spawn/PlayerSurvivalBar';
 import { IndexedDbKeyValueStore } from '../game/infrastructure/persistence/IndexedDbKeyValueStore';
 import { OpfsBlobStore } from '../game/infrastructure/persistence/OpfsBlobStore';
@@ -407,6 +416,13 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
   // ground probe becomes cavern-aware so walk mode can descend into digs.
   let voxelsRef: VoxelTerrain | null = null;
   let placementRef: PlacementToolHandle | null = null;
+  // S7b: same before/after-HUD indirection as progressHook below — the
+  // functional-placeable interaction tool needs the live inventory/HUD,
+  // which only exists once spawnsOn's block runs; PlacementTool's commit/
+  // remove hooks are wired unconditionally here so no piece can ever be
+  // placed before the indirection exists to catch it.
+  let placeableInteractionRef: PlaceableInteractionHandle | null = null;
+  let saveStoreForPersistence: WorldSaveStore | null = null;
   // Workstream 6: DigTool/PlacementTool are constructed before the HUD (whose
   // recordProgress is the real sink) — this indirection lets them fire
   // progress events the moment the HUD exists without reordering the whole
@@ -425,6 +441,7 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
       ('storage' in navigator && 'getDirectory' in navigator.storage
         ? new PersistentWorldSaveStore(new OpfsBlobStore(), new IndexedDbKeyValueStore())
         : null);
+    saveStoreForPersistence = store;
     const voxels = new VoxelTerrain(
       { heightAt: (x, z) => hf.heightAtCpu(x, z) },
       digMask,
@@ -476,6 +493,9 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
       ...(ctx.audio ? { audio: ctx.audio } : {}),
       ...(feel ? { feel } : {}),
       onProgress: (event) => progressHook?.(event),
+      onPieceCommitted: (piece) => placeableInteractionRef?.ensurePlaceable(piece),
+      onPieceRemoved: (piece) => placeableInteractionRef?.forgetPlaceable(piece),
+      mobile: params.preset === 'mobile',
       save: {
         load: () => voxels.entity('placement.pieces'),
         persist: (data) => voxels.setEntity('placement.pieces', data),
@@ -561,13 +581,33 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
     const loc = createLocalizer(settings.settings.locale);
     const itemsReg = ItemRegistry.create(STARTER_ITEMS);
     if (!isOk(itemsReg)) throw new Error(`bad starter item table: ${itemsReg.error.kind}`);
+
+    // S7b: wire the tested-but-unwired InventoryPersistence/ProgressionPersistence
+    // into the boot/save flow (closes the S4/S6 deferral). Only when there's a
+    // real save store — dev/tooling boots with no OPFS support skip persistence
+    // exactly like the voxel subsystem already does above.
+    const worldIdForSave = ctx.world?.worldId ?? `voxel-demo-${params.seed}`;
+    const gameStatePersistence = saveStoreForPersistence
+      ? new GameStatePersistence({
+          inventoryPersistence: new InventoryPersistence(saveStoreForPersistence, itemsReg.value),
+          progressionPersistence: new ProgressionPersistence(saveStoreForPersistence),
+        })
+      : null;
+    const loadedGameState = gameStatePersistence
+      ? await gameStatePersistence.load(worldIdForSave, 'local')
+      : null;
+
     const hud = mountGameHud({
       loc,
       registry: itemsReg.value,
       enableHotbarDigitKeys: false,
+      recipes: STARTER_RECIPES,
       ...(crosshairRef ? { crosshair: crosshairRef } : {}),
       ...(ctx.audio ? { audio: ctx.audio } : {}),
       ...(feel ? { feel } : {}),
+      ...(loadedGameState?.inventory ? { initialInventory: loadedGameState.inventory } : {}),
+      ...(loadedGameState?.progression ? { initialProgression: loadedGameState.progression } : {}),
+      ...(loadedGameState?.keyhints ? { initialKeyhints: loadedGameState.keyhints } : {}),
       setInputEnabled: (on) => ctx.hooks.flyCamEnabled?.(on),
       onEat: (food) => {
         const r = eat(vitals, survival, food);
@@ -582,6 +622,56 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
     // Workstream 6: DigTool/PlacementTool were built before this HUD existed
     // (see `progressHook` above) — wire the real sink now.
     progressHook = (event) => hud.recordProgress(event);
+
+    if (gameStatePersistence) {
+      const saveGameState = (): void => {
+        void gameStatePersistence.save(worldIdForSave, 'local', hud.inventory, hud.progression, hud.keyhints);
+      };
+      window.addEventListener('pagehide', saveGameState);
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'hidden') saveGameState();
+      });
+    }
+
+    // S7b: functional placeables (chest/door/campfire/bed/farm plot) — the
+    // domain resolver + UI wiring over the voxel/placement tool's committed
+    // pieces. Needs the voxel subsystem AND the HUD it grants inventory
+    // through, so it only mounts when both exist (matches DigTool/PlacementTool's
+    // own `digMask` gate plus this block's `spawnsOn` gate).
+    if (voxelsRef && placementRef) {
+      const voxels = voxelsRef;
+      const placeableInteraction = attachPlaceableInteraction({
+        placement: placementRef,
+        camera: engine.camera,
+        dom: engine.renderer.domElement,
+        parent: engine.scene,
+        registry: itemsReg.value,
+        recipes: STARTER_RECIPES,
+        loc,
+        ...(ctx.audio ? { audio: ctx.audio } : {}),
+        ...(feel ? { feel } : {}),
+        save: {
+          load: () => voxels.entity('placeables.state'),
+          persist: (data) => voxels.setEntity('placeables.state', data),
+        },
+        getInventory: () => hud.inventory,
+        setInventory: (inv) => hud.setInventory(inv),
+        addLoot: (stacks) => hud.addLoot(stacks),
+        getHotbarSelectedItemId: () => hud.selectedHotbarItemId(),
+        now: () => Date.now(),
+        setInputEnabled: (on) => ctx.hooks.flyCamEnabled?.(on),
+        setSpawnPoint: (x, y, z) => {
+          const pose = ctx.hooks.getPose?.();
+          captureSpawn({ p: [x, y, z], yaw: pose?.yaw ?? 0, pitch: pose?.pitch ?? 0 });
+        },
+        toast: (key, params2) => hud.toast(key, params2),
+        showInteractKeyhint: () => hud.maybeShowInteractHint(),
+      });
+      engine.onUpdate(() => placeableInteraction.update());
+      placeableInteractionRef = placeableInteraction;
+      if (ctx.world) ctx.world.placeables = placeableInteraction; // M7 net glue reaches it here
+    }
+
     const AIM_DIR = new Vector3();
 
     // Workstream 5.1: an F-attack costs stamina/hunger and is gated while
@@ -713,7 +803,8 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
         );
         hasMineTarget = hit !== null;
       }
-      const hasInteractTarget = spawns.hasInteractTarget();
+      const hasInteractTarget =
+        spawns.hasInteractTarget() || (placeableInteractionRef?.hasInteractTarget() ?? false);
       hud.setCrosshairState(
         resolveCrosshairState({
           placing,

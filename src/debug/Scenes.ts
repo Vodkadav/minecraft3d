@@ -8,6 +8,7 @@ import type { AudioPort } from '../game/application/ports/AudioPort';
 import type { WorldSaveStore } from '../game/application/ports/WorldSaveStore';
 import type { PlayerState } from '../game/domain/world/WorldSaveData';
 import type { SpawnFieldHandle } from '../spawn/SpawnFieldView';
+import type { PlaceableInteractionHandle } from '../voxel/placement/PlaceableInteractionTool';
 import type { VoxelTerrain } from '../voxel/VoxelTerrain';
 
 /** Present when the boot came from the menu (world lifecycle) — binds the
@@ -23,6 +24,10 @@ export interface WorldLaunchBinding {
   /** Set by the scene once the spawn field attaches — the M7.x net glue streams
    *  creatures (host) or puppets them (joiner) through it (ADR 0003). */
   spawns?: SpawnFieldHandle;
+  /** Set by the scene once functional placeables attach (Workstream 8.1,
+   *  S7b) — the net glue resolves joiner intents through it (host) or
+   *  reconciles broadcast state through it (joiner). */
+  placeables?: PlaceableInteractionHandle;
 }
 
 export interface WorldContext {

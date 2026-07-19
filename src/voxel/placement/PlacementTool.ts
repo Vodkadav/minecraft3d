@@ -18,7 +18,7 @@
  */
 
 import type { Object3D, PerspectiveCamera } from 'three';
-import { BoxGeometry, Color, Group, Mesh, Raycaster, Vector2, Vector3 } from 'three';
+import { BoxGeometry, Color, Group, Mesh, Raycaster, SphereGeometry, Vector2, Vector3 } from 'three';
 import { MeshBasicNodeMaterial, MeshStandardNodeMaterial } from 'three/webgpu';
 import type { AudioPort } from '../../game/application/ports/AudioPort';
 import type { FeelPort } from '../../game/application/ports/FeelPort';
@@ -39,6 +39,7 @@ import { PlacedPieceRegistry, type PlacedPiece } from './PlacedPieceRegistry';
 import { cyclePieceIndex, PLACEMENT_PIECES } from './PlacementPieces';
 import { makePlacementWorld } from './PlacementWorldAdapter';
 import { sdfNormal } from './SdfNormal';
+import { LANTERN_LIGHT, TORCH_LIGHT } from '../../game/domain/placeables/Torch';
 
 const REACH_M = 9;
 const GHOST_OPACITY = 0.4;
@@ -69,6 +70,13 @@ export interface PlacementToolDeps {
   audio?: AudioPort;
   feel?: FeelPort;
   onProgress?: (event: ProgressionEventId) => void;
+  /** Fired right after a piece commits/removes (Workstream 8.1, S7b) — the
+   *  scene's PlaceableInteractionTool uses this to keep its domain-state
+   *  store's ids in sync with the geometry registry's ids. */
+  onPieceCommitted?(piece: PlacedPiece): void;
+  onPieceRemoved?(piece: PlacedPiece): void;
+  /** Skips the torch/lantern glow mesh — budget/mobile gate (Torch.ts doc). */
+  mobile?: boolean;
 }
 
 export interface PlacementToolHandle {
@@ -76,10 +84,21 @@ export interface PlacementToolHandle {
   update(): void;
   isBuildMode(): boolean;
   dispose(): void;
+  /** Raycasts the crosshair against committed pieces within `reachM`
+   *  (Workstream 8.1 interact affordance) — null off-piece or over reach. */
+  raycastAimedPiece(reachM?: number): PlacedPiece | null;
+  /** The live mesh for a committed piece id — door open/close rotation, etc. */
+  meshFor(id: number): Mesh | undefined;
+  /** Every currently-committed piece (Workstream 8.1, S7b's boot-sync pass —
+   *  reconciles the domain PlaceableStore against the geometry registry). */
+  listPieces(): readonly PlacedPiece[];
 }
 
 export function attachPlacementTool(deps: PlacementToolDeps): PlacementToolHandle {
   const { terrain, camera, dom, parent, save, audio, feel, onProgress } = deps;
+  const onPieceCommitted = deps.onPieceCommitted;
+  const onPieceRemoved = deps.onPieceRemoved;
+  const mobile = deps.mobile ?? false;
   const sdf = (x: number, y: number, z: number): number => terrain.sdfAtWorld(x, y, z);
 
   const registry = PlacedPieceRegistry.deserialize(save?.load());
@@ -97,6 +116,22 @@ export function attachPlacementTool(deps: PlacementToolDeps): PlacementToolHandl
   solidMaterial.metalness = 0;
   const meshesById = new Map<number, Mesh>();
 
+  // Workstream 8.1/8.2 lite: a torch/lantern gets a small always-on emissive
+  // glow marker (procedural sphere, no dynamic point-light — see Torch.ts's
+  // doc comment on why real lighting is deferred). Skipped on the mobile
+  // preset (budget gate, plan task 5's "mobile-gated" requirement).
+  const GLOW_RADIUS_M = 0.12;
+  const glowMaterials = new Map<number, MeshBasicNodeMaterial>();
+  const glowMaterialFor = (hex: number): MeshBasicNodeMaterial => {
+    let mat = glowMaterials.get(hex);
+    if (!mat) {
+      mat = new MeshBasicNodeMaterial();
+      mat.color = new Color(hex);
+      glowMaterials.set(hex, mat);
+    }
+    return mat;
+  };
+
   const addSolidMesh = (piece: PlacedPiece): void => {
     const { center, size } = cellsBox(piece.cells, GRID);
     const mesh = new Mesh(new BoxGeometry(size[0], size[1], size[2]), solidMaterial);
@@ -104,6 +139,12 @@ export function attachPlacementTool(deps: PlacementToolDeps): PlacementToolHandl
     mesh.castShadow = true;
     mesh.receiveShadow = true;
     mesh.userData['placedId'] = piece.id;
+    if (!mobile && (piece.pieceId === 'torch' || piece.pieceId === 'lantern')) {
+      const light = piece.pieceId === 'torch' ? TORCH_LIGHT : LANTERN_LIGHT;
+      const glow = new Mesh(new SphereGeometry(GLOW_RADIUS_M, 8, 6), glowMaterialFor(light.colorHex));
+      glow.position.set(0, size[1] / 2, 0);
+      mesh.add(glow);
+    }
     meshesById.set(piece.id, mesh);
     piecesGroup.add(mesh);
   };
@@ -131,27 +172,37 @@ export function attachPlacementTool(deps: PlacementToolDeps): PlacementToolHandl
     if (!lastState) return;
     const cmd = commit(lastState);
     if (!cmd) return;
-    addSolidMesh(registry.add(cmd));
+    const piece = registry.add(cmd);
+    addSolidMesh(piece);
     persist();
     audio?.play('place', { position: cmd.center });
     feel?.trigger('place', { worldPos: cmd.center });
     onProgress?.('place');
+    onPieceCommitted?.(piece);
   };
 
   const raycaster = new Raycaster(undefined, undefined, 0, REACH_M);
-  const removeAim = (): void => {
+  const pieceAtCrosshair = (reachM: number): PlacedPiece | null => {
+    raycaster.far = reachM;
     raycaster.setFromCamera(CENTER_NDC, camera);
     const hit = raycaster.intersectObjects(piecesGroup.children, false)[0];
-    if (!hit) return;
+    raycaster.far = REACH_M;
+    if (!hit) return null;
     const id = hit.object.userData['placedId'];
-    if (typeof id !== 'number' || !registry.remove(id)) return;
-    const mesh = meshesById.get(id);
+    return typeof id === 'number' ? registry.get(id) : null;
+  };
+
+  const removeAim = (): void => {
+    const piece = pieceAtCrosshair(REACH_M);
+    if (!piece || !registry.remove(piece.id)) return;
+    const mesh = meshesById.get(piece.id);
     if (mesh) {
       piecesGroup.remove(mesh);
       mesh.geometry.dispose();
-      meshesById.delete(id);
+      meshesById.delete(piece.id);
     }
     persist();
+    onPieceRemoved?.(piece);
   };
 
   const onKeyDown = (e: KeyboardEvent): void => {
@@ -226,6 +277,9 @@ export function attachPlacementTool(deps: PlacementToolDeps): PlacementToolHandl
   return {
     update,
     isBuildMode: () => buildMode,
+    raycastAimedPiece: (reachM = REACH_M) => (buildMode ? null : pieceAtCrosshair(reachM)),
+    meshFor: (id: number) => meshesById.get(id),
+    listPieces: () => registry.all(),
     dispose: (): void => {
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('mousedown', onMouseDown, true);
@@ -233,8 +287,14 @@ export function attachPlacementTool(deps: PlacementToolDeps): PlacementToolHandl
       parent.remove(piecesGroup);
       ghost.geometry.dispose();
       ghostMaterial.dispose();
-      for (const mesh of meshesById.values()) mesh.geometry.dispose();
+      for (const mesh of meshesById.values()) {
+        mesh.geometry.dispose();
+        for (const child of mesh.children) {
+          if (child instanceof Mesh) child.geometry.dispose();
+        }
+      }
       solidMaterial.dispose();
+      for (const mat of glowMaterials.values()) mat.dispose();
     },
   };
 }

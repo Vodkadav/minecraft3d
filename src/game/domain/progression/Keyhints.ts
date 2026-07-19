@@ -6,7 +6,7 @@
  * `markKeyhintShown` once it renders the prompt.
  */
 
-export const KEYHINT_IDS = ["eat", "tame"] as const;
+export const KEYHINT_IDS = ["eat", "tame", "interact"] as const;
 export type KeyhintId = (typeof KEYHINT_IDS)[number];
 
 export interface KeyhintState {

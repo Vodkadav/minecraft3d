@@ -1,8 +1,13 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, vi } from "vitest";
 import { isOk } from "../game/domain/Result";
+import { Inventory } from "../game/domain/inventory/Inventory";
 import { ItemRegistry } from "../game/domain/items/ItemRegistry";
 import { STARTER_ITEMS } from "../game/domain/items/starterItems";
+import { markKeyhintShown } from "../game/domain/progression/Keyhints";
+import { emptyProgression, recordProgressionEvent } from "../game/domain/progression/ProgressionState";
+import { TUTORIAL_OBJECTIVES } from "../game/domain/progression/Objectives";
+import { ACHIEVEMENTS } from "../game/domain/progression/Achievements";
 import { createLocalizer } from "../game/ui/i18n/strings";
 import { mountGameHud } from "./GameHud";
 
@@ -35,6 +40,40 @@ describe("mountGameHud", () => {
     const hud = mountGameHud({ loc: createLocalizer("en"), registry: registry() });
     hud.setCrosshairState("mine");
     expect(document.querySelector<HTMLElement>(".lw-crosshair")?.dataset.state).toBe("mine");
+    hud.dispose();
+  });
+
+  it("seeds inventory/progression/keyhints from initial* opts (S7b persistence)", () => {
+    const reg = registry();
+    const seeded = Inventory.empty(reg, 27).add("wood", 7);
+    if (!isOk(seeded)) throw new Error("setup");
+    const progression = recordProgressionEvent(emptyProgression(), "craft", TUTORIAL_OBJECTIVES, ACHIEVEMENTS)
+      .state;
+    const keyhints = markKeyhintShown(markKeyhintShown({ shown: [] }, "eat"), "tame");
+    const hud = mountGameHud({
+      loc: createLocalizer("en"),
+      registry: reg,
+      initialInventory: seeded.value,
+      initialProgression: progression,
+      initialKeyhints: keyhints,
+    });
+    expect(hud.inventory.count("wood")).toBe(7);
+    expect(hud.progression.counts).toEqual(progression.counts);
+    expect(hud.keyhints.shown).toEqual(["eat", "tame"]);
+    hud.dispose();
+  });
+
+  it("toast pushes a localized message onto the toast host", () => {
+    const hud = mountGameHud({ loc: createLocalizer("en"), registry: registry() });
+    hud.toast("hud.toast.spawnSet");
+    expect(document.querySelector(".lw-toast-region")?.textContent).toContain("Spawn point set");
+    hud.dispose();
+  });
+
+  it("maybeShowInteractHint shows the [E] keyhint once", () => {
+    const hud = mountGameHud({ loc: createLocalizer("en"), registry: registry() });
+    hud.maybeShowInteractHint();
+    expect(document.querySelector(".lw-keyhint-prompt")?.textContent).toContain("E");
     hud.dispose();
   });
 

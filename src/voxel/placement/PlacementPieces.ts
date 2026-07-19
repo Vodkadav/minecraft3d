@@ -28,6 +28,9 @@ export const PLACEMENT_PIECES: readonly PieceDef[] = [
   { id: "campfire", footprint: { w: 1, d: 1, h: 1 }, sockets: [], requiresSupport: true },
   { id: "torch", footprint: { w: 1, d: 1, h: 1 }, sockets: [], requiresSupport: false },
   { id: "lantern", footprint: { w: 1, d: 1, h: 1 }, sockets: [], requiresSupport: false },
+
+  // ---- Workstream 8.3 farming (S7b) ----
+  { id: "plot", footprint: { w: 1, d: 1, h: 1 }, sockets: [], requiresSupport: true },
 ];
 
 /** Piece ids that carry Workstream 8.1 domain state (door/chest/campfire/
@@ -36,11 +39,14 @@ export const PLACEMENT_PIECES: readonly PieceDef[] = [
  *  state object alongside their PlacedPiece record. */
 export const PLACEABLE_PIECE_IDS: ReadonlySet<string> = new Set([
   "door",
+  "gate",
   "chest",
   "workbench",
   "campfire",
   "torch",
   "lantern",
+  "bed",
+  "plot",
 ]);
 
 export function cyclePieceIndex(index: number, delta: number, count: number): number {

@@ -29,7 +29,12 @@
 
 import { isOk } from "../game/domain/Result";
 import { ACHIEVEMENTS } from "../game/domain/progression/Achievements";
-import { emptyKeyhintState, markKeyhintShown, shouldShowKeyhint } from "../game/domain/progression/Keyhints";
+import {
+  emptyKeyhintState,
+  markKeyhintShown,
+  shouldShowKeyhint,
+  type KeyhintState,
+} from "../game/domain/progression/Keyhints";
 import { TUTORIAL_OBJECTIVE_IDS, TUTORIAL_OBJECTIVES } from "../game/domain/progression/Objectives";
 import {
   currentObjective,
@@ -84,6 +89,11 @@ export interface GameHudOptions {
   /** Fired after a successful eat (Workstream 5.2) — the composition root
    *  applies hunger/health restore to its own survival/vitals state. */
   onEat?(food: FoodMetadata): void;
+  /** S7b: seeds the session from a prior save (`GameStatePersistence.load`)
+   *  instead of the empty defaults — undefined on a brand-new owner/world. */
+  readonly initialInventory?: Inventory;
+  readonly initialProgression?: ProgressionState;
+  readonly initialKeyhints?: KeyhintState;
 }
 
 export interface GameHudHandle {
@@ -102,8 +112,22 @@ export interface GameHudHandle {
    *  in reach (Workstream 6.5) — a no-op every subsequent call. Call this
    *  from the per-frame interact-target poll the scene already runs. */
   maybeShowTameHint(): void;
+  /** Shows the "[E] Open/Use" keyhint once, the first time a functional
+   *  placeable is in reach (S7b) — same shown-once contract as tame/eat. */
+  maybeShowInteractHint(): void;
+  /** Pushes a localized toast (S7b: bed spawn-set, etc.) — the one seam
+   *  outside call sites need into the HUD's own toast host. */
+  toast(messageKey: string, params?: Readonly<Record<string, string | number>>): void;
+  /** Replaces the whole inventory silently (no loot toast) — S7b's chest
+   *  deposit/withdraw and cook/harvest grants go through this, not addLoot,
+   *  when the composition root already owns the resulting Inventory. */
+  setInventory(next: Inventory): void;
+  /** The item id in the currently-selected hotbar slot, or null if empty
+   *  (S7b: farming plant reads the selected seed from here). */
+  selectedHotbarItemId(): string | null;
   readonly inventory: Inventory;
   readonly progression: ProgressionState;
+  readonly keyhints: KeyhintState;
   dispose(): void;
 }
 
@@ -111,9 +135,9 @@ export function mountGameHud(opts: GameHudOptions): GameHudHandle {
   const doc = opts.doc ?? document;
   const { loc, registry } = opts;
 
-  let inventory = Inventory.empty(registry, INVENTORY_CAPACITY);
-  let progression = emptyProgression();
-  let keyhints = emptyKeyhintState();
+  let inventory = opts.initialInventory ?? Inventory.empty(registry, INVENTORY_CAPACITY);
+  let progression = opts.initialProgression ?? emptyProgression();
+  let keyhints = opts.initialKeyhints ?? emptyKeyhintState();
 
   const hotbar = Hotbar({
     registry,
@@ -197,7 +221,7 @@ export function mountGameHud(opts: GameHudOptions): GameHudHandle {
   }
 
   const activeKeyhintTimers = new Set<number>();
-  function showKeyhint(id: "eat" | "tame", key: string): void {
+  function showKeyhint(id: "eat" | "tame" | "interact", key: string): void {
     if (!shouldShowKeyhint(keyhints, id)) return;
     keyhints = markKeyhintShown(keyhints, id);
     const chip = Keyhint(key, loc.t(`keyhint.${id}`), doc);
@@ -247,6 +271,9 @@ export function mountGameHud(opts: GameHudOptions): GameHudHandle {
     get progression() {
       return progression;
     },
+    get keyhints() {
+      return keyhints;
+    },
     addLoot(stacks: readonly ItemStack[]): void {
       let gainedFood = false;
       for (const stack of stacks) {
@@ -278,6 +305,20 @@ export function mountGameHud(opts: GameHudOptions): GameHudHandle {
     recordProgress,
     maybeShowTameHint(): void {
       showKeyhint("tame", "T");
+    },
+    maybeShowInteractHint(): void {
+      showKeyhint("interact", "E");
+    },
+    toast(messageKey, params): void {
+      toasts.push(messageKey, params, LOOT_TOAST_TTL_MS);
+    },
+    setInventory(next: Inventory): void {
+      inventory = next;
+      hotbar.render(inventory);
+      inventoryScreen.setInventory(inventory);
+    },
+    selectedHotbarItemId(): string | null {
+      return inventory.slots[hotbar.selected]?.itemId ?? null;
     },
     dispose(): void {
       (doc.defaultView ?? window).removeEventListener("keydown", onEatKeyDown);

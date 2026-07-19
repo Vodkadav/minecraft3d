@@ -215,6 +215,17 @@ export const UI_STRINGS: Catalog = {
 
     "keyhint.eat": "Eat",
     "keyhint.tame": "Feed",
+    "keyhint.interact": "Open/Use",
+
+    "placeable.chest.title": "Chest",
+    "placeable.chest.player": "Your Inventory",
+    "placeable.campfire.title": "Campfire",
+    "placeable.campfire.cook": "Cook",
+    "placeable.campfire.collect": "Collect",
+    "placeable.campfire.empty": "Select a raw ingredient in your hotbar to cook.",
+    "placeable.campfire.cooking": "Cooking… {pct}%",
+    "placeable.campfire.ready": "Ready to collect!",
+    "hud.toast.spawnSet": "Spawn point set here",
   },
   es: {
     "app.title": "Diggy World",
@@ -422,6 +433,17 @@ export const UI_STRINGS: Catalog = {
 
     "keyhint.eat": "Comer",
     "keyhint.tame": "Alimentar",
+    "keyhint.interact": "Abrir/Usar",
+
+    "placeable.chest.title": "Cofre",
+    "placeable.chest.player": "Tu inventario",
+    "placeable.campfire.title": "Hoguera",
+    "placeable.campfire.cook": "Cocinar",
+    "placeable.campfire.collect": "Recoger",
+    "placeable.campfire.empty": "Selecciona un ingrediente crudo en tu barra de acceso para cocinar.",
+    "placeable.campfire.cooking": "Cocinando… {pct}%",
+    "placeable.campfire.ready": "¡Listo para recoger!",
+    "hud.toast.spawnSet": "Punto de reaparición establecido aquí",
   },
   da: {
     "app.title": "Diggy World",
@@ -629,6 +651,17 @@ export const UI_STRINGS: Catalog = {
 
     "keyhint.eat": "Spis",
     "keyhint.tame": "Fodr",
+    "keyhint.interact": "Åbn/Brug",
+
+    "placeable.chest.title": "Kiste",
+    "placeable.chest.player": "Din beholdning",
+    "placeable.campfire.title": "Lejrbål",
+    "placeable.campfire.cook": "Tilbered",
+    "placeable.campfire.collect": "Saml op",
+    "placeable.campfire.empty": "Vælg en rå ingrediens i din hotbar for at tilberede.",
+    "placeable.campfire.cooking": "Tilbereder… {pct}%",
+    "placeable.campfire.ready": "Klar til at samle op!",
+    "hud.toast.spawnSet": "Genopstandelsespunkt sat her",
   },
 };
 

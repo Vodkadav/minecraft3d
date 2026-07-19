@@ -30,6 +30,10 @@ export class PlacedPieceRegistry {
     return piece;
   }
 
+  get(id: number): PlacedPiece | null {
+    return this.byId.get(id) ?? null;
+  }
+
   remove(id: number): PlacedPiece | null {
     const piece = this.byId.get(id);
     if (!piece) return null;

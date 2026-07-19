@@ -298,6 +298,7 @@ async function bootEngine(hooks: LaasHooks, launch: MenuLaunch | null): Promise<
     const world = launch.join.attachWorld({
       voxels: ctx.world?.voxels ?? null,
       spawns: ctx.world?.spawns ?? null,
+      placeables: ctx.world?.placeables ?? null,
       parent: engine.scene,
       getPose: () => camPoseToPlayerState(fly.getPose()),
       onHostGone: hostWatch.onGone,
@@ -312,6 +313,7 @@ async function bootEngine(hooks: LaasHooks, launch: MenuLaunch | null): Promise<
       getPose: () => camPoseToPlayerState(fly.getPose()),
       voxels: ctx.world?.voxels ?? null,
       spawns: ctx.world?.spawns ?? null,
+      placeables: ctx.world?.placeables ?? null,
       parent: engine.scene,
     });
     engine.onUpdate((dt) => net.update(dt));

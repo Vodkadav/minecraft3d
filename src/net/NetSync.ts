@@ -28,6 +28,7 @@ import { makeRoomCode } from "../game/domain/net/RoomCode";
 import type { PlayerState } from "../game/domain/world/WorldSaveData";
 import { makeTrysteroTransport } from "../game/infrastructure/net/TrysteroTransport";
 import type { SpawnFieldHandle } from "../spawn/SpawnFieldView";
+import type { PlaceableInteractionHandle } from "../voxel/placement/PlaceableInteractionTool";
 import { RemotePlayers } from "./RemotePlayers";
 
 /** Structural slice of VoxelTerrain the net glue needs (null until M8 boots it). */
@@ -58,6 +59,9 @@ export interface HostNetDeps {
   readonly voxels: EditableVoxels | null;
   /** The host's spawn field — streamed to joiners, joiner intents applied to it. */
   readonly spawns?: SpawnFieldHandle | null;
+  /** The host's functional placeables (Workstream 8.1, S7b) — joiner
+   *  placeableInteract intents resolve against it. */
+  readonly placeables?: PlaceableInteractionHandle | null;
   readonly parent: Object3D;
   /** Test seam; defaults to the live trystero adapter. */
   readonly transportFactory?: (code: string) => NetTransport;
@@ -119,6 +123,8 @@ export async function attachHostNet(deps: HostNetDeps): Promise<HostNetHandle> {
       deps.spawns?.releaseRider(peerId);
     },
     onInteract: (action, targetId, peerId) => deps.spawns?.applyInteract(action, targetId, peerId),
+    onPlaceableInteract: (action, placeableId, peerId, itemId, count) =>
+      deps.placeables?.resolveHostIntent(action, placeableId, peerId, itemId, count),
   });
 
   // the host's own digs reach joiners as resolved world truth
@@ -168,6 +174,9 @@ export interface JoinWorldDeps {
   readonly voxels: EditableVoxels | null;
   /** The joiner's spawn field — puppeted by the host's stream (ADR 0003). */
   readonly spawns?: SpawnFieldHandle | null;
+  /** The joiner's functional placeables (Workstream 8.1, S7b) — `E` sends an
+   *  intent instead of resolving locally; broadcast state reconciles it. */
+  readonly placeables?: PlaceableInteractionHandle | null;
   readonly parent: Object3D;
   /** The host left — clean close OR a dropped connection (ADR 0002 §5). */
   onHostGone?(): void;
@@ -218,6 +227,7 @@ export function createJoinNet(code: string, opts: JoinNetOptions = {}): JoinNetH
   let world: {
     readonly voxels: EditableVoxels | null;
     readonly spawns: SpawnFieldHandle | null;
+    readonly placeables: PlaceableInteractionHandle | null;
     readonly remote: RemotePlayers;
     readonly onHostGone?: () => void;
     readonly onHostReturned?: () => void;
@@ -273,6 +283,8 @@ export function createJoinNet(code: string, opts: JoinNetOptions = {}): JoinNetH
     onCreatures: (entities: readonly CreatureEntity[]): void =>
       world?.spawns?.applySnapshot(entities),
     onHostClosing: onHostLost,
+    onPlaceableState: (placeableId: string, state: unknown): void =>
+      world?.placeables?.applyRemoteState(placeableId, state),
   };
 
   // trystero peers appear seconds after joinRoom, in no particular order in a
@@ -315,6 +327,7 @@ export function createJoinNet(code: string, opts: JoinNetOptions = {}): JoinNetH
       const attached = {
         voxels: deps.voxels,
         spawns: deps.spawns ?? null,
+        placeables: deps.placeables ?? null,
         remote,
         ...(deps.onHostGone ? { onHostGone: deps.onHostGone } : {}),
         ...(deps.onHostReturned ? { onHostReturned: deps.onHostReturned } : {}),
@@ -325,6 +338,12 @@ export function createJoinNet(code: string, opts: JoinNetOptions = {}): JoinNetH
         deps.spawns.remote = true;
         deps.spawns.onInteractIntent = (action, targetId) =>
           session?.sendInteract(action, targetId);
+      }
+      // joiner: E on a placeable becomes an intent too (Workstream 8.1, S7b)
+      if (deps.placeables) {
+        deps.placeables.remote = true;
+        deps.placeables.onInteractIntent = (action, placeableId, itemId, count) =>
+          session?.sendPlaceableInteract(action, placeableId, itemId, count);
       }
       for (const edit of pendingEdits.splice(0)) applyRemoteEdit(edit);
       // the M8 DigTool applies locally (optimistic — SDF edits are
@@ -349,6 +368,7 @@ export function createJoinNet(code: string, opts: JoinNetOptions = {}): JoinNetH
         dispose(): void {
           if (deps.voxels) deps.voxels.onLocalEdit = null;
           if (deps.spawns) deps.spawns.onInteractIntent = null;
+          if (deps.placeables) deps.placeables.onInteractIntent = null;
           remote.dispose();
           world = null;
         },
