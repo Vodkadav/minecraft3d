@@ -64,6 +64,21 @@
         width: 0%;
         background: #5fae8f;
         transition: width 0.2s ease;
+        overflow: hidden;
+      }
+      #boot .bar > div::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(90deg, transparent, rgba(255,255,255,0.35), transparent);
+        animation: boot-shimmer 1.6s ease-in-out infinite;
+      }
+      @keyframes boot-shimmer {
+        0% { transform: translateX(-100%); }
+        100% { transform: translateX(100%); }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #boot .bar > div::after { animation: none; }
       }
     </style>
   </head>

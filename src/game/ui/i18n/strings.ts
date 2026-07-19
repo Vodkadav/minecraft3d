@@ -226,6 +226,13 @@ export const UI_STRINGS: Catalog = {
     "placeable.campfire.cooking": "Cooking… {pct}%",
     "placeable.campfire.ready": "Ready to collect!",
     "hud.toast.spawnSet": "Spawn point set here",
+
+    "loading.tip.1": "Press E to harvest a node or gather from a plant.",
+    "loading.tip.2": "Open the crafting screen with I to see what you can build.",
+    "loading.tip.3": "Feed a wild animal with T to start taming it.",
+    "loading.tip.4": "Press B to enter build mode and place a piece.",
+    "loading.tip.5": "Eat with H when your hunger runs low.",
+    "loading.tip.6": "Sleep through the night with Z once you have a bed.",
   },
   es: {
     "app.title": "Diggy World",
@@ -444,6 +451,13 @@ export const UI_STRINGS: Catalog = {
     "placeable.campfire.cooking": "Cocinando… {pct}%",
     "placeable.campfire.ready": "¡Listo para recoger!",
     "hud.toast.spawnSet": "Punto de reaparición establecido aquí",
+
+    "loading.tip.1": "Pulsa E para recolectar un nodo o una planta.",
+    "loading.tip.2": "Abre la pantalla de fabricación con I para ver qué puedes construir.",
+    "loading.tip.3": "Alimenta a un animal salvaje con T para empezar a domarlo.",
+    "loading.tip.4": "Pulsa B para entrar en modo construcción y colocar una pieza.",
+    "loading.tip.5": "Come con H cuando tu hambre esté baja.",
+    "loading.tip.6": "Duerme durante la noche con Z una vez que tengas una cama.",
   },
   da: {
     "app.title": "Diggy World",
@@ -662,6 +676,13 @@ export const UI_STRINGS: Catalog = {
     "placeable.campfire.cooking": "Tilbereder… {pct}%",
     "placeable.campfire.ready": "Klar til at samle op!",
     "hud.toast.spawnSet": "Genopstandelsespunkt sat her",
+
+    "loading.tip.1": "Tryk E for at høste en ressource eller en plante.",
+    "loading.tip.2": "Åbn håndværksskærmen med I for at se, hvad du kan bygge.",
+    "loading.tip.3": "Fodr et vildt dyr med T for at begynde at tæmme det.",
+    "loading.tip.4": "Tryk B for at gå i byggetilstand og placere en del.",
+    "loading.tip.5": "Spis med H, når din sult er lav.",
+    "loading.tip.6": "Sov gennem natten med Z, når du har en seng.",
   },
 };
 

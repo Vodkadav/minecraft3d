@@ -13,6 +13,7 @@ import { Engine } from './core/Engine';
 import { FlyCamera } from './core/FlyCamera';
 import { initHooks, type LaasHooks } from './core/Hooks';
 import { createLocalizer } from './game/ui/i18n/strings';
+import { mountLoadingScreen } from './game/ui/components/LoadingScreen';
 import type { Locale } from './game/domain/i18n/translate';
 import { parseCamString, parseParams, type QualityPreset } from './core/Params';
 import { WorldSeed } from './core/Seed';
@@ -177,11 +178,16 @@ async function bootEngine(hooks: LaasHooks, launch: MenuLaunch | null): Promise<
   // the params surface keeps its URL/default semantics
   const params = launch ? { ...urlParams, seed: launch.seed, scene: 'world' } : urlParams;
   const bootUI = new BootUI(hooks);
+  // Workstream 9.3: rotating localized tips under the real progress bar for
+  // the ~45-50s full-world boot — additive to BootUI (engine-owned), never
+  // touches it. Disposed once the world is actually ready, below.
+  const loadingScreen = mountLoadingScreen(createLocalizer(browserLocale()));
 
   bootUI.set(0.02, 'probing WebGPU');
   const diag = await probeWebGPU();
   hooks.diag = diag;
   if (!diag.ok) {
+    loadingScreen.dispose();
     failLoud('WebGPU unavailable — LAAS has no fallback by design', [
       diag.reason ?? 'unknown reason',
       '',
@@ -346,6 +352,7 @@ async function bootEngine(hooks: LaasHooks, launch: MenuLaunch | null): Promise<
   engine.start();
   await engine.settle(6);
   bootUI.hide();
+  loadingScreen.dispose();
   hooks.ready = true;
    
   console.log('[laas] ready');
