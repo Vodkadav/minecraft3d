@@ -139,6 +139,32 @@ Live: https://vodkadav.github.io/minecraft3d/ (desktop Chrome + WebGPU).
   culling — cosmetic, trigger: playtest feedback (touches 15 veg node materials, prime-directive
   risk). **Remaining:** playtest gate.
 
+## AAA Definition of Complete
+
+AAA polish pass (docs/AAA_POLISH_PLAN.md), executed 2026-07-19 as verified slices — every checked
+item re-verified by the orchestrator (full `npm run ci` + diff inspection), not claimed:
+
+- [x] W1 Audio: procedural Web Audio SFX + buses + ambient/music beds (zero bundled audio files)
+- [x] W2 Juice: FeedbackDirector — camera shake, hit-stop, damage numbers, screen fx, rumble; reduced-motion-aware
+- [x] W3 HUD: theme tokens (AA contrast), hotbar, vitals cluster, toasts, crosshair states (minimap 3.5 deferred)
+- [x] W4 Inventory/crafting UX: drag-drop ARIA grid, crafting screen, container reuse
+- [x] W5 Survival loop: hunger/stamina/eating/sleep/respawn/difficulty (local-only, zero protocol surface)
+- [x] W6 Progression/onboarding: keyhints, achievements tab, progression persistence
+- [x] W7 Content gates: 50 items / 27 recipes / 17 build parts / 8 species / 3-biome spawn table
+- [x] W8 Interactivity: chests, doors, campfires, beds, torches — all through the host-authoritative
+  intent path; persists through reload (GameStatePersistence)
+- [x] W9 Perf & pacing: F4 perf HUD (p50/p95/p99), GC-hitch fixes in per-frame paths, branded
+  loading screen for the ~48 s boot, streaming pop-in grow-in
+- [x] W10 Presentation: procedural Diggy World wordmark + menu backdrop, credits (EN/ES/DA),
+  first-run pulse, menu/lobby/settings theme sweep
+- [ ] Security review of all new intent-path mutations (dispatched, in flight)
+- [ ] Playtest gate (structured session — owner schedules)
+
+Deferred (explicit, recorded in the plan doc): minimap/compass, breeding + boss, Tauri wrapper
+(owner-gated), repo/URL rename (owner-gated), FlyCamera hook bundle (footsteps + physical
+sprint-slow + door collision — one engine-dir decision), joiner inventory-sync protocol, live 3D
+menu backdrop, engine-side terrain/vegetation pop-in.
+
 ## Notes
 
 - Prime directive: never regress the finished desktop LAAS render — all new work is additive and
