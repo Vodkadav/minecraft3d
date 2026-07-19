@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { isErr, isOk } from "../Result";
 import { DEFAULT_BOUNDARY_RADIUS } from "../boundary/Boundary";
+import { DEFAULT_DAY_LENGTH_SECONDS } from "../time/WorldClock";
 import {
   defaultSettings,
   makeSettings,
@@ -22,6 +23,7 @@ function validInput(overrides: Partial<SettingsInput> = {}): SettingsInput {
     sfxVolume: 0.8,
     ambientVolume: 0.6,
     difficulty: "normal",
+    dayLengthSeconds: DEFAULT_DAY_LENGTH_SECONDS,
     ...overrides,
   };
 }
@@ -132,6 +134,34 @@ describe("Settings", () => {
 
   it("defaults to normal difficulty", () => {
     expect(defaultSettings().difficulty).toBe("normal");
+  });
+
+  it("defaults dayLengthSeconds to the engine's existing (static) cycle speed", () => {
+    expect(defaultSettings().dayLengthSeconds).toBe(DEFAULT_DAY_LENGTH_SECONDS);
+  });
+
+  it("rejects a day length below the minimum", () => {
+    const r = makeSettings(validInput({ dayLengthSeconds: 1 }));
+    expect(isErr(r)).toBe(true);
+    if (isErr(r)) expect(r.error.kind).toBe("DayLengthOutOfRange");
+  });
+
+  it("rejects a day length above the maximum", () => {
+    const r = makeSettings(validInput({ dayLengthSeconds: 100000 }));
+    expect(isErr(r)).toBe(true);
+    if (isErr(r)) expect(r.error.kind).toBe("DayLengthOutOfRange");
+  });
+
+  it("rejects a non-finite day length", () => {
+    const r = makeSettings(validInput({ dayLengthSeconds: Number.NaN }));
+    expect(isErr(r)).toBe(true);
+    if (isErr(r)) expect(r.error.kind).toBe("DayLengthOutOfRange");
+  });
+
+  it("updates the day length while keeping the rest", () => {
+    const r = updateSettings(defaultSettings(), { dayLengthSeconds: 600 });
+    expect(isOk(r)).toBe(true);
+    if (isOk(r)) expect(r.value.dayLengthSeconds).toBe(600);
   });
 
   it("updates a single bus volume while keeping the rest", () => {

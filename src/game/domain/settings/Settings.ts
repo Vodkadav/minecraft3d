@@ -12,6 +12,11 @@
 import { err, ok, type Result } from "../Result";
 import { DEFAULT_BOUNDARY_RADIUS } from "../boundary/Boundary";
 import type { Locale } from "../i18n/translate";
+import {
+  DAY_LENGTH_MAX_SECONDS,
+  DAY_LENGTH_MIN_SECONDS,
+  DEFAULT_DAY_LENGTH_SECONDS,
+} from "../time/WorldClock";
 import { DIFFICULTIES, type Difficulty } from "./Difficulty";
 
 export type GraphicsPreset = "low" | "mobile" | "high" | "ultra";
@@ -44,6 +49,8 @@ export interface Settings {
   readonly ambientVolume: number;
   /** Peaceful/normal/hard multipliers on hunger/damage/death-penalty (Workstream 5.6). */
   readonly difficulty: Difficulty;
+  /** Full day/night cycle length in seconds (Workstream E0.3); DAY_LENGTH_MIN..MAX_SECONDS. */
+  readonly dayLengthSeconds: number;
 }
 
 /** Mutable/plain shape accepted by the factory before validation. */
@@ -60,6 +67,7 @@ export type SettingsInput = {
   readonly sfxVolume: number;
   readonly ambientVolume: number;
   readonly difficulty: Difficulty;
+  readonly dayLengthSeconds: number;
 };
 
 export type SettingsError =
@@ -68,7 +76,8 @@ export type SettingsError =
   | { readonly kind: "TextScaleOutOfRange"; readonly value: number }
   | { readonly kind: "BoundaryRadiusOutOfRange"; readonly value: number }
   | { readonly kind: "VolumeOutOfRange"; readonly bus: string; readonly value: number }
-  | { readonly kind: "UnknownDifficulty"; readonly value: string };
+  | { readonly kind: "UnknownDifficulty"; readonly value: string }
+  | { readonly kind: "DayLengthOutOfRange"; readonly value: number };
 
 function isGraphicsPreset(value: string): value is GraphicsPreset {
   return (GRAPHICS_PRESETS as readonly string[]).includes(value);
@@ -113,6 +122,13 @@ export function makeSettings(input: SettingsInput): Result<Settings, SettingsErr
   if (!isDifficulty(input.difficulty)) {
     return err({ kind: "UnknownDifficulty", value: String(input.difficulty) });
   }
+  if (
+    !Number.isFinite(input.dayLengthSeconds) ||
+    input.dayLengthSeconds < DAY_LENGTH_MIN_SECONDS ||
+    input.dayLengthSeconds > DAY_LENGTH_MAX_SECONDS
+  ) {
+    return err({ kind: "DayLengthOutOfRange", value: input.dayLengthSeconds });
+  }
   return ok({
     graphicsPreset: input.graphicsPreset,
     animalDensity: input.animalDensity,
@@ -126,6 +142,7 @@ export function makeSettings(input: SettingsInput): Result<Settings, SettingsErr
     sfxVolume: input.sfxVolume,
     ambientVolume: input.ambientVolume,
     difficulty: input.difficulty,
+    dayLengthSeconds: input.dayLengthSeconds,
   });
 }
 
@@ -143,6 +160,7 @@ export function defaultSettings(): Settings {
     sfxVolume: 0.8,
     ambientVolume: 0.6,
     difficulty: "normal",
+    dayLengthSeconds: DEFAULT_DAY_LENGTH_SECONDS,
   };
 }
 

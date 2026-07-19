@@ -21,9 +21,16 @@ import { WorldSeed } from './core/Seed';
 import { resolveRenderPreset } from './game/domain/capability/RenderPreset';
 import type { GraphicsPreset } from './game/domain/settings/Settings';
 import { isErr } from './game/domain/Result';
+import { defaultSettings } from './game/domain/settings/Settings';
 import type { PlayerState } from './game/domain/world/WorldSaveData';
 import type { WorldSaveStore } from './game/application/ports/WorldSaveStore';
 import { WorldLifecycle } from './game/application/WorldLifecycle';
+import {
+  WorldClockPersistence,
+  readWorldClockHour,
+  WORLD_CLOCK_ENTITY_KEY,
+} from './game/application/WorldClockPersistence';
+import { WorldClockService } from './game/application/WorldClockService';
 import {
   camPoseToPlayerState,
   isDefaultPlayerState,
@@ -66,12 +73,30 @@ async function bootFallbackPreset(): Promise<QualityPreset> {
   return resolveRenderPreset(tier, persisted);
 }
 
+/** Mirrors `bootFallbackPreset` for the domain `dayLengthSeconds` setting
+ *  (Workstream E0.3) — only ever consulted on a menu launch (gameplay world);
+ *  a tooling/dev scene boot never calls this. */
+async function loadDayLengthSeconds(): Promise<number> {
+  try {
+    const loaded = await new LocalStorageSettingsStore().load();
+    if (!isErr(loaded)) return loaded.value.dayLengthSeconds;
+  } catch (e) {
+
+    console.warn('[laas] settings unavailable, using default day length:', e);
+  }
+  return defaultSettings().dayLengthSeconds;
+}
+
 /** Everything a menu launch overrides on the URL boot path (M8 lifecycle). */
 interface MenuLaunch {
   seed: number;
   worldId: string;
   playerState: PlayerState;
   store: WorldSaveStore;
+  /** Persisted time-of-day hour (Workstream E0.3) — undefined on a brand-new
+   *  world or a join (joiners never own the save); falls back to the URL/
+   *  scene's default boot hour. */
+  worldClockHour?: number;
   /** Present when this boot JOINS a remote world (M7): the live net session
    *  created before the boot; the store is in-memory (host owns the save). */
   join?: JoinNetHandle;
@@ -132,6 +157,7 @@ function mountMenu(hooks: LaasHooks): void {
         worldId: launch.worldId,
         playerState: launch.playerState,
         store: worlds,
+        worldClockHour: readWorldClockHour(launch.save.entities) ?? undefined,
       }).catch(reportBootFailure);
     },
     // M7 join-by-code: bring the net session up FIRST — the welcome snapshot
@@ -296,6 +322,23 @@ async function bootEngine(hooks: LaasHooks, launch: MenuLaunch | null): Promise<
   // net-probe seam: which world seed actually booted (menu boots carry no URL seed)
   (window as unknown as { __laasSeed?: number }).__laasSeed = params.seed;
 
+  // Workstream E0.3: a live domain day/night clock, wired ONLY for a menu
+  // launch (gameplay world) — tooling/dev scene boots (`launch === null`)
+  // never construct this, so their static boot-time sky stays byte-identical.
+  // Feeds the engine's existing `hooks.setTimeOfDay` write seam every frame
+  // (same seam TerrainScene's own `[`/`]` stepping and bookmarks already use).
+  let worldClock: WorldClockService | null = null;
+  if (launch) {
+    const dayLengthSeconds = await loadDayLengthSeconds();
+    worldClock = new WorldClockService(
+      dayLengthSeconds,
+      launch.worldClockHour ?? params.timeOfDay,
+      { setTimeOfDay: (hour) => hooks.setTimeOfDay?.(hour) },
+    );
+    const clock = worldClock;
+    engine.onUpdate((dt) => clock.tick(dt));
+  }
+
   // M7 multiplayer glue: every menu-launched world is joinable (host), and a
   // join boot binds its pre-created session to the now-live scene (joiner)
   if (launch?.join) {
@@ -333,14 +376,24 @@ async function bootEngine(hooks: LaasHooks, launch: MenuLaunch | null): Promise<
   // a JOINER saves nothing — the host owns the world save
   if (launch && !launch.join) {
     const lifecycle = new WorldLifecycle(launch.store);
+    // Workstream E0.3: persist the live clock hour alongside pose so a
+    // reload resumes the same time of day — a JOINER never owns the save.
+    const clockPersistence = worldClock ? new WorldClockPersistence(launch.store) : null;
     const savePose = (): void => {
       // when the voxel subsystem owns the save, flush IT (one write of live
       // chunks + live pose) — the load-modify-write below would race a
-      // debounced voxel save and clobber freshly-written chunk deltas
+      // debounced voxel save and clobber freshly-written chunk deltas.
+      // The clock hour rides the SAME sibling-subsystem entities seam
+      // `setEntity` already offers (mirrors 'voxel.digSpheres') so it's
+      // captured in that one write instead of racing a second store.save.
       const voxels = ctx.world?.voxels;
       if (voxels) {
+        if (worldClock) voxels.setEntity(WORLD_CLOCK_ENTITY_KEY, { hour: worldClock.hour });
         void voxels.flushSave();
         return;
+      }
+      if (clockPersistence && worldClock) {
+        void clockPersistence.save(launch.worldId, { hour: worldClock.hour });
       }
       void lifecycle.savePlayerState(launch.worldId, camPoseToPlayerState(fly.getPose()));
     };
