@@ -31,10 +31,24 @@ Current state: about 21,000 lines of strict TypeScript across 90+ commits, all p
 - Post: temporal AA with analytic camera-reprojection velocity, bloom, GPU auto-exposure, per-time-of-day filmic grade.
 - Exploration: walk mode with gravity, jumping, sprint and stride-matched camera motion; free-fly mode; nine composed bookmarks; a 90-second flythrough.
 
-## Running it
+## The minecraft3d game layer
+
+This repository also hosts `minecraft3d`, a free, desktop-first-with-mobile-PWA Minecraft-style
+survival game built additively on top of the LAAS engine below (voxel dig/build terrain,
+crafting, spawning, creatures, taming, combat, and P2P multiplayer) — untouched LAAS engine code
+lives in `src/{core,render,gpu,world,sky,vegetation,debug}`, the game layer in
+`src/game/{domain,application,infrastructure,ui}`. Live: https://vodkadav.github.io/minecraft3d/
+(desktop Chrome + WebGPU). Status and milestone log: [PROGRESS.md](PROGRESS.md).
+
+## Installation
 
 ```
 npm install
+```
+
+## Usage
+
+```
 npm run dev
 ```
 
@@ -52,6 +66,7 @@ Useful URL parameters: `?seed=N` (world seed), `?T=hours` (time of day, 0–24),
 | `STATUS.md` | The model's working memory: current state, diagnosis logs, measurements, decision history. |
 | `docs/THREE-NOTES.md` | Verified three.js/TSL/WebGPU API notes the model accumulated against the pinned version. |
 | `docs/DELTA.md`, `docs/DEVIATIONS.md` | Reference-comparison loops per phase, and spec deviations with reasons. |
-| `src/` | Engine and world: `core/`, `gpu/`, `world/`, `vegetation/`, `render/`, `sky/`, `debug/`. |
+| `src/` | Engine and world: `core/`, `gpu/`, `world/`, `vegetation/`, `render/`, `sky/`, `debug/`. The minecraft3d game layer lives in `src/game/` (domain/application/infrastructure/ui). |
+| `PROGRESS.md` | The minecraft3d game layer's status and milestone log. |
 | `tools/` | The model's verification harness: headless WebGPU screenshots, image comparison, pixel sampling, GPU profiling, bug-specific probes. |
 | `reference/` | The reference frames the world is judged against. |
