@@ -87,18 +87,24 @@ describe("JoinSession", () => {
     expect(onCreatures).toHaveBeenCalledExactlyOnceWith(entities);
   });
 
-  it("sendInteract reaches the host's onInteract hook", () => {
+  it("sendInteract reaches the host's onInteract hook, tagged with the sender", () => {
     const net = makeTransportNetwork();
-    const interacts: Array<[string, string]> = [];
+    const interacts: Array<[string, string, string]> = [];
     new HostSession(net.host, () => SNAPSHOT, {
       onWorldEdit: () => {},
-      onInteract: (action, targetId) => interacts.push([action, targetId]),
+      onInteract: (action, targetId, peerId) => interacts.push([action, targetId, peerId]),
     });
     const alice = new JoinSession(net.addPeer("alice"), "Alice", {});
 
     alice.sendInteract("attack", "spawn:7");
+    alice.sendInteract("mount", "spawn:9");
+    alice.sendInteract("dismount", "spawn:9");
 
-    expect(interacts).toEqual([["attack", "spawn:7"]]);
+    expect(interacts).toEqual([
+      ["attack", "spawn:7", "alice"],
+      ["mount", "spawn:9", "alice"],
+      ["dismount", "spawn:9", "alice"],
+    ]);
   });
 
   it("surfaces peerJoined and peerLeft", () => {

@@ -12,6 +12,8 @@ const HAPPY: NetMessage[] = [
   { kind: "dig", x: 1, y: 2, z: 3, radius: 1.5 },
   { kind: "fill", x: 1, y: 2, z: 3, radius: 1.5, materialId: 4 },
   { kind: "interact", action: "attack", targetId: "creature:7" },
+  { kind: "interact", action: "mount", targetId: "creature:7" },
+  { kind: "interact", action: "dismount", targetId: "creature:7" },
   {
     kind: "welcome",
     seed: 123,
@@ -49,6 +51,16 @@ const HAPPY: NetMessage[] = [
         z: 0,
         yaw: 1,
         dying: true,
+      },
+      {
+        id: "spawn:5",
+        species: "deer",
+        kind: "creature",
+        x: 0,
+        y: 0,
+        z: 0,
+        yaw: 1,
+        tamed: true,
       },
     ],
   },
@@ -101,6 +113,12 @@ describe("parseMessage — malformed input is an error value", () => {
         { id: "x", species: "deer", kind: "creature", x: 1, y: 2, z: 3, yaw: 0, dying: "yes" },
       ],
     }, // dying wrong type
+    {
+      kind: "creatures",
+      entities: [
+        { id: "x", species: "deer", kind: "creature", x: 1, y: 2, z: 3, yaw: 0, tamed: "yes" },
+      ],
+    }, // tamed wrong type
   ];
 
   it.each(BAD.map((m) => [JSON.stringify(m) ?? String(m), m] as const))(

@@ -86,8 +86,19 @@ Live: https://vodkadav.github.io/minecraft3d/ (desktop Chrome + WebGPU).
   clip once and only removes the instance when the host's own removal drops the id (TDD:
   Protocol/CreatureStream). `tools/net-probe.ts` extended to assert B actually saw the dying flag
   before removal (`dyingIds` probe seam) — not yet re-run live (needs GPU + P2P Nostr rails).
-  Follow-ups: KayKit humanoid avatars; move the snapshot to the unreliable channel (ADR 0002 §3);
-  joiner-side mounting.
+  Joiner-side mounting done (2026-07-19, ADR 0003 addendum): G now mounts/dismounts on a joiner
+  too — `mount`/`dismount` join the existing `InteractAction` intent path (host validates
+  tamed/dying/already-ridden, same as attack/harvest/feed), `HostSessionHooks.onInteract` now
+  carries the sender's peerId, and a streamed `tamed` flag on `CreatureEntity` replaces the
+  joiner's untracked local taming guess. A peer-ridden creature is glued to that peer's own
+  already-streamed pose (no new wire traffic) with its AI frozen, so the host never fights the
+  rider and the mount's motion is visible to any other peer for free; the riding client
+  additionally glues its own view locally every frame (zero added latency), ignoring the
+  network-smoothed stream target for that one id while riding. TDD: Protocol (mount/dismount
+  shapes, tamed flag), HostSession/JoinSession peerId threading. `tools/net-probe.ts` extended
+  with a cheap wiring check (a joiner's mount intent on an untamed creature must be rejected by
+  the host, `riddenIds` probe seam) — not yet re-run live. Follow-up: move the snapshot to the
+  unreliable channel (ADR 0002 §3) — investigated 2026-07-19, deferred (see ADR addendum).
 - [~] M8 Hybrid voxel terrain (Fable-led) — Fable [F] core done (2026-07-06): 8.1 SDF chunk store
   (TDD, delta persistence via M2 save), 8.2 Transvoxel regular-cell mesher (TDD; MIT Lengyel tables,
   see CREDITS.md), 8.3 break-ground seam (`?voxel=1`: dig-mask hole punch, dig/fill tool, walkable

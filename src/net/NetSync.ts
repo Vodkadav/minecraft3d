@@ -107,9 +107,18 @@ export async function attachHostNet(deps: HostNetDeps): Promise<HostNetHandle> {
         applyingRemote = false;
       }
     },
-    onPeerPose: (peerId, state) => remote.upsert(peerId, state),
-    onPeerLeft: (peerId) => remote.remove(peerId),
-    onInteract: (action, targetId) => deps.spawns?.applyInteract(action, targetId),
+    onPeerPose: (peerId, state) => {
+      remote.upsert(peerId, state);
+      // a peer riding a creature streams its own pose ~10 Hz already — reuse
+      // it to glue the ridden creature's transform without new wire traffic
+      // (ADR 0003 addendum: host echoes the rider's streamed pose).
+      deps.spawns?.setPeerPose(peerId, state.position[0], state.position[2]);
+    },
+    onPeerLeft: (peerId) => {
+      remote.remove(peerId);
+      deps.spawns?.releaseRider(peerId);
+    },
+    onInteract: (action, targetId, peerId) => deps.spawns?.applyInteract(action, targetId, peerId),
   });
 
   // the host's own digs reach joiners as resolved world truth
