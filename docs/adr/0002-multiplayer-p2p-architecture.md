@@ -28,6 +28,13 @@ the research pass; summary below).
    inventory, chat, and the join handshake (seed + chunk deltas); unreliable
    unordered (`ordered: false, maxRetransmits: 0`) for position/animation sync
    — a stale position packet is worse than a dropped one.
+   *Addendum 2026-07-19: deferred.* trystero 0.25.2 exposes no per-action
+   reliability config (zero `ordered`/`maxRetransmits` occurrences in its
+   shipped code); an unreliable channel would mean hand-rolling
+   `createDataChannel` on the raw RTCPeerConnections. Pose + creature sync is
+   verified live at kB/s on the default reliable channel, so this stays on it.
+   Revisit trigger: observed rubber-banding/latency buildup on lossy links in
+   real play, or trystero shipping reliability options.
 4. **Lobby = room codes, not a browsable world list.** A public server browser
    requires a live registry — a backend by definition. The host generates a
    short invite code (hash of worldId + session nonce) rendered as a copyable
