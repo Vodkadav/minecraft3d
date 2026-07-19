@@ -109,6 +109,10 @@ function emptyRegistry(): ItemRegistry {
 interface PeerRecord {
   lastPose: { state: PlayerState; at: number } | null;
   inventory: Inventory;
+  /** True once a join claim has been applied — later `join` messages (the
+   *  joiner re-announces on a timer) must never re-seed the authoritative
+   *  copy, or a peer could rewrite its own inventory at will. */
+  inventorySeeded: boolean;
 }
 
 export class HostSession {
@@ -130,6 +134,7 @@ export class HostSession {
       this.peers.set(peerId, {
         lastPose: null,
         inventory: Inventory.empty(this.registry, this.playerInventoryCapacity),
+        inventorySeeded: false,
       }),
     );
     transport.onPeerLeave((peerId) => {
@@ -202,11 +207,18 @@ export class HostSession {
       // accept it if it matches the expected slot count AND every item is
       // real and in-bounds per the live registry (Inventory.fromSlots
       // revalidates fully) — anything else keeps the fresh empty inventory
-      // already seeded at onPeerJoin.
-      if (claimedInventory && claimedInventory.capacity === this.playerInventoryCapacity) {
+      // already seeded at onPeerJoin. Applied at most ONCE per connection:
+      // the joiner re-announces `join` on a timer, and a re-seedable claim
+      // would let a peer rewrite its authoritative inventory at will.
+      if (
+        !peer.inventorySeeded &&
+        claimedInventory &&
+        claimedInventory.capacity === this.playerInventoryCapacity
+      ) {
         const seeded = Inventory.fromSlots(this.registry, claimedInventory.slots);
         if (isOk(seeded)) peer.inventory = seeded.value;
       }
+      peer.inventorySeeded = true;
       this.sendInventoryState(peerId, peer.inventory);
     }
 

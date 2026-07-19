@@ -380,6 +380,21 @@ describe("HostSession", () => {
       });
     });
 
+    it("ignores a claimed inventory on any join after the first (no re-seeding)", () => {
+      const { net: net2 } = hostedSession(undefined);
+      const alice = net2.addPeer("alice");
+      alice.broadcast({ kind: "join", playerName: "Alice" }); // seeds empty, locks the seed
+      const inbox = collect(alice);
+      const slots = Array(27).fill(null);
+      slots[0] = { itemId: "wood", count: 5 };
+      alice.broadcast({ kind: "join", playerName: "Alice", inventory: { capacity: 27, slots } });
+      expect(inventoryStateOf(inbox)).toEqual({
+        kind: "inventoryState",
+        capacity: 27,
+        slots: Array(27).fill(null),
+      });
+    });
+
     it("ignores a claimed inventory with the wrong capacity", () => {
       const { net: net2 } = hostedSession(undefined);
       const alice = net2.addPeer("alice");
