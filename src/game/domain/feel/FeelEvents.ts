@@ -15,7 +15,9 @@ export type FeelEventId =
   | "harvest"
   | "dig"
   | "place"
-  | "tame";
+  | "tame"
+  | "eat"
+  | "starve";
 
 export interface VignetteSpec {
   readonly kind: "hurt" | "heal";
@@ -101,6 +103,22 @@ export const FEEL_EVENTS = {
     damageNumber: false,
     particleBurst: "tame",
     rumble: { intensity: 0.25, durationMs: 60 },
+  },
+  eat: {
+    shakeTrauma: 0,
+    hitStopMs: 0,
+    vignette: { kind: "heal", intensity: 0.25 },
+    damageNumber: false,
+    particleBurst: null,
+    rumble: null,
+  },
+  starve: {
+    shakeTrauma: 0.05,
+    hitStopMs: 0,
+    vignette: { kind: "hurt", intensity: 0.35 },
+    damageNumber: false,
+    particleBurst: null,
+    rumble: { intensity: 0.15, durationMs: 60 },
   },
 } as const satisfies Record<FeelEventId, FeedbackBundle>;
 

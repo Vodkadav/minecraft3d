@@ -34,16 +34,19 @@ const HEEL_M = 3;
 export const WANDER_RADIUS_M = 20;
 const ARRIVE_M = 0.75;
 
+/** `reactRangeMult` widens reaction range (Workstream 5.4 night-threat hook —
+ *  fed in as plain config by the caller, e.g. NIGHT_AGGRO_RANGE_MULT); 1 = unchanged. */
 export function decideBehavior(
   species: string,
   playerDistM: number,
   healthFrac: number,
   tamed = false,
+  reactRangeMult = 1,
 ): Behavior {
   if (tamed) return "follow";
   const t = TEMPERAMENT[species];
   if (!t) return "roam";
-  if (playerDistM <= t.reactRange) {
+  if (playerDistM <= t.reactRange * reactRangeMult) {
     return t.aggressive && healthFrac >= t.fleeBelowHealth ? "aggro" : "flee";
   }
   return "roam";

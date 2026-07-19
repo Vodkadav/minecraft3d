@@ -17,6 +17,7 @@ import {
   type GraphicsPreset,
   type SettingsInput,
 } from "../domain/settings/Settings";
+import { DIFFICULTIES, type Difficulty } from "../domain/settings/Difficulty";
 import { wireButtonSound } from "./audioUi";
 import { applyAccessibility, injectStyles } from "./styles";
 
@@ -136,6 +137,20 @@ export function SettingsView(
     apply({ textScale: Number(textScale.value) }),
   );
   field(doc, root, "laas-textscale", loc.t("settings.textScale"), textScale);
+
+  // Difficulty (Workstream 5.6)
+  const difficulty = doc.createElement("select");
+  for (const d of DIFFICULTIES) {
+    const opt = doc.createElement("option");
+    opt.value = d;
+    opt.textContent = loc.t(`settings.difficulty.${d}`);
+    if (d === s.difficulty) opt.selected = true;
+    difficulty.appendChild(opt);
+  }
+  difficulty.addEventListener("change", () =>
+    apply({ difficulty: difficulty.value as Difficulty }),
+  );
+  field(doc, root, "laas-difficulty", loc.t("settings.difficulty"), difficulty);
 
   // Reduced motion
   const motion = doc.createElement("input");

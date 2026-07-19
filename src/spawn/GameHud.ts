@@ -10,6 +10,11 @@
  * camera bookmarks (`Bookmarks.ts`) own those keys, so wiring both would
  * silently break the existing dev/tooling shortcut. Wheel-scroll and click
  * selection still work there.
+ *
+ * Workstream 5.2: `H` eats the food item in the selected hotbar slot (a
+ * no-op on an empty/non-food slot) — consumes one, restores via `onEat`
+ * (the composition root owns hunger/health state, this is a thin hook).
+ * Workstream 5.3: `applyDeathPenalty` drops slots per the configured rule.
  */
 
 import { isOk } from "../game/domain/Result";
@@ -17,8 +22,13 @@ import { STARTER_RECIPES } from "../game/domain/crafting/starterRecipes";
 import type { Recipe } from "../game/domain/crafting/Crafting";
 import { Inventory, type ItemStack } from "../game/domain/inventory/Inventory";
 import type { ItemRegistry } from "../game/domain/items/ItemRegistry";
+import type { FoodMetadata } from "../game/domain/items/ItemDefinition";
+import type { DeathPenalty } from "../game/domain/survival/Respawn";
+import { dropOnDeath } from "../game/domain/survival/Respawn";
+import { HOTBAR_SIZE } from "../game/domain/ui/HotbarSelection";
 import type { CrosshairState } from "../game/domain/ui/CrosshairState";
 import type { AudioPort } from "../game/application/ports/AudioPort";
+import type { FeelPort } from "../game/application/ports/FeelPort";
 import type { Localizer } from "../game/application/i18n/Localizer";
 import { Button } from "../game/ui/components/Button";
 import { Crosshair, type CrosshairHandle } from "../game/ui/components/Crosshair";
@@ -42,16 +52,26 @@ export interface GameHudOptions {
    *  a second one. Owned/disposed by whoever created it, not by this HUD. */
   readonly crosshair?: CrosshairHandle;
   readonly audio?: AudioPort;
+  readonly feel?: FeelPort;
   readonly recipes?: readonly Recipe[];
   readonly unlockedTier?: number;
   /** Pauses/resumes camera-look input while the inventory overlay is open —
    *  wire to `ctx.hooks.flyCamEnabled` in the scene composition root. */
   setInputEnabled?(enabled: boolean): void;
+  /** Fired after a successful eat (Workstream 5.2) — the composition root
+   *  applies hunger/health restore to its own survival/vitals state. */
+  onEat?(food: FoodMetadata): void;
 }
 
 export interface GameHudHandle {
   addLoot(stacks: readonly ItemStack[]): void;
   setCrosshairState(state: CrosshairState): void;
+  /** Eats the food item in the selected hotbar slot, if any. Returns false
+   *  (no-op) for an empty slot or a non-food item. */
+  eatSelected(): boolean;
+  /** Drops inventory contents per the death-penalty rule (Workstream 5.3);
+   *  a no-op for "keep-inventory". */
+  applyDeathPenalty(penalty: DeathPenalty): void;
   readonly inventory: Inventory;
   dispose(): void;
 }
@@ -104,6 +124,34 @@ export function mountGameHud(opts: GameHudOptions): GameHudHandle {
   inventoryButton.classList.add("lw-inv-open-button");
   doc.body.appendChild(inventoryButton);
 
+  function eatSelected(): boolean {
+    const slot = inventory.slots[hotbar.selected];
+    if (!slot) return false;
+    const def = registry.get(slot.itemId);
+    if (!isOk(def) || !def.value.food) return false;
+    const removed = inventory.remove(slot.itemId, 1);
+    if (!isOk(removed)) return false;
+    inventory = removed.value;
+    hotbar.render(inventory);
+    inventoryScreen.setInventory(inventory);
+    opts.audio?.play("eat");
+    opts.feel?.trigger("eat");
+    toasts.push("hud.toast.ate", { name: def.value.displayName }, LOOT_TOAST_TTL_MS);
+    opts.onEat?.(def.value.food);
+    return true;
+  }
+
+  function isTextInputFocused(): boolean {
+    const el = doc.activeElement;
+    if (!el) return false;
+    const tag = el.tagName;
+    return tag === "INPUT" || tag === "TEXTAREA" || (el as HTMLElement).isContentEditable;
+  }
+  function onEatKeyDown(e: KeyboardEvent): void {
+    if (e.code === "KeyH" && !isTextInputFocused()) eatSelected();
+  }
+  (doc.defaultView ?? window).addEventListener("keydown", onEatKeyDown);
+
   return {
     get inventory() {
       return inventory;
@@ -123,7 +171,18 @@ export function mountGameHud(opts: GameHudOptions): GameHudHandle {
     setCrosshairState(state: CrosshairState): void {
       crosshair.setState(state);
     },
+    eatSelected,
+    applyDeathPenalty(penalty: DeathPenalty): void {
+      if (penalty === "keep-inventory") return;
+      const nextSlots = dropOnDeath(inventory.slots, HOTBAR_SIZE, penalty);
+      const rebuilt = Inventory.fromSlots(registry, nextSlots);
+      if (!isOk(rebuilt)) return;
+      inventory = rebuilt.value;
+      hotbar.render(inventory);
+      inventoryScreen.setInventory(inventory);
+    },
     dispose(): void {
+      (doc.defaultView ?? window).removeEventListener("keydown", onEatKeyDown);
       hotbar.dispose();
       toasts.dispose();
       inventoryScreen.dispose();

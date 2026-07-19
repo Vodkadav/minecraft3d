@@ -79,4 +79,48 @@ describe("mountGameHud", () => {
     expect(hasWood).toBe(true);
     hud.dispose();
   });
+
+  it("eatSelected consumes a food item in the selected hotbar slot and calls onEat", () => {
+    const onEat = vi.fn();
+    const hud = mountGameHud({ loc: createLocalizer("en"), registry: registry(), onEat });
+    hud.addLoot([{ itemId: "meat", count: 2 }]);
+    expect(hud.eatSelected()).toBe(true);
+    expect(hud.inventory.count("meat")).toBe(1);
+    expect(onEat).toHaveBeenCalledWith({ hungerRestore: 25, healthRestore: 5 });
+    expect(document.querySelector(".lw-toast-region")?.textContent).toContain("Meat");
+    hud.dispose();
+  });
+
+  it("eatSelected is a no-op on an empty slot or a non-food item", () => {
+    const hud = mountGameHud({ loc: createLocalizer("en"), registry: registry() });
+    expect(hud.eatSelected()).toBe(false); // empty hotbar
+    hud.addLoot([{ itemId: "wood", count: 1 }]);
+    expect(hud.eatSelected()).toBe(false); // wood isn't food
+    hud.dispose();
+  });
+
+  it("the H key eats the selected item", () => {
+    const onEat = vi.fn();
+    const hud = mountGameHud({ loc: createLocalizer("en"), registry: registry(), onEat });
+    hud.addLoot([{ itemId: "berries", count: 1 }]);
+    window.dispatchEvent(new KeyboardEvent("keydown", { code: "KeyH", bubbles: true }));
+    expect(onEat).toHaveBeenCalledTimes(1);
+    hud.dispose();
+  });
+
+  it("applyDeathPenalty keep-inventory leaves the inventory untouched", () => {
+    const hud = mountGameHud({ loc: createLocalizer("en"), registry: registry() });
+    hud.addLoot([{ itemId: "wood", count: 5 }]);
+    hud.applyDeathPenalty("keep-inventory");
+    expect(hud.inventory.count("wood")).toBe(5);
+    hud.dispose();
+  });
+
+  it("applyDeathPenalty drop-all clears the inventory", () => {
+    const hud = mountGameHud({ loc: createLocalizer("en"), registry: registry() });
+    hud.addLoot([{ itemId: "wood", count: 5 }]);
+    hud.applyDeathPenalty("drop-all");
+    expect(hud.inventory.count("wood")).toBe(0);
+    hud.dispose();
+  });
 });

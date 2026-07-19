@@ -21,6 +21,7 @@ function validInput(overrides: Partial<SettingsInput> = {}): SettingsInput {
     musicVolume: 0.6,
     sfxVolume: 0.8,
     ambientVolume: 0.6,
+    difficulty: "normal",
     ...overrides,
   };
 }
@@ -115,6 +116,22 @@ describe("Settings", () => {
     const r = makeSettings(validInput({ sfxVolume: 1.5 }));
     expect(isErr(r)).toBe(true);
     if (isErr(r)) expect(r.error.kind).toBe("VolumeOutOfRange");
+  });
+
+  it("accepts every declared difficulty", () => {
+    for (const difficulty of ["peaceful", "normal", "hard"] as const) {
+      expect(isOk(makeSettings(validInput({ difficulty })))).toBe(true);
+    }
+  });
+
+  it("rejects an unknown difficulty", () => {
+    const r = makeSettings(validInput({ difficulty: "nightmare" as never }));
+    expect(isErr(r)).toBe(true);
+    if (isErr(r)) expect(r.error.kind).toBe("UnknownDifficulty");
+  });
+
+  it("defaults to normal difficulty", () => {
+    expect(defaultSettings().difficulty).toBe("normal");
   });
 
   it("updates a single bus volume while keeping the rest", () => {

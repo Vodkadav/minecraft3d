@@ -31,6 +31,8 @@ export const AUDIO_EVENTS = {
   hit: { id: "hit", bus: "sfx", gain: 0.7, spatial: true, cooldownMs: 60, priority: 5 },
   hurt: { id: "hurt", bus: "sfx", gain: 0.75, spatial: false, cooldownMs: 300, priority: 6 },
   tame: { id: "tame", bus: "sfx", gain: 0.65, spatial: true, cooldownMs: 400, priority: 4 },
+  eat: { id: "eat", bus: "sfx", gain: 0.55, spatial: false, cooldownMs: 200, priority: 3 },
+  sleep: { id: "sleep", bus: "sfx", gain: 0.5, spatial: false, cooldownMs: 500, priority: 3 },
   uiClick: { id: "uiClick", bus: "ui", gain: 0.5, spatial: false, cooldownMs: 40, priority: 2 },
   uiHover: { id: "uiHover", bus: "ui", gain: 0.25, spatial: false, cooldownMs: 60, priority: 1 },
   ambientWind: { id: "ambientWind", bus: "ambient", gain: 0.4, spatial: false, cooldownMs: 0, priority: 1 },

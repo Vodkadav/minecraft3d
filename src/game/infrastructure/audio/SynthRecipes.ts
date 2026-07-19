@@ -41,6 +41,8 @@ const RECIPES: Record<AudioEventId, SynthRecipe> = {
   hit: { kind: "tone", type: "square", freqStartHz: 220, freqEndHz: 90, durationS: 0.1 },
   hurt: { kind: "tone", type: "sawtooth", freqStartHz: 300, freqEndHz: 120, durationS: 0.22 },
   tame: { kind: "tone", type: "sine", freqStartHz: 520, freqEndHz: 880, durationS: 0.3 },
+  eat: { kind: "noise", durationS: 0.16, filterHz: 1200 },
+  sleep: { kind: "tone", type: "sine", freqStartHz: 440, freqEndHz: 220, durationS: 0.9 },
   uiClick: { kind: "tone", type: "square", freqStartHz: 900, freqEndHz: 900, durationS: 0.03 },
   uiHover: { kind: "tone", type: "sine", freqStartHz: 700, freqEndHz: 700, durationS: 0.02 },
   ambientWind: { kind: "noise", durationS: 4, filterHz: 350 },

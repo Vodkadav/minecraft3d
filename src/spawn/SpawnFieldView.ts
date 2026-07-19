@@ -61,6 +61,7 @@ import {
 } from "../game/domain/combat/Combat";
 import { feed, startTaming, TAMING_RULES, type TamingState } from "../game/domain/taming/Taming";
 import { hashUnitFloat } from "../game/domain/rng/hash";
+import { NIGHT_AGGRO_RANGE_MULT, NIGHT_DAMAGE_MULT } from "../game/domain/time/DayNight";
 import type { ItemStack } from "../game/domain/inventory/Inventory";
 import type { AudioPort } from "../game/application/ports/AudioPort";
 import type { FeelPort } from "../game/application/ports/FeelPort";
@@ -113,6 +114,20 @@ export interface SpawnFieldDeps {
   onPlayerHit?(amount: number): void;
   /** Set the player's walk-speed multiplier (mount boost; 1 = on foot). */
   setMoveSpeedScale?(scale: number): void;
+  /** Workstream 5.1: stamina gate — an F press is dropped when this returns
+   *  false (no target is even picked, so it costs nothing on the joiner
+   *  side either). Local player state only; never routed through the
+   *  intent path (see IntentRules — attack resolution itself still is). */
+  canAttack?(): boolean;
+  /** Called once per accepted attack press, before resolution — the
+   *  composition root drains stamina/hunger here. */
+  onAttack?(): void;
+  /** Workstream 5.4: true while it's night — widens aggro reaction range and
+   *  scales up contact-bite damage. Omitted/false = always-day behaviour. */
+  isNight?(): boolean;
+  /** Workstream 5.6: difficulty multiplier on contact-bite damage (peaceful
+   *  = 0 disables player-facing creature damage entirely). Defaults to 1. */
+  creatureDamageMult?: number;
 }
 
 export interface SpawnFieldHandle {
@@ -490,8 +505,10 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
     // resolution (tamed/dying/already-ridden) is the one that sticks (ADR
     // 0003 addendum).
     if (ev.code === "KeyF") {
+      if (deps.canAttack && !deps.canAttack()) return; // stamina-gated (Workstream 5.1)
       const target = pickTarget(creatures);
       if (!target || target.dying !== null) return;
+      deps.onAttack?.();
       if (remote) onInteractIntent?.("attack", target.entity.id);
       else resolveAttack(target);
     } else if (ev.code === "KeyG") {
@@ -585,6 +602,7 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
       const stats = CREATURE_STATS[c.entity.species];
       const healthFrac = stats ? c.combat.health / stats.maxHealth : 1;
       const distToPlayer = Math.hypot(x - px, z - pz);
+      const night = deps.isNight?.() ?? false;
       // an aggressive wild creature that reaches the player bites, on cooldown
       if (
         stats &&
@@ -594,15 +612,20 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
         clockMs - c.lastBiteMs >= BITE_COOLDOWN_S * 1000
       ) {
         c.lastBiteMs = clockMs;
-        deps.onPlayerHit?.(stats.damage);
-        deps.audio?.play("hurt");
-        deps.feel?.trigger("takeDamage", { damageValue: stats.damage });
+        const damage =
+          stats.damage * (night ? NIGHT_DAMAGE_MULT : 1) * (deps.creatureDamageMult ?? 1);
+        if (damage > 0) {
+          deps.onPlayerHit?.(damage);
+          deps.audio?.play("hurt");
+          deps.feel?.trigger("takeDamage", { damageValue: damage });
+        }
       }
       const behavior = decideBehavior(
         c.entity.species,
         distToPlayer,
         healthFrac,
         c.taming.phase === "tamed",
+        night ? NIGHT_AGGRO_RANGE_MULT : 1,
       );
       const wp = wanderWaypoint(c.entity.id, c.anchor, epoch);
       const [vx, vz] = steer(behavior, [x, z], [px, pz], wp);

@@ -38,6 +38,12 @@ describe("decideBehavior", () => {
   it("unknown species just roams", () => {
     expect(decideBehavior("slime", 5, 1)).toBe("roam");
   });
+
+  it("reactRangeMult widens the reaction range (Workstream 5.4 night threat)", () => {
+    // wolf reactRange=14: 20m is out of range normally, in range at 1.5x (night)
+    expect(decideBehavior("wolf", 20, 1, false, 1)).toBe("roam");
+    expect(decideBehavior("wolf", 20, 1, false, 1.5)).toBe("aggro");
+  });
 });
 
 describe("steer", () => {

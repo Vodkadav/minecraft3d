@@ -12,6 +12,7 @@
 import { err, ok, type Result } from "../Result";
 import { DEFAULT_BOUNDARY_RADIUS } from "../boundary/Boundary";
 import type { Locale } from "../i18n/translate";
+import { DIFFICULTIES, type Difficulty } from "./Difficulty";
 
 export type GraphicsPreset = "low" | "mobile" | "high" | "ultra";
 
@@ -41,6 +42,8 @@ export interface Settings {
   readonly musicVolume: number;
   readonly sfxVolume: number;
   readonly ambientVolume: number;
+  /** Peaceful/normal/hard multipliers on hunger/damage/death-penalty (Workstream 5.6). */
+  readonly difficulty: Difficulty;
 }
 
 /** Mutable/plain shape accepted by the factory before validation. */
@@ -56,6 +59,7 @@ export type SettingsInput = {
   readonly musicVolume: number;
   readonly sfxVolume: number;
   readonly ambientVolume: number;
+  readonly difficulty: Difficulty;
 };
 
 export type SettingsError =
@@ -63,10 +67,15 @@ export type SettingsError =
   | { readonly kind: "DensityOutOfRange"; readonly value: number }
   | { readonly kind: "TextScaleOutOfRange"; readonly value: number }
   | { readonly kind: "BoundaryRadiusOutOfRange"; readonly value: number }
-  | { readonly kind: "VolumeOutOfRange"; readonly bus: string; readonly value: number };
+  | { readonly kind: "VolumeOutOfRange"; readonly bus: string; readonly value: number }
+  | { readonly kind: "UnknownDifficulty"; readonly value: string };
 
 function isGraphicsPreset(value: string): value is GraphicsPreset {
   return (GRAPHICS_PRESETS as readonly string[]).includes(value);
+}
+
+function isDifficulty(value: string): value is Difficulty {
+  return (DIFFICULTIES as readonly string[]).includes(value);
 }
 
 export function makeSettings(input: SettingsInput): Result<Settings, SettingsError> {
@@ -101,6 +110,9 @@ export function makeSettings(input: SettingsInput): Result<Settings, SettingsErr
       return err({ kind: "VolumeOutOfRange", bus, value });
     }
   }
+  if (!isDifficulty(input.difficulty)) {
+    return err({ kind: "UnknownDifficulty", value: String(input.difficulty) });
+  }
   return ok({
     graphicsPreset: input.graphicsPreset,
     animalDensity: input.animalDensity,
@@ -113,6 +125,7 @@ export function makeSettings(input: SettingsInput): Result<Settings, SettingsErr
     musicVolume: input.musicVolume,
     sfxVolume: input.sfxVolume,
     ambientVolume: input.ambientVolume,
+    difficulty: input.difficulty,
   });
 }
 
@@ -129,6 +142,7 @@ export function defaultSettings(): Settings {
     musicVolume: 0.6,
     sfxVolume: 0.8,
     ambientVolume: 0.6,
+    difficulty: "normal",
   };
 }
 

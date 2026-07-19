@@ -11,11 +11,19 @@ import type { VignettePulse } from "../game/domain/feel/FeelState";
 import { pulseIntensity } from "../game/domain/feel/FeelState";
 
 const LOW_HEALTH_OPACITY = 0.35;
+/** Full sleep-fade hold duration, ms (fade-to-black, then fade-up); reduced
+ *  motion skips the transition animation and just holds briefly. */
+const SLEEP_FADE_MS = 700;
 
 export interface ScreenEffectsHandle {
   /** Called once per frame with the live (already-decaying) pulse list. */
   render(pulses: readonly VignettePulse[]): void;
   setLowHealth(active: boolean): void;
+  /** Sleep transition (Workstream 5.5) — two steps so the caller can do the
+   *  actual time-jump while the screen is black: `await sleepFadeOut()`,
+   *  jump the clock, `await sleepFadeIn()`. */
+  sleepFadeOut(): Promise<void>;
+  sleepFadeIn(): Promise<void>;
   dispose(): void;
 }
 
@@ -35,6 +43,12 @@ export function mountScreenEffects(
   const hurtLayer = base("rgba(193,68,58,0.55)");
   const healLayer = base("rgba(111,174,74,0.4)");
   const lowHealthLayer = base("rgba(193,68,58,0.65)");
+
+  const sleepLayer = doc.createElement("div");
+  sleepLayer.setAttribute("aria-hidden", "true");
+  sleepLayer.style.cssText =
+    "position:fixed;inset:0;z-index:40;pointer-events:none;opacity:0;background:#000;";
+  doc.body.appendChild(sleepLayer);
 
   return {
     render(pulses: readonly VignettePulse[]): void {
@@ -56,10 +70,22 @@ export function mountScreenEffects(
     setLowHealth(active: boolean): void {
       lowHealthLayer.style.opacity = active ? String(LOW_HEALTH_OPACITY) : "0";
     },
+    async sleepFadeOut(): Promise<void> {
+      const half = reducedMotion() ? 0 : SLEEP_FADE_MS / 2;
+      sleepLayer.style.transition = half > 0 ? `opacity ${half}ms ease-in-out` : "";
+      sleepLayer.style.opacity = "1";
+      await new Promise((resolve) => setTimeout(resolve, half));
+    },
+    async sleepFadeIn(): Promise<void> {
+      const half = reducedMotion() ? 0 : SLEEP_FADE_MS / 2;
+      sleepLayer.style.opacity = "0";
+      await new Promise((resolve) => setTimeout(resolve, half));
+    },
     dispose(): void {
       hurtLayer.remove();
       healLayer.remove();
       lowHealthLayer.remove();
+      sleepLayer.remove();
     },
   };
 }

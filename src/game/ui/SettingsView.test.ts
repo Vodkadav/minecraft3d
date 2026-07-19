@@ -49,6 +49,7 @@ describe("SettingsView", () => {
       "laas-vol-music",
       "laas-vol-sfx",
       "laas-vol-ambient",
+      "laas-difficulty",
     ]) {
       const label = el.querySelector(`label[for="${id}"]`);
       expect(label, `label for ${id}`).toBeTruthy();
@@ -83,6 +84,16 @@ describe("SettingsView", () => {
     radius.dispatchEvent(new Event("change"));
     await flush();
     expect(controller.settings.boundaryRadius).toBe(1000);
+  });
+
+  it("renders a difficulty select with all three tiers and flows changes through", async () => {
+    const { el, controller } = await build();
+    const select = control<HTMLSelectElement>(el, "laas-difficulty");
+    expect([...select.options].map((o) => o.value)).toEqual(["peaceful", "normal", "hard"]);
+    select.value = "hard";
+    select.dispatchEvent(new Event("change"));
+    await flush();
+    expect(controller.settings.difficulty).toBe("hard");
   });
 
   it("flows a music-volume change through the controller and store", async () => {

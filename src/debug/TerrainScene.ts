@@ -35,7 +35,6 @@ import { VoxelTerrain } from '../voxel/VoxelTerrain';
 import { attachPlacementTool, type PlacementToolHandle } from '../voxel/placement/PlacementTool';
 import { attachTreasureField } from '../voxel/treasure/TreasureField';
 import { attachSpawnField } from '../spawn/SpawnFieldView';
-import { createPlayerHealthBar } from '../spawn/PlayerHealthBar';
 import { mountGameHud } from '../spawn/GameHud';
 import { stepCameraShake } from '../feel/CameraShake';
 import { mountDamageNumbers } from '../feel/DamageNumbers';
@@ -54,10 +53,22 @@ import { isOk } from '../game/domain/Result';
 import { ItemRegistry } from '../game/domain/items/ItemRegistry';
 import { STARTER_ITEMS } from '../game/domain/items/starterItems';
 import { resolveCrosshairState } from '../game/domain/ui/CrosshairState';
+import { difficultyRules } from '../game/domain/settings/Difficulty';
+import { setSpawnPoint, type SpawnPoint } from '../game/domain/survival/Respawn';
+import {
+  canAttack as canAttackSurvival,
+  drainStaminaForAttack,
+  spawnSurvival,
+  starvationDamagePerTick,
+  tickSurvival,
+} from '../game/domain/survival/Survival';
+import { eat } from '../game/domain/survival/Eating';
+import { isNight, MORNING_HOUR } from '../game/domain/time/DayNight';
 import { Crosshair } from '../game/ui/components/Crosshair';
 import { createLocalizer } from '../game/ui/i18n/strings';
 import { LocalStorageSettingsStore } from '../game/infrastructure/persistence/LocalStorageSettingsStore';
 import { SettingsController } from '../game/application/SettingsController';
+import { createPlayerSurvivalBar } from '../spawn/PlayerSurvivalBar';
 import { IndexedDbKeyValueStore } from '../game/infrastructure/persistence/IndexedDbKeyValueStore';
 import { OpfsBlobStore } from '../game/infrastructure/persistence/OpfsBlobStore';
 import { PersistentWorldSaveStore } from '../game/infrastructure/persistence/PersistentWorldSaveStore';
@@ -78,6 +89,9 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
   // as audio (never a tooling/dev URL scene) — mirrors `ctx.audio`'s own
   // gating in main.ts, so a no-flags desktop boot stays pixel-identical.
   let feel: FeelDirector | null = null;
+  // Workstream 5.5: hoisted so the spawnsOn block below can trigger the
+  // sleep-fade transition without re-mounting a second overlay.
+  let screenEffectsRef: ReturnType<typeof mountScreenEffects> | null = null;
   if (ctx.audio) {
     settingsController = new SettingsController(new LocalStorageSettingsStore());
     await settingsController.load();
@@ -95,6 +109,7 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
       (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false);
     const damageNumbers = mountDamageNumbers(document, engine.camera, engine.renderer.domElement);
     const screenEffects = mountScreenEffects(document, reducedMotion);
+    screenEffectsRef = screenEffects;
     // the largest new instance carpet is skipped outright on the mobile
     // preset, same policy as GroundRing/froxels above
     const particles = params.preset === 'mobile' ? undefined : mountImpactParticles(engine.scene);
@@ -502,12 +517,25 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
     if (!settingsController) await settings.load();
     // M6 player health: only wild worlds (spawns on) can hurt you, so the
     // vitals + bar live here. Death respawns full at the start position — a
-    // family game loses your spot, never your progress.
+    // family game loses your spot, never your progress (Workstream 5.3:
+    // the death-penalty rule below can now override "never your progress"
+    // on harder difficulties, but stays keep-inventory by default).
     let vitals = spawnPlayerVitals();
+    // Workstream 5.1: hunger + stamina, ticked alongside vitals below.
+    let survival = spawnSurvival();
     // reposition through the fly camera's own seam (setPose owns basePos too —
     // a raw camera.position.set is stomped by fly.update the same frame)
     let respawnPose: CamPose | null = null;
-    const healthBar = createPlayerHealthBar();
+    // Workstream 5.3: the domain spawn-point value (position-only); mirrors
+    // respawnPose whenever it's (re)captured — a placed bed (Workstream 7)
+    // will call `setSpawnPoint` from the same seam instead of "on sleep".
+    let spawnPoint: SpawnPoint | null = null;
+    const survivalBar = createPlayerSurvivalBar(createLocalizer(settings.settings.locale));
+
+    function captureSpawn(pose: CamPose): void {
+      respawnPose = pose;
+      spawnPoint = setSpawnPoint(spawnPoint, { x: pose.p[0], y: pose.p[1], z: pose.p[2] });
+    }
 
     // themed HUD (Workstream 3+4): hotbar + toasts + crosshair + the
     // inventory/crafting overlay. Digit-key hotbar selection is off here —
@@ -524,9 +552,42 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
       enableHotbarDigitKeys: false,
       ...(crosshairRef ? { crosshair: crosshairRef } : {}),
       ...(ctx.audio ? { audio: ctx.audio } : {}),
+      ...(feel ? { feel } : {}),
       setInputEnabled: (on) => ctx.hooks.flyCamEnabled?.(on),
+      onEat: (food) => {
+        const r = eat(vitals, survival, food);
+        vitals = r.vitals;
+        survival = r.survival;
+        const frac = vitals.health / PLAYER_MAX_HEALTH;
+        survivalBar.setHealth(frac);
+        survivalBar.setHunger(survival.hunger);
+        feel?.setLowHealth(frac > 0 && frac <= LOW_HEALTH_FRACTION);
+      },
     });
     const AIM_DIR = new Vector3();
+
+    // Workstream 5.1: an F-attack costs stamina/hunger and is gated while
+    // stamina is empty; applied here (not in the domain) since it needs the
+    // live `survival` closure. Local player state only — never routed
+    // through the intent path (see the SpawnFieldDeps doc comment).
+    function applyPlayerDamage(amount: number): void {
+      const r = damagePlayer(vitals, amount);
+      vitals = r.state;
+      const frac = vitals.health / PLAYER_MAX_HEALTH;
+      survivalBar.setHealth(frac);
+      survivalBar.flashDamage();
+      feel?.setLowHealth(frac > 0 && frac <= LOW_HEALTH_FRACTION);
+      if (r.died) {
+        vitals = respawnPlayer(vitals);
+        survival = spawnSurvival();
+        if (respawnPose) ctx.hooks.setPose?.(respawnPose);
+        survivalBar.setHealth(1);
+        survivalBar.setStamina(survival.stamina);
+        survivalBar.setHunger(survival.hunger);
+        feel?.setLowHealth(false);
+        hud.applyDeathPenalty(difficultyRules(settings.settings.difficulty).deathPenalty);
+      }
+    }
 
     const spawns = attachSpawnField({
       seed: params.seed,
@@ -540,22 +601,17 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
       dom: engine.renderer.domElement,
       ...(ctx.audio ? { audio: ctx.audio } : {}),
       ...(feel ? { feel } : {}),
-      onPlayerHit: (amount) => {
-        const r = damagePlayer(vitals, amount);
-        vitals = r.state;
-        const frac = vitals.health / PLAYER_MAX_HEALTH;
-        healthBar.set(frac);
-        healthBar.flashDamage();
-        feel?.setLowHealth(frac > 0 && frac <= LOW_HEALTH_FRACTION);
-        if (r.died) {
-          vitals = respawnPlayer(vitals);
-          if (respawnPose) ctx.hooks.setPose?.(respawnPose);
-          healthBar.set(1);
-          feel?.setLowHealth(false);
-        }
-      },
+      onPlayerHit: (amount) => applyPlayerDamage(amount),
       setMoveSpeedScale: (s) => ctx.hooks.setMoveSpeedScale?.(s),
       onLoot: (stacks) => hud.addLoot(stacks),
+      canAttack: () => canAttackSurvival(survival),
+      onAttack: () => {
+        survival = drainStaminaForAttack(survival);
+        survivalBar.setStamina(survival.stamina);
+        survivalBar.setHunger(survival.hunger);
+      },
+      isNight: () => isNight(sunSky.timeOfDay),
+      creatureDamageMult: difficultyRules(settings.settings.difficulty).creatureDamage,
       ...(voxelsRef
         ? {
             save: {
@@ -571,16 +627,59 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
       (window as unknown as { __laasDbg?: Record<string, unknown> }).__laasDbg ?? {},
       { spawnField: spawns },
     );
+    // Workstream 5.1: sprint is detected observationally from frame-to-frame
+    // camera speed — FlyCamera owns the actual sprint key state and lives in
+    // src/core (engine dir, off-limits), the same constraint that deferred
+    // S1's footstep-velocity hook. WALK_SPEED*SPRINT_MULT ≈ 9.2 m/s there.
+    const SPRINT_SPEED_THRESHOLD_MPS = 6;
+    let lastPlayerX = engine.camera.position.x;
+    let lastPlayerZ = engine.camera.position.z;
     engine.onUpdate((dt) => {
       spawns.update(dt);
-      if (!respawnPose) respawnPose = ctx.hooks.getPose?.() ?? null; // spawn = respawn
+      if (!respawnPose) {
+        const p = ctx.hooks.getPose?.() ?? null;
+        if (p) captureSpawn(p); // spawn = respawn
+      }
       const before = vitals.health;
       vitals = tickVitals(vitals, dt);
       if (vitals.health !== before) {
         const frac = vitals.health / PLAYER_MAX_HEALTH;
-        healthBar.set(frac);
+        survivalBar.setHealth(frac);
         feel?.setLowHealth(frac > 0 && frac <= LOW_HEALTH_FRACTION);
       }
+
+      const nx = engine.camera.position.x;
+      const nz = engine.camera.position.z;
+      const horizSpeed = dt > 0 ? Math.hypot(nx - lastPlayerX, nz - lastPlayerZ) / dt : 0;
+      lastPlayerX = nx;
+      lastPlayerZ = nz;
+      const rules = difficultyRules(settings.settings.difficulty);
+      survival = tickSurvival(survival, dt, {
+        sprinting: horizSpeed > SPRINT_SPEED_THRESHOLD_MPS,
+        hungerRateMult: rules.hungerRate,
+      });
+      survivalBar.setStamina(survival.stamina);
+      survivalBar.setHunger(survival.hunger);
+      const starveDmg = starvationDamagePerTick(survival, dt);
+      if (starveDmg > 0) {
+        applyPlayerDamage(starveDmg);
+        feel?.trigger('starve');
+      }
+    });
+
+    // Workstream 5.3: Z sleeps through the night (a no-op by day — no bed
+    // exists yet, Workstream 7); sets the spawn point at the player's
+    // current position, same convention as sleeping in most survival games.
+    window.addEventListener('keydown', (e) => {
+      if (e.code !== 'KeyZ' || !isNight(sunSky.timeOfDay)) return;
+      void (async () => {
+        await screenEffectsRef?.sleepFadeOut();
+        const pose = ctx.hooks.getPose?.();
+        if (pose) captureSpawn(pose);
+        ctx.hooks.setTimeOfDay?.(MORNING_HOUR);
+        ctx.audio?.play('sleep');
+        await screenEffectsRef?.sleepFadeIn();
+      })();
     });
     engine.onUpdate(() => {
       const placing = placementRef?.isBuildMode() ?? false;
