@@ -28,4 +28,51 @@ describe("VitalsCluster", () => {
     cluster.snap("health");
     expect(cluster.isAnyCritical()).toBe(true);
   });
+
+  // E2.1: bars/orbs layout
+  it("defaults to bars layout with every bar shaped 'bar'", () => {
+    const cluster = VitalsCluster([HEALTH, STAMINA]);
+    expect(cluster.el.dataset.layout).toBe("bars");
+    for (const bar of cluster.el.querySelectorAll<HTMLElement>(".lw-bar")) {
+      expect(bar.dataset.shape).toBe("bar");
+    }
+  });
+
+  it("layout: orbs shapes every spec without its own override as 'orb'", () => {
+    const cluster = VitalsCluster([HEALTH, STAMINA], { layout: "orbs" });
+    expect(cluster.el.dataset.layout).toBe("orbs");
+    const health = cluster.el.querySelector<HTMLElement>("#lw-vital-health");
+    const stamina = cluster.el.querySelector<HTMLElement>("#lw-vital-stamina");
+    expect(health?.dataset.shape).toBe("orb");
+    expect(stamina?.dataset.shape).toBe("orb");
+  });
+
+  it("a spec's own shape overrides the cluster's orbs default (e.g. hunger stays a bar)", () => {
+    const HUNGER = { ...STAMINA, id: "hunger", shape: "bar" as const };
+    const cluster = VitalsCluster([HEALTH, HUNGER], { layout: "orbs" });
+    expect(cluster.el.querySelector<HTMLElement>("#lw-vital-health")?.dataset.shape).toBe("orb");
+    expect(cluster.el.querySelector<HTMLElement>("#lw-vital-hunger")?.dataset.shape).toBe("bar");
+  });
+
+  it("without a portrait option, no portrait badge is rendered", () => {
+    const cluster = VitalsCluster([HEALTH, STAMINA], { layout: "orbs" });
+    expect(cluster.el.querySelector(".lw-orb-portrait")).toBeNull();
+  });
+
+  it("renders and updates the level-portrait badge", () => {
+    const cluster = VitalsCluster([HEALTH, STAMINA], {
+      layout: "orbs",
+      portrait: { level: 3, ariaLabel: "Level 3" },
+    });
+    const badge = cluster.el.querySelector<HTMLElement>(".lw-orb-portrait");
+    expect(badge?.textContent).toBe("3");
+    expect(badge?.getAttribute("aria-label")).toBe("Level 3");
+    cluster.setLevel(4);
+    expect(badge?.textContent).toBe("4");
+  });
+
+  it("setLevel is a safe no-op with no portrait configured", () => {
+    const cluster = VitalsCluster([HEALTH, STAMINA]);
+    expect(() => cluster.setLevel(5)).not.toThrow();
+  });
 });

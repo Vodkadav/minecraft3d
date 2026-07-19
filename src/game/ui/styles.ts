@@ -145,6 +145,66 @@ ${THEME_CSS_VARS}
   pointer-events: none;
 }
 
+/* E2.1: Diablo-style corner orbs + level portrait. Procedural CSS only (no
+   binary assets) — circles via border-radius, vertical fill via scaleY on
+   the same .lw-bar-fill element the bar layout already uses. Health orb at
+   the left edge, energy/"focus" orb at the right, portrait centered between
+   them; data-layout="bars" (the default) keeps today's centered stack and
+   hides the portrait entirely. */
+.lw-vitals-cluster[data-layout="orbs"] {
+  left: 0;
+  right: 0;
+  bottom: var(--lw-space-4);
+  transform: none;
+  flex-direction: row;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0;
+  padding: 0 var(--lw-space-6);
+}
+.lw-bar[data-shape="orb"] {
+  width: 84px;
+  height: 84px;
+  border-radius: 50%;
+  border-width: 3px;
+  flex: none;
+}
+.lw-bar[data-shape="orb"] .lw-bar-fill {
+  transform-origin: bottom;
+}
+.lw-bar[data-shape="orb"] .lw-bar-label {
+  flex-direction: column;
+  text-align: center;
+}
+.lw-vitals-cluster[data-layout="orbs"] #lw-vital-health { order: 1; }
+.lw-vitals-cluster[data-layout="orbs"] #lw-vital-stamina { order: 3; }
+.lw-vitals-cluster[data-layout="orbs"] #lw-vital-hunger {
+  order: 2;
+  align-self: center;
+  width: 120px;
+  height: 12px;
+  margin-bottom: var(--lw-space-6);
+}
+.lw-orb-portrait {
+  display: none;
+  order: 2;
+  align-self: flex-end;
+  margin-bottom: var(--lw-space-2);
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  align-items: center;
+  justify-content: center;
+  background: var(--lw-bg-panel);
+  color: var(--lw-fg);
+  border: 3px solid var(--lw-accent);
+  font-size: var(--lw-font-md);
+  font-weight: 700;
+}
+.lw-vitals-cluster[data-layout="orbs"] .lw-orb-portrait {
+  display: flex;
+}
+
 /* Hotbar */
 .lw-hotbar {
   position: fixed;

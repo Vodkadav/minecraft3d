@@ -24,6 +24,7 @@ function validInput(overrides: Partial<SettingsInput> = {}): SettingsInput {
     ambientVolume: 0.6,
     difficulty: "normal",
     dayLengthSeconds: DEFAULT_DAY_LENGTH_SECONDS,
+    hudStyle: "bars",
     ...overrides,
   };
 }
@@ -162,6 +163,29 @@ describe("Settings", () => {
     const r = updateSettings(defaultSettings(), { dayLengthSeconds: 600 });
     expect(isOk(r)).toBe(true);
     if (isOk(r)) expect(r.value.dayLengthSeconds).toBe(600);
+  });
+
+  // E2.1
+  it("accepts every declared hud style", () => {
+    for (const hudStyle of ["bars", "orbs"] as const) {
+      expect(isOk(makeSettings(validInput({ hudStyle })))).toBe(true);
+    }
+  });
+
+  it("rejects an unknown hud style", () => {
+    const r = makeSettings(validInput({ hudStyle: "wheel" as never }));
+    expect(isErr(r)).toBe(true);
+    if (isErr(r)) expect(r.error.kind).toBe("UnknownHudStyle");
+  });
+
+  it("defaults to the bars hud style (no-flags boot stays pixel-identical)", () => {
+    expect(defaultSettings().hudStyle).toBe("bars");
+  });
+
+  it("updates hudStyle while keeping the rest", () => {
+    const r = updateSettings(defaultSettings(), { hudStyle: "orbs" });
+    expect(isOk(r)).toBe(true);
+    if (isOk(r)) expect(r.value.hudStyle).toBe("orbs");
   });
 
   it("updates a single bus volume while keeping the rest", () => {

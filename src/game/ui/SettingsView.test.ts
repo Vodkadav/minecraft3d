@@ -51,6 +51,7 @@ describe("SettingsView", () => {
       "laas-vol-ambient",
       "laas-difficulty",
       "laas-daylength",
+      "laas-hudstyle",
     ]) {
       const label = el.querySelector(`label[for="${id}"]`);
       expect(label, `label for ${id}`).toBeTruthy();
@@ -107,6 +108,19 @@ describe("SettingsView", () => {
     expect(controller.settings.dayLengthSeconds).toBe(600);
     const reloaded = await store.load();
     if (isOk(reloaded)) expect(reloaded.value.dayLengthSeconds).toBe(600);
+  });
+
+  it("defaults the HUD style select to bars and flows a change through the controller and store", async () => {
+    const { el, controller, store } = await build();
+    const select = control<HTMLSelectElement>(el, "laas-hudstyle");
+    expect([...select.options].map((o) => o.value)).toEqual(["bars", "orbs"]);
+    expect(select.value).toBe("bars");
+    select.value = "orbs";
+    select.dispatchEvent(new Event("change"));
+    await flush();
+    expect(controller.settings.hudStyle).toBe("orbs");
+    const reloaded = await store.load();
+    if (isOk(reloaded)) expect(reloaded.value.hudStyle).toBe("orbs");
   });
 
   it("flows a music-volume change through the controller and store", async () => {
