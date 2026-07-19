@@ -959,6 +959,104 @@ ${THEME_CSS_VARS}
   animation-duration: 0.001ms !important;
   transition-duration: 0.001ms !important;
 }
+
+/* Minimap (Phase E3.2) */
+.lw-minimap {
+  position: fixed;
+  top: var(--lw-space-4);
+  left: var(--lw-space-4);
+  width: 160px;
+  height: 160px;
+  border-radius: var(--lw-radius-lg);
+  border: 2px solid var(--lw-border);
+  background: var(--lw-bg-track);
+  overflow: hidden;
+  z-index: 20;
+}
+.lw-minimap[data-mobile="true"] {
+  width: 96px;
+  height: 96px;
+}
+.lw-minimap-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.lw-minimap-icons {
+  position: absolute;
+  inset: 0;
+}
+.lw-map-icon {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  margin-left: -5px;
+  margin-top: -5px;
+  border-radius: var(--lw-radius-pill);
+  border: 1px solid rgba(0, 0, 0, 0.6);
+}
+.lw-map-icon[data-kind="player"] {
+  background: var(--lw-accent);
+  width: 12px;
+  height: 12px;
+  margin-left: -6px;
+  margin-top: -6px;
+  border-radius: 2px;
+}
+.lw-map-icon[data-kind="creature"] { background: var(--lw-danger); }
+.lw-map-icon[data-kind="peer"] { background: var(--lw-accent-hover); }
+.lw-map-icon[data-kind="resourceNode"] { background: var(--lw-success); }
+.lw-map-icon[data-kind="groundLoot"] { background: var(--lw-warning); }
+.lw-map-icon[data-kind="poi"] { background: var(--lw-focus); }
+.lw-map-icon[data-kind="waypoint"] {
+  background: var(--lw-fg);
+  border-radius: 2px;
+  transform: rotate(45deg);
+}
+
+/* Full map overlay (Phase E3.3) */
+.lw-map-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.55);
+  z-index: 60;
+}
+.lw-map-overlay-panel {
+  width: min(900px, 94vw);
+  height: min(700px, 88vh);
+  display: flex;
+  flex-direction: column;
+}
+.lw-map-canvas-wrap {
+  position: relative;
+  flex: 1;
+  border-radius: var(--lw-radius-md);
+  border: 1px solid var(--lw-border);
+  background: var(--lw-bg-track);
+  overflow: hidden;
+  cursor: grab;
+  touch-action: none;
+}
+.lw-map-canvas-wrap:active { cursor: grabbing; }
+.lw-map-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.lw-map-icons {
+  position: absolute;
+  inset: 0;
+}
+.lw-map-hint {
+  font-size: var(--lw-font-xs);
+  color: var(--lw-fg-muted);
+  margin-top: var(--lw-space-2);
+}
 `;
 
 export function injectStyles(doc: Document): void {

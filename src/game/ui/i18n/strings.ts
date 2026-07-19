@@ -342,6 +342,15 @@ export const UI_STRINGS: Catalog = {
     "talent.luckyFinds.name": "Lucky Finds",
     "talent.luckyFinds.desc": "Better loot from everything you gather or defeat.",
 
+    "map.title": "Map",
+    "map.open.aria": "Open the full map",
+    "map.close": "Close",
+    "map.close.aria": "Close the map",
+    "map.recenter": "Recenter",
+    "map.recenter.aria": "Recenter the map on your position",
+    "map.hint": "Drag to pan, scroll to zoom, click to place a waypoint. Arrow keys pan, +/- zoom.",
+    "map.waypoint.set": "Waypoint set",
+
     "loading.tip.1": "Press E to harvest a node or gather from a plant.",
     "loading.tip.2": "Open the crafting screen with I to see what you can build.",
     "loading.tip.3": "Feed a wild animal with T to start taming it.",
@@ -689,6 +698,15 @@ export const UI_STRINGS: Catalog = {
     "talent.luckyFinds.name": "Hallazgos Afortunados",
     "talent.luckyFinds.desc": "Mejor botín de todo lo que recolectas o derrotas.",
 
+    "map.title": "Mapa",
+    "map.open.aria": "Abrir el mapa completo",
+    "map.close": "Cerrar",
+    "map.close.aria": "Cerrar el mapa",
+    "map.recenter": "Recentrar",
+    "map.recenter.aria": "Recentrar el mapa en tu posición",
+    "map.hint": "Arrastra para desplazar, desplázate para hacer zoom, haz clic para colocar un punto de ruta. Las flechas desplazan, +/- hacen zoom.",
+    "map.waypoint.set": "Punto de ruta establecido",
+
     "loading.tip.1": "Pulsa E para recolectar un nodo o una planta.",
     "loading.tip.2": "Abre la pantalla de fabricación con I para ver qué puedes construir.",
     "loading.tip.3": "Alimenta a un animal salvaje con T para empezar a domarlo.",
@@ -1035,6 +1053,15 @@ export const UI_STRINGS: Catalog = {
     "talent.deepBreath.desc": "Lidt ekstra maks. energi.",
     "talent.luckyFinds.name": "Heldige Fund",
     "talent.luckyFinds.desc": "Bedre bytte fra alt, du indsamler eller besejrer.",
+
+    "map.title": "Kort",
+    "map.open.aria": "Åbn det fulde kort",
+    "map.close": "Luk",
+    "map.close.aria": "Luk kortet",
+    "map.recenter": "Centrer igen",
+    "map.recenter.aria": "Centrer kortet på din position",
+    "map.hint": "Træk for at panorere, rul for at zoome, klik for at placere et waypoint. Piletaster panorerer, +/- zoomer.",
+    "map.waypoint.set": "Waypoint sat",
 
     "loading.tip.1": "Tryk E for at høste en ressource eller en plante.",
     "loading.tip.2": "Åbn håndværksskærmen med I for at se, hvad du kan bygge.",

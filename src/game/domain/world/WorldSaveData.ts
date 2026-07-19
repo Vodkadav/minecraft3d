@@ -54,6 +54,12 @@ export interface WorldSaveData {
    *  tests, `createNewWorldSave`) keeps compiling and loading unchanged;
    *  `CharacterPersistence` treats an absent record as "no character yet". */
   readonly character?: Readonly<Record<string, unknown>>;
+  /** Per-owner discovered-map-cell blobs (Phase E3.1) — same optional
+   *  open-record shape as `.character`, so every save literal written before
+   *  this field existed keeps compiling and loading unchanged;
+   *  `ExplorationPersistence` treats an absent record as "nothing explored
+   *  yet" rather than corrupt data. */
+  readonly exploration?: Readonly<Record<string, unknown>>;
 }
 
 /** Lightweight index entry for the world-list / lobby, without the chunk blobs. */

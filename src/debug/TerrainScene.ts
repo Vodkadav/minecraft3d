@@ -101,7 +101,12 @@ import { SettingsController } from '../game/application/SettingsController';
 import { GameStatePersistence } from '../game/application/GameStatePersistence';
 import { InventoryPersistence } from '../game/application/InventoryPersistence';
 import { ProgressionPersistence } from '../game/application/ProgressionPersistence';
+import { ExplorationPersistence, loadExplorationOrEmpty } from '../game/application/ExplorationPersistence';
 import type { WorldSaveStore } from '../game/application/ports/WorldSaveStore';
+import { emptyExploration, revealAround } from '../game/domain/map/Exploration';
+import { mergeMarkers, type MapMarker } from '../game/domain/map/MinimapModel';
+import { mountMapScreen } from '../game/ui/MapScreen';
+import { mountMinimapView } from '../spawn/MinimapView';
 import { createPlayerSurvivalBar } from '../spawn/PlayerSurvivalBar';
 import { IndexedDbKeyValueStore } from '../game/infrastructure/persistence/IndexedDbKeyValueStore';
 import { OpfsBlobStore } from '../game/infrastructure/persistence/OpfsBlobStore';
@@ -686,6 +691,18 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
       ? await gameStatePersistence.load(worldIdForSave, 'local')
       : null;
 
+    // E3.1: discovered-map-cell persistence — same optional-record pattern
+    // as inventory/progression/character above; a dedicated seam (not folded
+    // into GameStatePersistence) mirrors how WorldClockPersistence stays
+    // standalone, since it saves on the same pagehide/visibilitychange
+    // triggers rather than GameStatePersistence's own save() call.
+    const explorationPersistence = saveStoreForPersistence
+      ? new ExplorationPersistence(saveStoreForPersistence)
+      : null;
+    let exploration = explorationPersistence
+      ? await loadExplorationOrEmpty(explorationPersistence, worldIdForSave, 'local')
+      : emptyExploration();
+
     const hud = mountGameHud({
       loc,
       registry: itemsReg.value,
@@ -746,6 +763,9 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
       const saveGameState = (): void => {
         void gameStatePersistence.save(worldIdForSave, 'local', hud.inventory, hud.progression, hud.keyhints);
         void characterPersistence?.save(worldIdForSave, 'local', hud.character);
+        if (explorationPersistence) {
+          void explorationPersistence.save(worldIdForSave, 'local', exploration);
+        }
       };
       window.addEventListener('pagehide', saveGameState);
       document.addEventListener('visibilitychange', () => {
@@ -941,6 +961,46 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
         applyPlayerDamage(starveDmg);
         feel?.trigger('starve');
       }
+    });
+
+    // Phase E3.1-E3.3: minimap + full map. Markers merge whatever live
+    // sources exist today (creatures, resource nodes) via the pluggable
+    // MarkerSource array — wiring a future source (e.g. E0.5 ground loot)
+    // is one more entry here, no change to MinimapModel/MapScreen.
+    function liveMarkers(): readonly MapMarker[] {
+      return mergeMarkers([() => spawns.liveMarkers()]);
+    }
+    const minimap = mountMinimapView({
+      heightAt: (x, z) => hf.heightAtCpu(x, z),
+      mobile: settings.settings.graphicsPreset === 'mobile',
+    });
+    const mapScreen = mountMapScreen({
+      loc,
+      getSnapshot: () => ({
+        player: {
+          x: engine.camera.position.x,
+          z: engine.camera.position.z,
+          yawRadians: ctx.hooks.getPose?.()?.yaw ?? 0,
+        },
+        exploration,
+        markers: liveMarkers(),
+      }),
+      setInputEnabled: (on) => ctx.hooks.flyCamEnabled?.(on),
+    });
+    const MINIMAP_UPDATE_INTERVAL_S = 0.2;
+    let sinceMinimapUpdate = 0;
+    engine.onUpdate((dt) => {
+      const px = engine.camera.position.x;
+      const pz = engine.camera.position.z;
+      exploration = revealAround(exploration, px, pz);
+      sinceMinimapUpdate += dt;
+      if (sinceMinimapUpdate < MINIMAP_UPDATE_INTERVAL_S) return;
+      sinceMinimapUpdate = 0;
+      minimap.update(
+        { x: px, z: pz, yawRadians: ctx.hooks.getPose?.()?.yaw ?? 0 },
+        liveMarkers(),
+      );
+      mapScreen.refresh();
     });
 
     // Workstream 5.3: Z sleeps through the night (a no-op by day — no bed
