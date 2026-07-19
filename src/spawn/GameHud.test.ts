@@ -327,4 +327,49 @@ describe("mountGameHud", () => {
     expect(onCharacterChange).toHaveBeenCalledWith(hud.character);
     hud.dispose();
   });
+
+  it("starts with an empty bank and exposes it via the bank getter", () => {
+    const hud = mountGameHud({ loc: createLocalizer("en"), registry: registry() });
+    expect(hud.bank.tab("shared").totalCount()).toBe(0);
+    hud.dispose();
+  });
+
+  it("the mouse-only bank-open button and the K key both toggle the bank overlay", () => {
+    const hud = mountGameHud({ loc: createLocalizer("en"), registry: registry() });
+    const bankButton = document.querySelector<HTMLButtonElement>(".lw-bank-open-button");
+    expect(bankButton).toBeTruthy();
+    bankButton?.click();
+    expect(document.querySelector('[aria-label="Bank"]')?.hasAttribute("hidden")).toBe(false);
+    bankButton?.click();
+    expect(document.querySelector('[aria-label="Bank"]')?.hasAttribute("hidden")).toBe(true);
+
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "k", bubbles: true }));
+    expect(document.querySelector('[aria-label="Bank"]')?.hasAttribute("hidden")).toBe(false);
+    hud.dispose();
+  });
+
+  it("depositing into the bank overlay updates hud.bank and does not disturb the I-key inventory binding", () => {
+    const hud = mountGameHud({ loc: createLocalizer("en"), registry: registry() });
+    hud.addLoot([{ itemId: "wood", count: 4 }]);
+
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "k", bubbles: true }));
+    const bankOverlay = document.querySelector('[aria-label="Bank"]') as HTMLElement;
+    const grids = bankOverlay.querySelectorAll(".lw-inv-grid");
+    const playerSlot = grids[0].querySelector('[role="gridcell"]') as HTMLElement;
+    const bankSlot = grids[1].querySelector('[role="gridcell"]') as HTMLElement;
+    playerSlot.dispatchEvent(
+      Object.assign(new Event("dragstart", { bubbles: true, cancelable: true }), {
+        dataTransfer: { setData: () => {}, getData: () => {} },
+      }),
+    );
+    bankSlot.dispatchEvent(new Event("drop", { bubbles: true, cancelable: true }));
+
+    expect(hud.bank.tab("shared").count("wood")).toBe(4);
+    expect(hud.inventory.count("wood")).toBe(0);
+
+    // The I key still opens the (distinct) inventory overlay unaffected.
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "i", bubbles: true }));
+    expect(document.querySelector(".lw-inv-overlay")?.hasAttribute("hidden")).toBe(false);
+    hud.dispose();
+  });
 });

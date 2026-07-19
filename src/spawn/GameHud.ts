@@ -17,6 +17,15 @@
  * (the composition root owns hunger/health state, this is a thin hook).
  * Workstream 5.3: `applyDeathPenalty` drops slots per the configured rule.
  *
+ * Phase E4.4: also mounts the account `BankScreen` (`K` toggles it, mirroring
+ * `InventoryScreen`'s `I`), a mouse-accessible open button beside the
+ * inventory one. Bank state lives in-memory here exactly like `inventory`
+ * did before S7b's persistence wiring landed — `initialBank`/`onBankChange`
+ * are the seam a future composition-root change threads `BankPersistence`
+ * through (deferred this slice, same precedent as E1.5's un-wired
+ * `CharacterScreen`). SINGLE-PLAYER/HOST-LOCAL ONLY per the E0.4 security
+ * caveat — no networked deposit/withdraw path exists yet.
+ *
  * Workstream 6: this HUD owns the session's `ProgressionState`/`KeyhintState`
  * the same way it owns `inventory` — in-memory only; `ProgressionPersistence`
  * is a tested, not-yet-wired seam (mirrors S4's un-wired `InventoryPersistence`).
@@ -68,6 +77,7 @@ import type { DeathPenalty } from "../game/domain/survival/Respawn";
 import { dropOnDeath } from "../game/domain/survival/Respawn";
 import { HOTBAR_SIZE } from "../game/domain/ui/HotbarSelection";
 import type { CrosshairState } from "../game/domain/ui/CrosshairState";
+import { Bank, type BankOptions } from "../game/domain/storage/Bank";
 import type { AudioPort } from "../game/application/ports/AudioPort";
 import type { FeelPort } from "../game/application/ports/FeelPort";
 import type { Localizer } from "../game/application/i18n/Localizer";
@@ -81,8 +91,11 @@ import { ObjectiveTracker } from "../game/ui/components/ObjectiveTracker";
 import { createToastHost } from "../game/ui/components/Toast";
 import { mountCharacterScreen } from "../game/ui/CharacterScreen";
 import { mountInventoryScreen } from "../game/ui/InventoryScreen";
+import { mountBankScreen } from "../game/ui/BankScreen";
 
 const INVENTORY_CAPACITY = 27;
+export const DEFAULT_BANK_OPTIONS: BankOptions = { sharedCapacity: 45, tabCapacity: 27 };
+const DEFAULT_CHARACTER_ID = "player";
 const LOOT_TOAST_TTL_MS = 3500;
 const OBJECTIVE_TOAST_TTL_MS = 4500;
 const KEYHINT_TTL_MS = 4000;
@@ -123,6 +136,16 @@ export interface GameHudOptions {
    *  localStorage-backed store (the `LocalStorageSettingsStore` sibling
    *  pattern); tests/loopback callers inject an in-memory fake. */
   readonly filterStore?: ItemFilterStore;
+  /** Phase E4.4: seeds the bank overlay from a prior save (`BankPersistence`)
+   *  once the composition root wires it — undefined starts an empty bank. */
+  readonly initialBank?: Bank;
+  readonly bankOptions?: BankOptions;
+  /** Whose private bank tab this session's "Character" tab shows; defaults
+   *  to the single-player owner id used elsewhere in this HUD. */
+  readonly characterId?: string;
+  /** Fired after any successful bank deposit/withdraw/move — the composition
+   *  root persists the resulting bank via `BankPersistence` (not yet wired). */
+  onBankChange?(next: Bank): void;
 }
 
 export interface GameHudHandle {
@@ -158,6 +181,7 @@ export interface GameHudHandle {
   readonly progression: ProgressionState;
   readonly keyhints: KeyhintState;
   readonly character: CharacterState;
+  readonly bank: Bank;
   dispose(): void;
 }
 
@@ -172,6 +196,7 @@ export function mountGameHud(opts: GameHudOptions): GameHudHandle {
 
   const filterStore = opts.filterStore ?? new LocalStorageItemFilterStore();
   let filterRules: readonly FilterRule[] = defaultFilterRules();
+  let bank = opts.initialBank ?? Bank.empty(registry, opts.bankOptions ?? DEFAULT_BANK_OPTIONS);
 
   const hotbar = Hotbar({
     registry,
@@ -261,6 +286,34 @@ export function mountGameHud(opts: GameHudOptions): GameHudHandle {
   characterButton.classList.add("lw-character-open-button");
   doc.body.appendChild(characterButton);
 
+  const bankScreen = mountBankScreen({
+    loc,
+    registry,
+    characterId: opts.characterId ?? DEFAULT_CHARACTER_ID,
+    ...(opts.setInputEnabled ? { setInputEnabled: opts.setInputEnabled } : {}),
+    doc,
+    onChange: (nextPlayer, nextBank) => {
+      inventory = nextPlayer;
+      bank = nextBank;
+      hotbar.render(inventory);
+      inventoryScreen.setInventory(inventory);
+      opts.onBankChange?.(bank);
+    },
+  });
+
+  // Mouse-only access to the bank overlay, mirroring the inventory button —
+  // `K` is the keyboard shortcut (BankScreen owns that binding internally).
+  const bankButton = Button({
+    label: loc.t("bank.title"),
+    ariaLabel: loc.t("bank.open.aria"),
+    variant: "quiet",
+    onClick: () => bankScreen.toggle(),
+  });
+  bankButton.classList.add("lw-inv-open-button", "lw-bank-open-button");
+  doc.body.appendChild(bankButton);
+  bankScreen.setPlayerInventory(inventory);
+  bankScreen.setBank(bank);
+
   function renderTracker(): void {
     const excluded = progression.tutorialSkipped ? TUTORIAL_EXCLUDE : undefined;
     const objective = currentObjective(progression, TUTORIAL_OBJECTIVES, excluded);
@@ -325,6 +378,7 @@ export function mountGameHud(opts: GameHudOptions): GameHudHandle {
     inventory = removed.value;
     hotbar.render(inventory);
     inventoryScreen.setInventory(inventory);
+    bankScreen.setPlayerInventory(inventory);
     opts.audio?.play("eat");
     opts.feel?.trigger("eat");
     toasts.push("hud.toast.ate", { name: def.value.displayName }, LOOT_TOAST_TTL_MS);
@@ -370,6 +424,7 @@ export function mountGameHud(opts: GameHudOptions): GameHudHandle {
       }
       hotbar.render(inventory);
       inventoryScreen.setInventory(inventory);
+      bankScreen.setPlayerInventory(inventory);
       if (gainedFood) showKeyhint("eat", "H");
     },
     setCrosshairState(state: CrosshairState): void {
@@ -384,6 +439,7 @@ export function mountGameHud(opts: GameHudOptions): GameHudHandle {
       inventory = rebuilt.value;
       hotbar.render(inventory);
       inventoryScreen.setInventory(inventory);
+      bankScreen.setPlayerInventory(inventory);
     },
     recordProgress,
     maybeShowTameHint(): void {
@@ -399,9 +455,13 @@ export function mountGameHud(opts: GameHudOptions): GameHudHandle {
       inventory = next;
       hotbar.render(inventory);
       inventoryScreen.setInventory(inventory);
+      bankScreen.setPlayerInventory(inventory);
     },
     selectedHotbarItemId(): string | null {
       return inventory.slots[hotbar.selected]?.itemId ?? null;
+    },
+    get bank() {
+      return bank;
     },
     dispose(): void {
       (doc.defaultView ?? window).removeEventListener("keydown", onEatKeyDown);
@@ -412,6 +472,8 @@ export function mountGameHud(opts: GameHudOptions): GameHudHandle {
       inventoryButton.remove();
       characterScreen.dispose();
       characterButton.remove();
+      bankScreen.dispose();
+      bankButton.remove();
       const win = doc.defaultView ?? window;
       for (const timer of activeKeyhintTimers) win.clearTimeout(timer);
       activeKeyhintTimers.clear();

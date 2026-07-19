@@ -39,7 +39,10 @@ import {
 } from '../voxel/placement/PlaceableInteractionTool';
 import { attachTreasureField } from '../voxel/treasure/TreasureField';
 import { attachSpawnField } from '../spawn/SpawnFieldView';
-import { mountGameHud } from '../spawn/GameHud';
+import { DEFAULT_BANK_OPTIONS, mountGameHud } from '../spawn/GameHud';
+import { BankPersistence } from '../game/application/BankPersistence';
+import { IndexedDbAccountStore } from '../game/infrastructure/persistence/IndexedDbAccountStore';
+import type { Bank } from '../game/domain/storage/Bank';
 import { mountNameplateView } from '../spawn/NameplateView';
 import { stepCameraShake } from '../feel/CameraShake';
 import { mountDamageNumbers } from '../feel/DamageNumbers';
@@ -659,6 +662,20 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
     // into the boot/save flow (closes the S4/S6 deferral). Only when there's a
     // real save store — dev/tooling boots with no OPFS support skip persistence
     // exactly like the voxel subsystem already does above.
+    // E4.4: the account bank persists across worlds/characters via its own
+    // account-scoped store (separate DB from the per-world save) — loaded
+    // here so the HUD's bank overlay seeds from the real account, saved on
+    // every bank change (rare, user-driven).
+    const bankPersistence =
+      typeof indexedDB !== 'undefined'
+        ? new BankPersistence(new IndexedDbAccountStore(), itemsReg.value, DEFAULT_BANK_OPTIONS)
+        : null;
+    let initialBank: Bank | null = null;
+    if (bankPersistence) {
+      const loadedBank = await bankPersistence.load();
+      if (isOk(loadedBank)) initialBank = loadedBank.value;
+    }
+
     const gameStatePersistence = saveStoreForPersistence
       ? new GameStatePersistence({
           inventoryPersistence: new InventoryPersistence(saveStoreForPersistence, itemsReg.value),
@@ -680,6 +697,10 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
       ...(loadedGameState?.inventory ? { initialInventory: loadedGameState.inventory } : {}),
       ...(loadedGameState?.progression ? { initialProgression: loadedGameState.progression } : {}),
       ...(loadedGameState?.keyhints ? { initialKeyhints: loadedGameState.keyhints } : {}),
+      ...(initialBank ? { initialBank } : {}),
+      onBankChange: (next) => {
+        void bankPersistence?.save(next);
+      },
       initialCharacter: character,
       onCharacterChange: (next) => {
         // E1.4b: multipliers apply live — a stat spend mid-session changes
