@@ -48,6 +48,7 @@ import type { ProgressionEventId } from "../game/domain/progression/ProgressionE
 import { STARTER_RECIPES } from "../game/domain/crafting/starterRecipes";
 import type { Recipe } from "../game/domain/crafting/Crafting";
 import { Inventory, type ItemStack } from "../game/domain/inventory/Inventory";
+import { defaultFilterRules, type FilterRule } from "../game/domain/inventory/ItemFilter";
 import type { ItemRegistry } from "../game/domain/items/ItemRegistry";
 import type { FoodMetadata } from "../game/domain/items/ItemDefinition";
 import type { DeathPenalty } from "../game/domain/survival/Respawn";
@@ -57,6 +58,8 @@ import type { CrosshairState } from "../game/domain/ui/CrosshairState";
 import type { AudioPort } from "../game/application/ports/AudioPort";
 import type { FeelPort } from "../game/application/ports/FeelPort";
 import type { Localizer } from "../game/application/i18n/Localizer";
+import type { ItemFilterStore } from "../game/application/ports/ItemFilterStore";
+import { LocalStorageItemFilterStore } from "../game/infrastructure/persistence/LocalStorageItemFilterStore";
 import { Button } from "../game/ui/components/Button";
 import { Crosshair, type CrosshairHandle } from "../game/ui/components/Crosshair";
 import { Hotbar } from "../game/ui/components/Hotbar";
@@ -94,6 +97,10 @@ export interface GameHudOptions {
   readonly initialInventory?: Inventory;
   readonly initialProgression?: ProgressionState;
   readonly initialKeyhints?: KeyhintState;
+  /** Item-filter rule persistence (Workstream E4.2) — defaults to a
+   *  localStorage-backed store (the `LocalStorageSettingsStore` sibling
+   *  pattern); tests/loopback callers inject an in-memory fake. */
+  readonly filterStore?: ItemFilterStore;
 }
 
 export interface GameHudHandle {
@@ -139,6 +146,9 @@ export function mountGameHud(opts: GameHudOptions): GameHudHandle {
   let progression = opts.initialProgression ?? emptyProgression();
   let keyhints = opts.initialKeyhints ?? emptyKeyhintState();
 
+  const filterStore = opts.filterStore ?? new LocalStorageItemFilterStore();
+  let filterRules: readonly FilterRule[] = defaultFilterRules();
+
   const hotbar = Hotbar({
     registry,
     ariaLabel: loc.t("hud.hotbar"),
@@ -169,6 +179,11 @@ export function mountGameHud(opts: GameHudOptions): GameHudHandle {
     recipes: opts.recipes ?? STARTER_RECIPES,
     unlockedTier: unlockedTierFor(progression.completedObjectives, TUTORIAL_OBJECTIVES),
     achievements: ACHIEVEMENTS,
+    filterRules,
+    onFilterRulesChange: (next) => {
+      filterRules = next;
+      void filterStore.save(filterRules);
+    },
     ...(opts.audio ? { audio: opts.audio } : {}),
     ...(opts.setInputEnabled ? { setInputEnabled: opts.setInputEnabled } : {}),
     doc,
@@ -177,6 +192,15 @@ export function mountGameHud(opts: GameHudOptions): GameHudHandle {
       hotbar.render(inventory);
     },
     onCraft: () => recordProgress("craft"),
+  });
+
+  // Best-effort async load (mirrors composeGameUi's settings.load()) — the
+  // screen already renders with the domain default rules, so a slow/failed
+  // load just means a brief moment before the player's saved rules apply.
+  void filterStore.load().then((r) => {
+    if (!r.ok) return;
+    filterRules = r.value;
+    inventoryScreen.setFilterRules(filterRules);
   });
 
   // Mouse-only access to the inventory/crafting/achievements overlay (Pillar

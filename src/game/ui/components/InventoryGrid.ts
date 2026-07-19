@@ -22,6 +22,7 @@
  */
 
 import { isOk } from "../../domain/Result";
+import { evaluateItemId, type FilterRule } from "../../domain/inventory/ItemFilter";
 import { Inventory, type InventoryError } from "../../domain/inventory/Inventory";
 import { quickMove } from "../../domain/inventory/QuickMove";
 import type { ItemRegistry } from "../../domain/items/ItemRegistry";
@@ -61,12 +62,19 @@ export interface InventoryGridOptions {
    *  the composition root applies the transfer (unused until a second grid
    *  exists, e.g. a storage chest). */
   onExternalDrop?(sourceGridId: string, sourceIndex: number, targetIndex: number): void;
+  /** Item-filter rules (Workstream E4.2) applied to every rendered slot as a
+   *  `data-filter-action` attribute ("highlight"/"dim"/"hide"); omitted or
+   *  empty renders every slot normally. */
+  readonly filterRules?: readonly FilterRule[];
   readonly doc?: Document;
 }
 
 export interface InventoryGridHandle {
   readonly el: HTMLElement;
   render(inventory: Inventory): void;
+  /** Live rule update (e.g. the filter editor tab changing a rule) — no
+   *  remount required. */
+  setFilterRules(rules: readonly FilterRule[]): void;
   dispose(): void;
 }
 
@@ -85,6 +93,7 @@ export function InventoryGrid(opts: InventoryGridOptions): InventoryGridHandle {
 
   let inventory = Inventory.empty(opts.registry, 0);
   let ui: GridUiState = initialGridState(0);
+  let filterRules: readonly FilterRule[] = opts.filterRules ?? [];
   const slotEls: HTMLDivElement[] = [];
   const tooltips: TooltipHandle[] = [];
 
@@ -161,6 +170,7 @@ export function InventoryGrid(opts: InventoryGridOptions): InventoryGridHandle {
       if (!slot) {
         if (nameEl) nameEl.textContent = "";
         if (countEl) countEl.textContent = "";
+        cell.removeAttribute("data-filter-action");
         cell.setAttribute(
           "aria-label",
           opts.loc.t("inventory.slot.aria.empty", { n: index + 1 }),
@@ -168,6 +178,9 @@ export function InventoryGrid(opts: InventoryGridOptions): InventoryGridHandle {
         cell.removeAttribute("aria-describedby");
         return;
       }
+      const filterAction = evaluateItemId(opts.registry, filterRules, slot.itemId);
+      if (filterAction) cell.dataset.filterAction = filterAction;
+      else cell.removeAttribute("data-filter-action");
       const displayName = nameFor(slot.itemId);
       if (nameEl) nameEl.textContent = displayName;
       if (countEl) countEl.textContent = slot.count > 1 ? String(slot.count) : "";
@@ -281,6 +294,10 @@ export function InventoryGrid(opts: InventoryGridOptions): InventoryGridHandle {
     render(next: Inventory): void {
       inventory = next;
       if (ui.cursor >= inventory.capacity) ui = { ...ui, cursor: Math.max(0, inventory.capacity - 1) };
+      renderSlots();
+    },
+    setFilterRules(rules: readonly FilterRule[]): void {
+      filterRules = rules;
       renderSlots();
     },
     dispose(): void {

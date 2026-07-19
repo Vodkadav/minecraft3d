@@ -222,6 +222,30 @@ describe("InventoryGrid", () => {
     expect(chestChange).not.toHaveBeenCalled();
   });
 
+  it("marks slots with data-filter-action per the given rules", () => {
+    const reg = registry();
+    const grid = InventoryGrid({
+      registry: reg,
+      loc: createLocalizer("en"),
+      ariaLabel: "Inventory",
+      filterRules: [{ id: "r1", enabled: true, match: { kind: "tag", tag: "food" }, action: "highlight" }],
+    });
+    grid.render(invWith(reg, [[0, "meat", 1], [1, "wood", 1]]));
+    const cells = grid.el.querySelectorAll<HTMLElement>('[role="gridcell"]');
+    expect(cells[0]?.dataset.filterAction).toBe("highlight");
+    expect(cells[1]?.dataset.filterAction).toBeUndefined();
+  });
+
+  it("setFilterRules live-updates the rendered slots without a remount", () => {
+    const reg = registry();
+    const grid = InventoryGrid({ registry: reg, loc: createLocalizer("en"), ariaLabel: "Inventory" });
+    grid.render(invWith(reg, [[0, "meat", 1]]));
+    const cells = grid.el.querySelectorAll<HTMLElement>('[role="gridcell"]');
+    expect(cells[0]?.dataset.filterAction).toBeUndefined();
+    grid.setFilterRules([{ id: "r1", enabled: true, match: { kind: "tag", tag: "food" }, action: "dim" }]);
+    expect(cells[0]?.dataset.filterAction).toBe("dim");
+  });
+
   it("dispose removes the mounted grid", () => {
     const reg = registry();
     const grid = InventoryGrid({ registry: reg, loc: createLocalizer("en"), ariaLabel: "Inventory" });

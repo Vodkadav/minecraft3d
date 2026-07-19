@@ -82,4 +82,76 @@ describe("mountChestScreen", () => {
     expect(latestPlayer.count("wood")).toBe(0);
     screen.dispose();
   });
+
+  it("the player-side Sort button autosorts+merges the player inventory only", () => {
+    const reg = registry();
+    const screen = mountChestScreen({ loc: createLocalizer("en"), registry: reg });
+    let player = Inventory.empty(reg, 9);
+    const a = player.add("wood", 5);
+    if (!isOk(a)) throw new Error("setup");
+    const b = a.value.add("wood", 3);
+    if (!isOk(b)) throw new Error("setup");
+    player = b.value;
+    const chest = Inventory.empty(reg, 20);
+
+    let latestPlayer = player;
+    let latestChest = chest;
+    screen.open(player, chest, (p, c) => {
+      latestPlayer = p;
+      latestChest = c;
+    });
+
+    const sortButtons = [...document.querySelectorAll("button")].filter((b) => b.textContent === "Sort");
+    expect(sortButtons).toHaveLength(2);
+    sortButtons[0]?.click(); // player-side sort
+
+    expect(latestPlayer.count("wood")).toBe(8);
+    expect(latestPlayer.slots.filter((s) => s?.itemId === "wood")).toHaveLength(1);
+    expect(latestChest.totalCount()).toBe(0); // chest untouched
+    screen.dispose();
+  });
+
+  it("applies the given filterRules as data-filter-action on both grids", () => {
+    const reg = registry();
+    const screen = mountChestScreen({
+      loc: createLocalizer("en"),
+      registry: reg,
+      filterRules: [{ id: "r1", enabled: true, match: { kind: "tag", tag: "food" }, action: "highlight" }],
+    });
+    let player = Inventory.empty(reg, 9);
+    const a = player.add("meat", 1);
+    if (!isOk(a)) throw new Error("setup");
+    player = a.value;
+    let chest = Inventory.empty(reg, 20);
+    const c = chest.add("meat", 1);
+    if (!isOk(c)) throw new Error("setup");
+    chest = c.value;
+
+    screen.open(player, chest, () => {});
+    const cells = [...document.querySelectorAll<HTMLElement>(".lw-inv-slot")].filter((el) =>
+      el.textContent?.includes("Meat"),
+    );
+    expect(cells.length).toBeGreaterThan(0);
+    expect(cells.every((c) => c.dataset.filterAction === "highlight")).toBe(true);
+    screen.dispose();
+  });
+
+  it("setFilterRules live-updates both grids", () => {
+    const reg = registry();
+    const screen = mountChestScreen({ loc: createLocalizer("en"), registry: reg });
+    let player = Inventory.empty(reg, 9);
+    const a = player.add("meat", 1);
+    if (!isOk(a)) throw new Error("setup");
+    player = a.value;
+    screen.open(player, Inventory.empty(reg, 20), () => {});
+
+    const meatCell = [...document.querySelectorAll<HTMLElement>(".lw-inv-slot")].find((el) =>
+      el.textContent?.includes("Meat"),
+    );
+    expect(meatCell?.dataset.filterAction).toBeUndefined();
+
+    screen.setFilterRules([{ id: "r1", enabled: true, match: { kind: "tag", tag: "food" }, action: "dim" }]);
+    expect(meatCell?.dataset.filterAction).toBe("dim");
+    screen.dispose();
+  });
 });

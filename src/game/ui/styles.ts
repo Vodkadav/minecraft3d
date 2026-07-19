@@ -279,6 +279,18 @@ ${THEME_CSS_VARS}
   border-color: var(--lw-accent);
   box-shadow: 0 0 0 2px var(--lw-accent);
 }
+/* Item filter (Workstream E4.2) — highlight/dim/hide per matching rule. */
+.lw-inv-slot[data-filter-action="highlight"] {
+  border-color: var(--lw-success);
+  box-shadow: 0 0 0 2px var(--lw-success);
+}
+.lw-inv-slot[data-filter-action="dim"] {
+  opacity: 0.55;
+}
+.lw-inv-slot[data-filter-action="hide"] {
+  opacity: 0.15;
+  filter: grayscale(1);
+}
 .lw-inv-slot:focus-visible {
   outline: 3px solid var(--lw-focus);
   outline-offset: 2px;
@@ -294,6 +306,82 @@ ${THEME_CSS_VARS}
   font-size: 0.65rem;
   color: var(--lw-fg);
   text-shadow: 0 1px 1px #000;
+}
+
+/* Item filter editor (Workstream E4.2) */
+.lw-filter-editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lw-space-3);
+  max-height: 70vh;
+  overflow-y: auto;
+}
+.lw-filter-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--lw-space-2);
+}
+.lw-filter-rule {
+  display: flex;
+  align-items: center;
+  gap: var(--lw-space-2);
+  padding: var(--lw-space-2);
+  border: 1px solid var(--lw-border);
+  border-radius: var(--lw-radius-md);
+}
+.lw-filter-rule-summary { flex: 1; }
+.lw-filter-empty { color: var(--lw-fg-muted); }
+.lw-filter-add {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: var(--lw-space-3);
+}
+.lw-filter-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lw-space-1);
+}
+.lw-filter-field label { color: var(--lw-fg); font-size: var(--lw-font-sm); }
+.lw-filter-field select,
+.lw-filter-field input {
+  background: var(--lw-bg-track);
+  color: var(--lw-fg);
+  border: 1px solid var(--lw-border);
+  border-radius: var(--lw-radius-sm);
+  padding: var(--lw-space-1) var(--lw-space-2);
+  min-height: 44px;
+}
+
+.lw-chest-body {
+  display: flex;
+  gap: var(--lw-space-4);
+}
+.lw-chest-column {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lw-space-2);
+}
+.lw-inv-tab-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lw-space-2);
+}
+.lw-inv-sort-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--lw-space-2);
+}
+.lw-inv-sort-toolbar select {
+  background: var(--lw-bg-track);
+  color: var(--lw-fg);
+  border: 1px solid var(--lw-border);
+  border-radius: var(--lw-radius-sm);
+  padding: var(--lw-space-1) var(--lw-space-2);
+  min-height: 44px;
 }
 
 /* Crafting screen (Workstream 4) */

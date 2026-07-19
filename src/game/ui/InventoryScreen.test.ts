@@ -213,6 +213,81 @@ describe("mountInventoryScreen", () => {
     screen.dispose();
   });
 
+  it("the Sort button autosorts and merges the inventory grid", () => {
+    const onInventoryChange = vi.fn();
+    const screen = mountInventoryScreen({
+      loc: createLocalizer("en"),
+      registry: registry(),
+      recipes: STARTER_RECIPES,
+      unlockedTier: 1,
+      onInventoryChange,
+    });
+    const reg = registry();
+    const inv = Inventory.empty(reg, 27).add("wood", 5);
+    if (!isOk(inv)) throw new Error("setup");
+    const inv2 = inv.value.add("wood", 3);
+    if (!isOk(inv2)) throw new Error("setup");
+    screen.setInventory(inv2.value); // two partial wood stacks
+    screen.open();
+
+    const sortButton = [...document.querySelectorAll("button")].find((b) => b.textContent === "Sort");
+    sortButton?.click();
+
+    expect(screen.inventory.count("wood")).toBe(8);
+    const woodSlots = screen.inventory.slots.filter((s) => s?.itemId === "wood");
+    expect(woodSlots).toHaveLength(1); // merged into one stack
+    expect(onInventoryChange).toHaveBeenCalled();
+    screen.dispose();
+  });
+
+  it("switches to the filter tab and adding a rule highlights matching slots", () => {
+    const screen = mountInventoryScreen({
+      loc: createLocalizer("en"),
+      registry: registry(),
+      recipes: STARTER_RECIPES,
+      unlockedTier: 1,
+    });
+    const reg = registry();
+    const inv = Inventory.empty(reg, 27).add("meat", 1);
+    if (!isOk(inv)) throw new Error("setup");
+    screen.setInventory(inv.value);
+    screen.open();
+
+    const filterTab = [...document.querySelectorAll("button")].find((b) => b.textContent === "Filter");
+    filterTab?.click();
+    expect(document.querySelector(".lw-filter-editor")).toBeTruthy();
+
+    const tagSelect = document.querySelector<HTMLSelectElement>("#lw-filter-add-tag")!;
+    tagSelect.value = "food";
+    document.querySelector<HTMLButtonElement>(".lw-filter-add button[type='submit']")?.click();
+
+    const inventoryTab = [...document.querySelectorAll("button")].find((b) => b.textContent === "Inventory");
+    inventoryTab?.click();
+    const meatCell = [...document.querySelectorAll<HTMLElement>(".lw-inv-slot")].find((c) =>
+      c.textContent?.includes("Meat"),
+    );
+    expect(meatCell?.dataset.filterAction).toBe("highlight");
+    screen.dispose();
+  });
+
+  it("fires onFilterRulesChange when a rule is added", () => {
+    const onFilterRulesChange = vi.fn();
+    const screen = mountInventoryScreen({
+      loc: createLocalizer("en"),
+      registry: registry(),
+      recipes: STARTER_RECIPES,
+      unlockedTier: 1,
+      filterRules: [],
+      onFilterRulesChange,
+    });
+    screen.open();
+    const filterTab = [...document.querySelectorAll("button")].find((b) => b.textContent === "Filter");
+    filterTab?.click();
+    document.querySelector<HTMLButtonElement>(".lw-filter-add button[type='submit']")?.click();
+    expect(onFilterRulesChange).toHaveBeenCalledTimes(1);
+    screen.dispose();
+  });
+
   it("dispose removes the overlay from the document", () => {
     const screen = mountInventoryScreen({
       loc: createLocalizer("en"),

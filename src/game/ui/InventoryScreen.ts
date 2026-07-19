@@ -12,6 +12,8 @@
 
 import type { Recipe } from "../domain/crafting/Crafting";
 import { Inventory } from "../domain/inventory/Inventory";
+import { autosort, SORT_KEYS, type SortKey } from "../domain/inventory/InventorySort";
+import { defaultFilterRules, type FilterRule } from "../domain/inventory/ItemFilter";
 import type { ItemRegistry } from "../domain/items/ItemRegistry";
 import type { Achievement } from "../domain/progression/ProgressionState";
 import type { AudioPort } from "../application/ports/AudioPort";
@@ -20,6 +22,7 @@ import { AchievementsScreen } from "./components/AchievementsScreen";
 import { Button } from "./components/Button";
 import { CraftingScreen } from "./components/CraftingScreen";
 import { InventoryGrid } from "./components/InventoryGrid";
+import { ItemFilterEditor } from "./components/ItemFilterEditor";
 import { Panel } from "./components/Panel";
 import { injectStyles } from "./styles";
 
@@ -32,6 +35,11 @@ export interface InventoryScreenOptions {
   /** Achievement definitions for the third tab (Workstream 6.4) — omitted
    *  entirely hides the tab (keeps this screen usable pre-Workstream-6). */
   readonly achievements?: readonly Achievement[];
+  /** Starting item-filter rule set (Workstream E4.2) — defaults to the
+   *  small built-in starter set; the composition root loads/persists the
+   *  actual player rules and threads them in + reacts to `onFilterRulesChange`. */
+  readonly filterRules?: readonly FilterRule[];
+  onFilterRulesChange?(rules: readonly FilterRule[]): void;
   /** Pauses/resumes camera-look input; called on open(false)/close(true). */
   setInputEnabled?(enabled: boolean): void;
   onInventoryChange?(next: Inventory): void;
@@ -52,10 +60,13 @@ export interface InventoryScreenHandle {
   setUnlockedTier(tier: number): void;
   /** Re-renders the achievements grid against the given unlocked-id set. */
   setUnlockedAchievements(unlockedIds: readonly string[]): void;
+  /** Live item-filter rule update (e.g. once the composition root's async
+   *  store load resolves) — no remount required. */
+  setFilterRules(rules: readonly FilterRule[]): void;
   dispose(): void;
 }
 
-type Tab = "inventory" | "crafting" | "achievements";
+type Tab = "inventory" | "crafting" | "achievements" | "filter";
 
 function isTextInput(el: Element | null): boolean {
   if (!el) return false;
@@ -68,6 +79,7 @@ export function mountInventoryScreen(opts: InventoryScreenOptions): InventoryScr
   injectStyles(doc);
 
   let inventory = Inventory.empty(opts.registry, 27);
+  let filterRules: readonly FilterRule[] = opts.filterRules ?? defaultFilterRules();
   let open = false;
   let tab: Tab = "inventory";
 
@@ -94,7 +106,17 @@ export function mountInventoryScreen(opts: InventoryScreenOptions): InventoryScr
   achievementsTabBtn.className = "laas-ui lw-button";
   achievementsTabBtn.dataset.variant = "quiet";
   achievementsTabBtn.textContent = opts.loc.t("inventory.tab.achievements");
-  tabs.append(inventoryTabBtn, craftingTabBtn, ...(opts.achievements ? [achievementsTabBtn] : []));
+  const filterTabBtn = doc.createElement("button");
+  filterTabBtn.type = "button";
+  filterTabBtn.className = "laas-ui lw-button";
+  filterTabBtn.dataset.variant = "quiet";
+  filterTabBtn.textContent = opts.loc.t("inventory.tab.filter");
+  tabs.append(
+    inventoryTabBtn,
+    craftingTabBtn,
+    ...(opts.achievements ? [achievementsTabBtn] : []),
+    filterTabBtn,
+  );
 
   const closeBtn = Button({
     label: opts.loc.t("inventory.close"),
@@ -111,6 +133,7 @@ export function mountInventoryScreen(opts: InventoryScreenOptions): InventoryScr
     registry: opts.registry,
     loc: opts.loc,
     ariaLabel: opts.loc.t("inventory.tab.inventory"),
+    filterRules,
     doc,
     onChange: (next) => {
       inventory = next;
@@ -118,6 +141,48 @@ export function mountInventoryScreen(opts: InventoryScreenOptions): InventoryScr
       craftScreen.render(inventory);
     },
   });
+
+  // ---- sort toolbar (Workstream E4.1) ----
+  const sortKeySelect = doc.createElement("select");
+  sortKeySelect.setAttribute("aria-label", opts.loc.t("inventory.sort.key"));
+  for (const key of SORT_KEYS) {
+    const o = doc.createElement("option");
+    o.value = key;
+    o.textContent = opts.loc.t(`inventory.sort.key.${key}`);
+    sortKeySelect.appendChild(o);
+  }
+  const sortButton = Button({
+    label: opts.loc.t("inventory.sort"),
+    ariaLabel: opts.loc.t("inventory.sort.aria"),
+    variant: "quiet",
+    onClick: () => {
+      const next = autosort(opts.registry, inventory, sortKeySelect.value as SortKey);
+      inventory = next;
+      opts.onInventoryChange?.(next);
+      grid.render(inventory);
+      craftScreen.render(inventory);
+    },
+  });
+  const sortToolbar = doc.createElement("div");
+  sortToolbar.className = "lw-inv-sort-toolbar";
+  sortToolbar.append(sortKeySelect, sortButton);
+
+  const inventoryBody = doc.createElement("div");
+  inventoryBody.className = "lw-inv-tab-body";
+  inventoryBody.append(sortToolbar, grid.el);
+
+  // ---- item filter editor (Workstream E4.2) ----
+  const filterEditor = ItemFilterEditor({
+    loc: opts.loc,
+    registry: opts.registry,
+    doc,
+    onChange: (next) => {
+      filterRules = next;
+      grid.setFilterRules(filterRules);
+      opts.onFilterRulesChange?.(filterRules);
+    },
+  });
+  filterEditor.render(filterRules);
 
   const craftScreen = CraftingScreen({
     registry: opts.registry,
@@ -139,7 +204,7 @@ export function mountInventoryScreen(opts: InventoryScreenOptions): InventoryScr
     : null;
 
   const body = doc.createElement("div");
-  body.appendChild(grid.el);
+  body.appendChild(inventoryBody);
 
   const panel = Panel([header, body], { className: "lw-inv-overlay-panel" });
   overlay.appendChild(panel);
@@ -148,7 +213,8 @@ export function mountInventoryScreen(opts: InventoryScreenOptions): InventoryScr
   function elFor(t: Tab): HTMLElement {
     if (t === "crafting") return craftScreen.el;
     if (t === "achievements" && achievementsScreen) return achievementsScreen.el;
-    return grid.el;
+    if (t === "filter") return filterEditor.el;
+    return inventoryBody;
   }
   function applyTab(): void {
     inventoryTabBtn.dataset.variant = tab === "inventory" ? "" : "quiet";
@@ -157,6 +223,8 @@ export function mountInventoryScreen(opts: InventoryScreenOptions): InventoryScr
     craftingTabBtn.setAttribute("aria-selected", String(tab === "crafting"));
     achievementsTabBtn.dataset.variant = tab === "achievements" ? "" : "quiet";
     achievementsTabBtn.setAttribute("aria-selected", String(tab === "achievements"));
+    filterTabBtn.dataset.variant = tab === "filter" ? "" : "quiet";
+    filterTabBtn.setAttribute("aria-selected", String(tab === "filter"));
     body.replaceChildren(elFor(tab));
   }
   inventoryTabBtn.addEventListener("click", () => {
@@ -169,6 +237,10 @@ export function mountInventoryScreen(opts: InventoryScreenOptions): InventoryScr
   });
   achievementsTabBtn.addEventListener("click", () => {
     tab = "achievements";
+    applyTab();
+  });
+  filterTabBtn.addEventListener("click", () => {
+    tab = "filter";
     applyTab();
   });
   applyTab();
@@ -230,11 +302,17 @@ export function mountInventoryScreen(opts: InventoryScreenOptions): InventoryScr
     setUnlockedAchievements(unlockedIds: readonly string[]): void {
       achievementsScreen?.render(unlockedIds);
     },
+    setFilterRules(rules: readonly FilterRule[]): void {
+      filterRules = rules;
+      grid.setFilterRules(filterRules);
+      filterEditor.render(filterRules);
+    },
     dispose(): void {
       (doc.defaultView ?? window).removeEventListener("keydown", onKeyDown);
       grid.dispose();
       craftScreen.dispose();
       achievementsScreen?.dispose();
+      filterEditor.dispose();
       overlay.remove();
     },
   };
