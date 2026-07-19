@@ -154,4 +154,75 @@ describe("mountChestScreen", () => {
     expect(meatCell?.dataset.filterAction).toBe("dim");
     screen.dispose();
   });
+
+  it("E0.4 wave-3: a joiner's cross-grid drop fires onTransferIntent instead of mutating locally", () => {
+    const reg = registry();
+    const onTransferIntent = vi.fn();
+    const screen = mountChestScreen({
+      loc: createLocalizer("en"),
+      registry: reg,
+      isRemote: () => true,
+      onTransferIntent,
+    });
+    let seededPlayer = Inventory.empty(reg, 9);
+    const added = seededPlayer.add("wood", 5);
+    if (!isOk(added)) throw new Error("setup");
+    seededPlayer = added.value;
+    const chest = Inventory.empty(reg, 20);
+
+    let onChangeCalls = 0;
+    screen.open(seededPlayer, chest, () => {
+      onChangeCalls++;
+    });
+
+    const grids = document.querySelectorAll(".lw-inv-grid");
+    const playerGridEl = grids[0] as HTMLElement;
+    const chestGridEl = grids[1] as HTMLElement;
+    const playerSlot = playerGridEl.querySelector('[role="gridcell"]') as HTMLElement;
+    const chestSlot = chestGridEl.querySelector('[role="gridcell"]') as HTMLElement;
+
+    playerSlot.dispatchEvent(
+      Object.assign(new Event("dragstart", { bubbles: true, cancelable: true }), {
+        dataTransfer: { setData: vi.fn(), getData: vi.fn() },
+      }),
+    );
+    chestSlot.dispatchEvent(new Event("drop", { bubbles: true, cancelable: true }));
+
+    expect(onTransferIntent).toHaveBeenCalledWith("deposit", "wood", 5);
+    expect(onChangeCalls).toBe(0); // no local mutation — host echo is the only truth
+    screen.dispose();
+  });
+
+  it("render() reconciles both grids from host-confirmed state while open", () => {
+    const reg = registry();
+    const screen = mountChestScreen({ loc: createLocalizer("en"), registry: reg });
+    const player = Inventory.empty(reg, 9);
+    const chest = Inventory.empty(reg, 20);
+    screen.open(player, chest, () => {});
+
+    let nextPlayer = Inventory.empty(reg, 9);
+    const added = nextPlayer.add("stone", 2);
+    if (!isOk(added)) throw new Error("setup");
+    nextPlayer = added.value;
+    let nextChest = Inventory.empty(reg, 20);
+    const addedChest = nextChest.add("wood", 5);
+    if (!isOk(addedChest)) throw new Error("setup");
+    nextChest = addedChest.value;
+
+    screen.render(nextPlayer, nextChest);
+
+    const grids = document.querySelectorAll(".lw-inv-grid");
+    const playerGridEl = grids[0] as HTMLElement;
+    const chestGridEl = grids[1] as HTMLElement;
+    expect(playerGridEl.textContent).toContain("2");
+    expect(chestGridEl.textContent).toContain("5");
+    screen.dispose();
+  });
+
+  it("render() is a no-op while closed", () => {
+    const reg = registry();
+    const screen = mountChestScreen({ loc: createLocalizer("en"), registry: reg });
+    expect(() => screen.render(Inventory.empty(reg, 9), Inventory.empty(reg, 20))).not.toThrow();
+    screen.dispose();
+  });
 });

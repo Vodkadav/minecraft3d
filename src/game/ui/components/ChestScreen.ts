@@ -31,17 +31,33 @@ export interface ChestScreenOptions {
   readonly filterRules?: readonly FilterRule[];
   setInputEnabled?(enabled: boolean): void;
   readonly doc?: Document;
+  /** E0.4 wave-3: true for a JOINER — a cross-grid drop (deposit/withdraw)
+   *  never mutates either `Inventory` locally; it only fires
+   *  `onTransferIntent` and waits for the host's authoritative reply
+   *  (`render()` below). Read live at drop-time (a function, not a snapshot)
+   *  because host-local vs. joiner is only known after this screen mounts. */
+  isRemote?(): boolean;
+  /** Fired instead of a local transfer when `isRemote()` is true — the whole
+   *  slot's stack (matches `transferBetween`'s "moves the whole stack"
+   *  contract) as a host `inventoryOp` deposit/withdraw. */
+  onTransferIntent?(direction: "deposit" | "withdraw", itemId: string, count: number): void;
 }
 
 export interface ChestScreenHandle {
   readonly isOpen: boolean;
   /** Opens against a chest inventory; `onChange` fires with BOTH updated
-   *  inventories after any transfer (the caller persists the chest side). */
+   *  inventories after any LOCAL transfer (host-local play only — the caller
+   *  persists the chest side; a joiner never gets this callback for a
+   *  cross-grid transfer, see `isRemote`/`onTransferIntent`). */
   open(
     playerInventory: Inventory,
     chestInventory: Inventory,
     onChange: (player: Inventory, chest: Inventory) => void,
   ): void;
+  /** Reconciles both grids from the host's authoritative state while open
+   *  (E0.4 wave-3) — a joiner's only path to seeing a transfer's real
+   *  outcome, since remote drops never mutate locally. A no-op if closed. */
+  render(playerInventory: Inventory, chestInventory: Inventory): void;
   close(): void;
   /** Live item-filter rule update (e.g. once the composition root's async
    *  store load resolves) — no remount required. */
@@ -96,6 +112,12 @@ export function mountChestScreen(opts: ChestScreenOptions): ChestScreenHandle {
     },
     onExternalDrop: (sourceGridId, sourceIndex, targetIndex) => {
       if (sourceGridId !== "chest-chest") return;
+      if (opts.isRemote?.()) {
+        const slot = chest.slots[sourceIndex];
+        if (!slot) return;
+        opts.onTransferIntent?.("withdraw", slot.itemId, slot.count);
+        return;
+      }
       const r = transferBetween(chest, player, sourceIndex);
       if (!isOk(r)) return;
       chest = r.value.from;
@@ -121,6 +143,12 @@ export function mountChestScreen(opts: ChestScreenOptions): ChestScreenHandle {
     },
     onExternalDrop: (sourceGridId, sourceIndex, targetIndex) => {
       if (sourceGridId !== "chest-player") return;
+      if (opts.isRemote?.()) {
+        const slot = player.slots[sourceIndex];
+        if (!slot) return;
+        opts.onTransferIntent?.("deposit", slot.itemId, slot.count);
+        return;
+      }
       const r = transferBetween(player, chest, sourceIndex);
       if (!isOk(r)) return;
       player = r.value.from;
@@ -198,6 +226,13 @@ export function mountChestScreen(opts: ChestScreenOptions): ChestScreenHandle {
       chestGrid.render(chest);
       doc.exitPointerLock?.();
       opts.setInputEnabled?.(false);
+    },
+    render(playerInventory, chestInventory): void {
+      if (!open) return;
+      player = playerInventory;
+      chest = chestInventory;
+      playerGrid.render(player);
+      chestGrid.render(chest);
     },
     close,
     setFilterRules(rules: readonly FilterRule[]): void {

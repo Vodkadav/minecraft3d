@@ -100,6 +100,7 @@ import { LocalStorageSettingsStore } from '../game/infrastructure/persistence/Lo
 import { SettingsController } from '../game/application/SettingsController';
 import { GameStatePersistence } from '../game/application/GameStatePersistence';
 import { InventoryPersistence } from '../game/application/InventoryPersistence';
+import { Inventory } from '../game/domain/inventory/Inventory';
 import { ProgressionPersistence } from '../game/application/ProgressionPersistence';
 import { ExplorationPersistence, loadExplorationOrEmpty } from '../game/application/ExplorationPersistence';
 import type { WorldSaveStore } from '../game/application/ports/WorldSaveStore';
@@ -758,6 +759,19 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
     // Workstream 6: DigTool/PlacementTool were built before this HUD existed
     // (see `progressHook` above) — wire the real sink now.
     progressHook = (event) => hud.recordProgress(event);
+
+    // E0.4 wave-3: a joiner NEVER mutates its own inventory locally — this is
+    // the one path the host's echoed `inventoryState` reaches the HUD (and,
+    // if a chest is open, its player-side grid via `notifyInventoryChanged`).
+    // `placeableInteractionRef` is assigned later in this function but
+    // already live by the time any inventoryState actually arrives (async).
+    if (ctx.world) {
+      ctx.world.applyInventoryState = (wire) => {
+        const inv = Inventory.fromSlots(itemsReg.value, wire.slots);
+        if (isOk(inv)) hud.setInventory(inv.value);
+        placeableInteractionRef?.notifyInventoryChanged();
+      };
+    }
 
     if (gameStatePersistence) {
       const saveGameState = (): void => {

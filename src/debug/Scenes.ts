@@ -7,6 +7,7 @@ import type { WorldSeed } from '../core/Seed';
 import type { AudioPort } from '../game/application/ports/AudioPort';
 import type { WorldSaveStore } from '../game/application/ports/WorldSaveStore';
 import type { ItemRegistry } from '../game/domain/items/ItemRegistry';
+import type { SerializedInventoryWire } from '../game/domain/net/Protocol';
 import type { PlayerState } from '../game/domain/world/WorldSaveData';
 import type { SpawnFieldHandle } from '../spawn/SpawnFieldView';
 import type { PlaceableInteractionHandle } from '../voxel/placement/PlaceableInteractionTool';
@@ -32,6 +33,11 @@ export interface WorldLaunchBinding {
   /** Set by the scene once the item catalogue loads — the M7 net glue's
    *  HostSession needs it to be inventory-authoritative (E0.4). */
   registry?: ItemRegistry;
+  /** Set by the scene once its HUD exists — the M7 net glue calls this with
+   *  the host's echoed `inventoryState` after any joiner inventoryOp/chest
+   *  transfer (E0.4 wave-3). A joiner's inventory UI updates ONLY here, never
+   *  from a local mutation. */
+  applyInventoryState?(wire: SerializedInventoryWire): void;
 }
 
 export interface WorldContext {

@@ -30,6 +30,7 @@ import {
   type FillMsg,
   type InteractAction,
   type InventoryOp,
+  type NetMessage,
   type PlaceableAction,
   type PlaceableInteractMsg,
   type PoseMsg,
@@ -158,6 +159,18 @@ export class HostSession {
       return;
     }
     const msg = parsed.value;
+    try {
+      this.dispatch(peerId, msg);
+    } catch {
+      // N2 hardening (2026-07-19 SR follow-up): a hook (e.g. persist() I/O on
+      // a deposit) throwing must never kill the host message loop for every
+      // OTHER connected peer — drop this one message and keep serving. WHAT+
+      // WHY only, never message contents/PII (err-explicit-result-handling §4).
+      console.warn("net: message handler threw — dropped", { peerId, kind: msg.kind });
+    }
+  }
+
+  private dispatch(peerId: string, msg: NetMessage): void {
     switch (msg.kind) {
       case "join":
         this.handleJoin(peerId, msg.playerName, msg.inventory);

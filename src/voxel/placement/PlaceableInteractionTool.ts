@@ -27,7 +27,7 @@ import { defaultFilterRules } from '../../game/domain/inventory/ItemFilter';
 import type { ItemRegistry } from '../../game/domain/items/ItemRegistry';
 import type { ItemFilterStore } from '../../game/application/ports/ItemFilterStore';
 import { LocalStorageItemFilterStore } from '../../game/infrastructure/persistence/LocalStorageItemFilterStore';
-import type { PlaceableAction } from '../../game/domain/net/Protocol';
+import type { InventoryOp, PlaceableAction } from '../../game/domain/net/Protocol';
 import type { CampfireState } from '../../game/domain/placeables/Campfire';
 import type { ChestState } from '../../game/domain/placeables/ChestTransfer';
 import type { DoorState } from '../../game/domain/placeables/Door';
@@ -99,6 +99,10 @@ export interface PlaceableInteractionHandle {
   onInteractIntent:
     | ((action: PlaceableAction, placeableId: string, itemId?: string, count?: number) => void)
     | null;
+  /** A joiner's chest deposit/withdraw (E0.4 wave-3) — wired to
+   *  `JoinSession.sendInventoryOp`. Separate from `onInteractIntent` because
+   *  the wire shape is `InventoryOp`, not `PlaceableAction`. */
+  onInventoryOpIntent: ((op: InventoryOp) => void) | null;
   /** Host-side resolution — wired as `HostSessionHooks.onPlaceableInteract`.
    *  Never grants into the host's own inventory (2026-07-19 SR finding 1.2
    *  fix): the `grant`, if any, is returned so `HostSession` can credit the
@@ -112,6 +116,11 @@ export interface PlaceableInteractionHandle {
   ): { state: unknown; grant?: { itemId: string; count: number } } | undefined;
   /** Joiner-side reconciliation — wired as `JoinSessionHooks.onPlaceableState`. */
   applyRemoteState(placeableId: string, state: unknown): void;
+  /** The composition root calls this right after applying a host-echoed
+   *  `inventoryState` to the player's own inventory (E0.4 wave-3) — refreshes
+   *  the open chest screen's player-side grid so a joiner sees the real
+   *  post-transfer count without needing to reopen the chest. */
+  notifyInventoryChanged(): void;
 }
 
 export function attachPlaceableInteraction(deps: PlaceableInteractionDeps): PlaceableInteractionHandle {
@@ -178,6 +187,7 @@ export function attachPlaceableInteraction(deps: PlaceableInteractionDeps): Plac
   let onInteractIntent:
     | ((action: PlaceableAction, placeableId: string, itemId?: string, count?: number) => void)
     | null = null;
+  let onInventoryOpIntent: ((op: InventoryOp) => void) | null = null;
 
   const roll = deps.roll ?? Math.random;
 
@@ -215,6 +225,12 @@ export function attachPlaceableInteraction(deps: PlaceableInteractionDeps): Plac
     registry,
     filterRules: defaultFilterRules(),
     ...(deps.setInputEnabled ? { setInputEnabled: deps.setInputEnabled } : {}),
+    isRemote: () => remote,
+    onTransferIntent: (direction, itemId, count) => {
+      const placeableId = openChestPieceId;
+      if (!placeableId) return;
+      onInventoryOpIntent?.({ op: direction, placeableId, itemId, count });
+    },
     doc,
   });
   // Best-effort async load (mirrors GameHud's own item-filter load) — the
@@ -229,20 +245,30 @@ export function attachPlaceableInteraction(deps: PlaceableInteractionDeps): Plac
     const chestInv = Inventory.fromSlots(registry, chest.slots);
     if (!isOk(chestInv)) return;
     chestScreen.open(deps.getInventory(), chestInv.value, (player, chestNext) => {
+      // E0.4 wave-3: this onChange only fires for a HOST-LOCAL transfer —
+      // ChestScreen never calls it for a joiner's cross-grid drop (see
+      // `isRemote`/`onTransferIntent` above); a joiner's own view updates
+      // only from the host's echoed inventoryState/placeableState via
+      // `refreshOpenChest` below.
       deps.setInventory(player);
       const id = openChestPieceId;
       if (!id) return;
-      // Local-first, mirrors the DigTool "apply now, sync via intent"
-      // pattern: the transfer always updates this player's own view (solo =
-      // the whole truth; a joiner's own screen). A joiner's chest mirror is
-      // NOT re-broadcast to the host — Workstream 8.1's protocol carries
-      // itemId+count for exactly this, but ChestScreen's drag/drop UI moves
-      // by SLOT, not itemId+count, so wiring a real depositChest/
-      // withdrawChest intent needs that seam added first (deferred, see the
-      // S7b report: multiplayer chest sharing is a documented gap).
       store = upsertPlaceable(store, id, 'chest', { capacity: chestNext.capacity, slots: chestNext.slots });
       persist();
     });
+  }
+
+  /** Re-renders the open chest screen from the CURRENT authoritative state —
+   *  called after either side changes: the chest's own state (host echo via
+   *  `applyRemoteState`) or the player's own inventory (host echo via
+   *  `inventoryState`, reached through `deps.getInventory()` once the
+   *  composition root has applied it — see `notifyInventoryChanged`). */
+  function refreshOpenChest(): void {
+    if (!chestScreen.isOpen || !openChestPieceId) return;
+    const record = getPlaceable(store, openChestPieceId);
+    if (record?.pieceId !== 'chest') return;
+    const chestInv = Inventory.fromSlots(registry, (record.state as ChestState).slots);
+    if (isOk(chestInv)) chestScreen.render(deps.getInventory(), chestInv.value);
   }
 
   // ---- campfire UI ----
@@ -365,6 +391,15 @@ export function attachPlaceableInteraction(deps: PlaceableInteractionDeps): Plac
     set onInteractIntent(fn) {
       onInteractIntent = fn;
     },
+    get onInventoryOpIntent() {
+      return onInventoryOpIntent;
+    },
+    set onInventoryOpIntent(fn) {
+      onInventoryOpIntent = fn;
+    },
+    notifyInventoryChanged(): void {
+      refreshOpenChest();
+    },
     resolveHostIntent(action, placeableId, _peerId, itemId, count) {
       const piece = placement.listPieces().find((p) => String(p.id) === placeableId);
       if (!piece) return undefined;
@@ -394,12 +429,7 @@ export function attachPlaceableInteraction(deps: PlaceableInteractionDeps): Plac
       if (!piece) return;
       if (existing.pieceId === 'door') applyDoorVisual(piece, state as DoorState);
       if (existing.pieceId === 'plot') syncPlotMarker(placeableId, piece, state as PlotState);
-      if (existing.pieceId === 'chest' && openChestPieceId === placeableId) {
-        // chest UI reconciles from the host's truth next time it's reopened;
-        // mid-session live reconciliation is left as a documented deviation
-        // (no per-peer inventory-grant protocol exists yet — see S7b report).
-        void state;
-      }
+      if (existing.pieceId === 'chest' && openChestPieceId === placeableId) refreshOpenChest();
       refreshOpenCampfire();
     },
     dispose(): void {

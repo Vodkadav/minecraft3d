@@ -389,6 +389,10 @@ export function createJoinNet(code: string, opts: JoinNetOptions = {}): JoinNetH
         deps.placeables.remote = true;
         deps.placeables.onInteractIntent = (action, placeableId, itemId, count) =>
           session?.sendPlaceableInteract(action, placeableId, itemId, count);
+        // joiner: a chest deposit/withdraw becomes an inventoryOp intent too
+        // (E0.4 wave-3) — the host's echoed inventoryState/placeableState is
+        // the only path the chest UI updates from, never a local mutation.
+        deps.placeables.onInventoryOpIntent = (op) => session?.sendInventoryOp(op);
       }
       for (const edit of pendingEdits.splice(0)) applyRemoteEdit(edit);
       // the M8 DigTool applies locally (optimistic — SDF edits are
@@ -413,7 +417,10 @@ export function createJoinNet(code: string, opts: JoinNetOptions = {}): JoinNetH
         dispose(): void {
           if (deps.voxels) deps.voxels.onLocalEdit = null;
           if (deps.spawns) deps.spawns.onInteractIntent = null;
-          if (deps.placeables) deps.placeables.onInteractIntent = null;
+          if (deps.placeables) {
+            deps.placeables.onInteractIntent = null;
+            deps.placeables.onInventoryOpIntent = null;
+          }
           remote.dispose();
           world = null;
         },

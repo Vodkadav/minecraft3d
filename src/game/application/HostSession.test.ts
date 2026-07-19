@@ -214,6 +214,31 @@ describe("HostSession", () => {
     warn.mockRestore();
   });
 
+  it("N2: survives a hook throwing mid-message and keeps processing later messages", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    net = makeTransportNetwork();
+    session = new HostSession(net.host, () => SNAPSHOT, {
+      onWorldEdit: () => {
+        throw new Error("persist() I/O failed");
+      },
+    });
+    const alice = net.addPeer("alice");
+    const inbox = collect(alice);
+
+    expect(() =>
+      alice.broadcast({ kind: "dig", x: 1, y: 2, z: 3, radius: 1.5 }),
+    ).not.toThrow();
+    expect(warn).toHaveBeenCalled();
+    // the log carries WHAT+WHY, never the error's own message text or payload
+    const call = warn.mock.calls.find(([m]) => m === "net: message handler threw — dropped");
+    expect(call?.[1]).toEqual({ peerId: "alice", kind: "dig" });
+
+    // a later, unrelated message still processes normally — the loop is alive
+    alice.broadcast({ kind: "join", playerName: "Alice" });
+    expect(inbox).toContainEqual({ kind: "welcome", ...SNAPSHOT });
+    warn.mockRestore();
+  });
+
   it("routes a valid interact intent to the onInteract hook, tagged with the sender", () => {
     const interacts: Array<{ action: string; targetId: string; peerId: string }> = [];
     net = makeTransportNetwork();

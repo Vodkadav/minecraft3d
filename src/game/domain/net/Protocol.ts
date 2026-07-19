@@ -309,6 +309,17 @@ const MAX_WIRE_INVENTORY_SLOTS = 64;
 const MAX_WIRE_ITEM_ID_LEN = 64;
 const MAX_WIRE_STACK_COUNT = 999;
 
+/** N1 hardening (2026-07-19 SR follow-up): a display name is free text a
+ *  hostile peer fully controls — bound it so it can't pad every `peerJoined`
+ *  rebroadcast or a UI label with megabytes of text. Generous over any real
+ *  name; truncation is the caller's UI concern, this boundary only rejects. */
+const MAX_PLAYER_NAME_LEN = 24;
+
+/** N1 hardening: `unknown kind` is logged verbatim from attacker-controlled
+ *  input — cap what reaches the console so a malicious `kind` payload can't
+ *  pad every dropped-message warning. */
+const MAX_LOGGED_KIND_LEN = 40;
+
 function isInventoryStackWire(v: unknown): v is InventoryStackWire {
   return (
     isRecord(v) &&
@@ -354,6 +365,10 @@ function isWireItemId(v: unknown): v is string {
   return isStr(v) && v.length > 0 && v.length <= MAX_WIRE_ITEM_ID_LEN;
 }
 
+function isPlayerName(v: unknown): v is string {
+  return isStr(v) && v.length <= MAX_PLAYER_NAME_LEN;
+}
+
 function isInventoryOp(v: unknown): v is InventoryOp {
   if (!isRecord(v)) return false;
   switch (v.op) {
@@ -391,7 +406,7 @@ function isCreatureEntity(v: unknown): v is CreatureEntity {
 /** Per-kind shape validators; each returns true iff the record is that message. */
 const VALIDATORS: Record<string, (m: Record<string, unknown>) => boolean> = {
   join: (m) =>
-    isStr(m.playerName) && (m.inventory === undefined || isSerializedInventoryWire(m.inventory)),
+    isPlayerName(m.playerName) && (m.inventory === undefined || isSerializedInventoryWire(m.inventory)),
   pose: (m) => isPlayerState(m.state),
   dig: (m) => isNum(m.x) && isNum(m.y) && isNum(m.z) && isNum(m.radius),
   fill: (m) =>
@@ -418,7 +433,7 @@ const VALIDATORS: Record<string, (m: Record<string, unknown>) => boolean> = {
   worldEdit: (m) => isWorldEdit(m.edit),
   entityRemoved: (m) => isStr(m.id),
   creatures: (m) => Array.isArray(m.entities) && m.entities.every(isCreatureEntity),
-  peerJoined: (m) => isStr(m.peerId) && isStr(m.playerName),
+  peerJoined: (m) => isStr(m.peerId) && isPlayerName(m.playerName),
   peerLeft: (m) => isStr(m.peerId),
   hostClosing: () => true,
 };
@@ -430,7 +445,10 @@ export function parseMessage(raw: unknown): Result<NetMessage, ProtocolError> {
   }
   const kind = raw.kind;
   if (!isStr(kind) || !(kind in VALIDATORS)) {
-    return err({ kind: "MalformedMessage", reason: `unknown kind: ${String(kind)}` });
+    return err({
+      kind: "MalformedMessage",
+      reason: `unknown kind: ${String(kind).slice(0, MAX_LOGGED_KIND_LEN)}`,
+    });
   }
   if (!VALIDATORS[kind](raw)) {
     return err({ kind: "MalformedMessage", reason: `bad shape for kind: ${kind}` });
