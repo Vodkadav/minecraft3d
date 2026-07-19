@@ -4,10 +4,30 @@ import { Group } from "three";
 import type { WorldEdit } from "../game/domain/net/Protocol";
 import { isValidRoomCode } from "../game/domain/net/RoomCode";
 import type { WorldSaveData } from "../game/domain/world/WorldSaveData";
+import type { InventoryOp } from "../game/domain/net/Protocol";
 import type { NetTransport } from "../game/application/ports/NetTransport";
 import { makeTransportNetwork } from "../game/application/testing/InMemoryTransportPair";
 import { InMemoryWorldSaveStore } from "../game/infrastructure/persistence/InMemoryWorldSaveStore";
+import type { PlaceableInteractionHandle } from "../voxel/placement/PlaceableInteractionTool";
 import { attachHostNet, createJoinNet, type EditableVoxels } from "./NetSync";
+
+/** Honest fake: the slice of `PlaceableInteractionHandle` the net glue reads
+ *  and writes — mirrors the real attach/dispose lifecycle without the DOM. */
+function fakePlaceables(): PlaceableInteractionHandle {
+  return {
+    update: () => {},
+    hasInteractTarget: () => false,
+    ensurePlaceable: () => {},
+    forgetPlaceable: () => {},
+    dispose: () => {},
+    remote: false,
+    onInteractIntent: null,
+    onInventoryOpIntent: null,
+    resolveHostIntent: () => undefined,
+    applyRemoteState: () => {},
+    notifyInventoryChanged: () => {},
+  };
+}
 
 const POSE = { position: [1, 2, 3] as [number, number, number], yaw: 0.5, pitch: 0 };
 
@@ -285,6 +305,32 @@ describe("createJoinNet", () => {
 
     const hostGroup = hostParent.getObjectByName("remote-players") as Group;
     expect(hostGroup.children.map((c) => c.name)).toEqual(["bob"]);
+  });
+
+  it("E0.4 wave-3: delivers the host's inventoryState to attachWorld's onInventoryState", async () => {
+    const { join, connect } = await joinedSetup();
+    connect();
+    await join.waitForWelcome(5000);
+    const onInventoryState = vi.fn();
+    join.attachWorld({ voxels: null, parent: new Group(), getPose: () => POSE, onInventoryState });
+
+    expect(onInventoryState).toHaveBeenCalledWith({ capacity: 27, slots: Array(27).fill(null) });
+  });
+
+  it("E0.4 wave-3: wires a placeables chest deposit/withdraw intent onto the wire as inventoryOp", async () => {
+    const { net, join, connect } = await joinedSetup();
+    connect();
+    await join.waitForWelcome(5000);
+    const hostInbox: unknown[] = [];
+    net.host.onMessage((_peerId, msg) => hostInbox.push(msg));
+    const placeables = fakePlaceables();
+    join.attachWorld({ voxels: null, parent: new Group(), getPose: () => POSE, placeables });
+
+    expect(placeables.remote).toBe(true);
+    const op: InventoryOp = { op: "deposit", placeableId: "chest:1", itemId: "wood", count: 3 };
+    placeables.onInventoryOpIntent?.(op);
+
+    expect(hostInbox).toContainEqual({ kind: "inventoryOp", inventoryOp: op });
   });
 
   it("fires onHostGone when the host closes", async () => {

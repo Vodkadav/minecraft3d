@@ -20,11 +20,16 @@ import { parseCamString, parseParams, type QualityPreset } from './core/Params';
 import { WorldSeed } from './core/Seed';
 import { resolveRenderPreset } from './game/domain/capability/RenderPreset';
 import type { GraphicsPreset } from './game/domain/settings/Settings';
-import { isErr } from './game/domain/Result';
+import { isErr, isOk } from './game/domain/Result';
 import { defaultSettings } from './game/domain/settings/Settings';
 import type { PlayerState } from './game/domain/world/WorldSaveData';
 import type { WorldSaveStore } from './game/application/ports/WorldSaveStore';
 import { WorldLifecycle } from './game/application/WorldLifecycle';
+import { InventoryPersistence } from './game/application/InventoryPersistence';
+import { Inventory } from './game/domain/inventory/Inventory';
+import { ItemRegistry } from './game/domain/items/ItemRegistry';
+import { STARTER_ITEMS } from './game/domain/items/starterItems';
+import type { SerializedInventoryWire } from './game/domain/net/Protocol';
 import {
   WorldClockPersistence,
   readWorldClockHour,
@@ -100,6 +105,10 @@ interface MenuLaunch {
   /** Present when this boot JOINS a remote world (M7): the live net session
    *  created before the boot; the store is in-memory (host owns the save). */
   join?: JoinNetHandle;
+  /** JOIN-only (E0.4 wave-3): caches the host's echoed inventoryState locally
+   *  under this room's stable code, so rejoining the SAME room from this
+   *  device restores it as the next join claim (see `joinerInventoryStore`). */
+  persistInventoryState?(wire: SerializedInventoryWire): void;
 }
 
 async function boot(): Promise<void> {
@@ -117,6 +126,52 @@ async function boot(): Promise<void> {
     return;
   }
   await bootEngine(hooks, null);
+}
+
+/** E0.4 wave-3: a joiner's own gear, cached locally per joinable room so
+ *  rejoining the SAME room on this device restores it as the join claim
+ *  (`HostSession` re-seeds only ONCE per connection and fully revalidates
+ *  against its live item registry — this cache can never let a peer conjure
+ *  or dupe an item, only lose/skip the convenience if it's stale/absent). A
+ *  SEPARATE IndexedDB database from the real per-world store (`laas-world-meta`)
+ *  so a joined room's code never leaks into the menu's own "my worlds" list —
+ *  the OPFS blob store IS shared, but every record here carries `modifiedChunks:
+ *  []`, so it never writes a chunk blob a real world could collide with.
+ *  In-memory (session-only) when OPFS is unavailable. */
+function joinerInventoryStore(): WorldSaveStore {
+  return 'storage' in navigator && 'getDirectory' in navigator.storage
+    ? new PersistentWorldSaveStore(new OpfsBlobStore(), new IndexedDbKeyValueStore('laas-joiner-inventory'))
+    : new InMemoryWorldSaveStore();
+}
+
+function serializeInventory(inv: Inventory): SerializedInventoryWire {
+  return {
+    capacity: inv.capacity,
+    slots: inv.slots.map((s) => (s ? { itemId: s.itemId, count: s.count } : null)),
+  };
+}
+
+/** Overwrites the whole cached record for `roomKey` — simpler and more
+ *  robust than a read-modify-write (InventoryPersistence.saveInventory)
+ *  since a brand-new room has no prior record to modify; nothing else in
+ *  this record is ever read back except `inventories.local`. */
+async function saveJoinerInventory(
+  store: WorldSaveStore,
+  roomKey: string,
+  wire: SerializedInventoryWire,
+): Promise<void> {
+  await store.save({
+    worldId: roomKey,
+    seed: 0,
+    name: '',
+    createdAt: Date.now(),
+    modifiedAt: Date.now(),
+    modifiedChunks: [],
+    entities: {},
+    inventories: { local: wire },
+    progression: {},
+    playerState: { position: [0, 0, 0], yaw: 0, pitch: 0 },
+  });
 }
 
 /**
@@ -164,7 +219,20 @@ function mountMenu(hooks: LaasHooks): void {
     // is what the engine boots from. The joiner's world lives in an in-memory
     // store (the host owns the durable save; a joiner never writes OPFS).
     onJoinByCode: async (code) => {
-      const join = createJoinNet(code);
+      // E0.4 wave-3: the join claim carries whatever THIS device cached for
+      // THIS room code last time (see `joinerInventoryStore` above) — omitted
+      // on a brand-new room, exactly like the host's own documented default
+      // ("no claim ⇒ fresh empty inventory").
+      const roomKey = code.toUpperCase();
+      const itemsReg = ItemRegistry.create(STARTER_ITEMS);
+      const invStore = joinerInventoryStore();
+      const invPersistence = isOk(itemsReg) ? new InventoryPersistence(invStore, itemsReg.value) : null;
+      let initialInventory: SerializedInventoryWire | undefined;
+      if (invPersistence) {
+        const loadedInv = await invPersistence.loadInventory(roomKey, 'local');
+        if (isOk(loadedInv)) initialInventory = serializeInventory(loadedInv.value);
+      }
+      const join = createJoinNet(code, initialInventory ? { initialInventory } : {});
       const welcome = await join.waitForWelcome();
       if (!welcome) {
         join.dispose();
@@ -193,6 +261,9 @@ function mountMenu(hooks: LaasHooks): void {
         playerState: defaultPose,
         store,
         join,
+        ...(invPersistence
+          ? { persistInventoryState: (wire: SerializedInventoryWire) => void saveJoinerInventory(invStore, roomKey, wire) }
+          : {}),
       }).catch(reportBootFailure);
       return true;
     },
@@ -353,6 +424,12 @@ async function bootEngine(hooks: LaasHooks, launch: MenuLaunch | null): Promise<
       getPose: () => camPoseToPlayerState(fly.getPose()),
       onHostGone: hostWatch.onGone,
       onHostReturned: hostWatch.onReturned,
+      // E0.4 wave-3: the host's authoritative echo is the ONLY path this
+      // joiner's inventory UI updates from — never a local mutation.
+      onInventoryState: (wire) => {
+        ctx.world?.applyInventoryState?.(wire);
+        launch.persistInventoryState?.(wire);
+      },
     });
     engine.onUpdate((dt) => world.update(dt));
   } else if (launch) {

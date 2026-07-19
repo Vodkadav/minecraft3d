@@ -223,3 +223,40 @@ describe("parseMessage — malformed input is an error value", () => {
     expect(() => parseMessage(() => 0)).not.toThrow();
   });
 });
+
+describe("N1: playerName length bound", () => {
+  const NAME_24 = "A".repeat(24);
+  const NAME_25 = "A".repeat(25);
+
+  it("accepts a join playerName at exactly the cap", () => {
+    const r = parseMessage({ kind: "join", playerName: NAME_24 });
+    expect(isOk(r)).toBe(true);
+  });
+
+  it("rejects a join playerName one over the cap", () => {
+    const r = parseMessage({ kind: "join", playerName: NAME_25 });
+    expect(isErr(r)).toBe(true);
+  });
+
+  it("accepts a peerJoined playerName at exactly the cap", () => {
+    const r = parseMessage({ kind: "peerJoined", peerId: "p1", playerName: NAME_24 });
+    expect(isOk(r)).toBe(true);
+  });
+
+  it("rejects a peerJoined playerName one over the cap", () => {
+    const r = parseMessage({ kind: "peerJoined", peerId: "p1", playerName: NAME_25 });
+    expect(isErr(r)).toBe(true);
+  });
+});
+
+describe("N1: unknown-kind log slice", () => {
+  it("caps the reason string for an oversized attacker-controlled kind", () => {
+    const hostileKind = "x".repeat(5000);
+    const r = parseMessage({ kind: hostileKind });
+    expect(isErr(r)).toBe(true);
+    if (isErr(r)) {
+      expect(r.error.reason.length).toBeLessThan(100);
+      expect(r.error.reason).toBe(`unknown kind: ${"x".repeat(40)}`);
+    }
+  });
+});
