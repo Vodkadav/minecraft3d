@@ -61,7 +61,7 @@ export interface FillMsg {
   readonly materialId: number;
 }
 
-export type InteractAction = "attack" | "harvest" | "feed" | "mount" | "dismount";
+export type InteractAction = "attack" | "harvest" | "feed" | "mount" | "dismount" | "pickup";
 
 export interface InteractMsg {
   readonly kind: "interact";
@@ -197,6 +197,24 @@ export interface CreaturesMsg {
   readonly entities: readonly CreatureEntity[];
 }
 
+/** One streamed ground-drop loot stack (E0.5) — mirrors `CreatureEntity`'s
+ *  shape/streaming contract but for dropped stacks (position only, no
+ *  behavior/health/dying/tamed). `y` is already ground-resolved by the host. */
+export interface GroundItemEntity {
+  readonly id: string;
+  readonly itemId: string;
+  readonly count: number;
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
+}
+
+/** The host's full active ground-drop set (E0.5), streamed like `creatures`. */
+export interface GroundItemsMsg {
+  readonly kind: "groundItems";
+  readonly entities: readonly GroundItemEntity[];
+}
+
 export interface PeerJoinedMsg {
   readonly kind: "peerJoined";
   readonly peerId: string;
@@ -242,7 +260,8 @@ export type HostMessage =
   | PeerLeftMsg
   | HostClosingMsg
   | PlaceableStateMsg
-  | InventoryStateMsg;
+  | InventoryStateMsg
+  | GroundItemsMsg;
 
 export type NetMessage = JoinerMessage | HostMessage;
 
@@ -288,7 +307,14 @@ function isWorldEdit(v: unknown): v is WorldEdit {
   return v.materialId === undefined || isNum(v.materialId);
 }
 
-const INTERACT_ACTIONS: readonly string[] = ["attack", "harvest", "feed", "mount", "dismount"];
+const INTERACT_ACTIONS: readonly string[] = [
+  "attack",
+  "harvest",
+  "feed",
+  "mount",
+  "dismount",
+  "pickup",
+];
 
 const PLACEABLE_ACTIONS: readonly string[] = [
   "toggleDoor",
@@ -371,6 +397,22 @@ function isInventoryOp(v: unknown): v is InventoryOp {
   }
 }
 
+/** Ceiling for E0.5 ground-item wire arrays — generous over any realistic
+ *  active drop count but bounded so a hostile peer can't DoS `parseMessage`. */
+const MAX_WIRE_GROUND_ITEMS = 256;
+
+function isGroundItemEntity(v: unknown): v is GroundItemEntity {
+  return (
+    isRecord(v) &&
+    isWireItemId(v.id) &&
+    isWireItemId(v.itemId) &&
+    isWireCount(v.count) &&
+    isNum(v.x) &&
+    isNum(v.y) &&
+    isNum(v.z)
+  );
+}
+
 function isCreatureEntity(v: unknown): v is CreatureEntity {
   return (
     isRecord(v) &&
@@ -418,6 +460,10 @@ const VALIDATORS: Record<string, (m: Record<string, unknown>) => boolean> = {
   worldEdit: (m) => isWorldEdit(m.edit),
   entityRemoved: (m) => isStr(m.id),
   creatures: (m) => Array.isArray(m.entities) && m.entities.every(isCreatureEntity),
+  groundItems: (m) =>
+    Array.isArray(m.entities) &&
+    m.entities.length <= MAX_WIRE_GROUND_ITEMS &&
+    m.entities.every(isGroundItemEntity),
   peerJoined: (m) => isStr(m.peerId) && isStr(m.playerName),
   peerLeft: (m) => isStr(m.peerId),
   hostClosing: () => true,

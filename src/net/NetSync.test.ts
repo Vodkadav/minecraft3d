@@ -112,6 +112,39 @@ describe("attachHostNet", () => {
     expect(worldEdits).toHaveLength(1); // HostSession's broadcast only
   });
 
+  it("streams a host groundItems snapshot to joiners (E0.5)", async () => {
+    const net = makeTransportNetwork();
+    const store = new InMemoryWorldSaveStore();
+    await store.save(save("w1", 42));
+    let onSnapshot: ((entities: unknown[]) => void) | null = null;
+    const groundItems = {
+      set onSnapshot(fn: ((entities: unknown[]) => void) | null) {
+        onSnapshot = fn;
+      },
+      get onSnapshot() {
+        return onSnapshot;
+      },
+    };
+    await attachHostNet({
+      worldId: "w1",
+      seed: 42,
+      store,
+      getPose: () => POSE,
+      voxels: null,
+      // structural fake — only the onSnapshot seam attachHostNet touches
+      groundItems: groundItems as unknown as Parameters<typeof attachHostNet>[0]["groundItems"],
+      parent: new Group(),
+      transportFactory: () => net.host,
+    });
+
+    const joiner = net.addPeer("alice");
+    const messages = inbox(joiner);
+    const entities = [{ id: "loot:1", itemId: "wood", count: 3, x: 1, y: 0, z: 2 }];
+    onSnapshot!(entities);
+
+    expect(messages).toContainEqual({ kind: "groundItems", entities });
+  });
+
   it("broadcasts the host's own local edits to joiners", async () => {
     const { net, voxels } = await hostSetup();
     const joiner = net.addPeer("alice");
@@ -272,6 +305,59 @@ describe("createJoinNet", () => {
     voxels.carveAt(4, 5, 6, 1.5); // the M8 DigTool applying optimistically
 
     expect(hostApplied).toContainEqual({ op: "dig", x: 4, y: 5, z: 6, radius: 1.5 });
+  });
+
+  it("applies a host groundItems snapshot to the joiner's field and never mutates locally (E0.5)", async () => {
+    const { join, connect, net } = await joinedSetup();
+    connect();
+    await join.waitForWelcome(5000);
+    const applied: unknown[] = [];
+    const groundItems = {
+      remote: false,
+      onInteractIntent: null as ((targetId: string) => void) | null,
+      applySnapshot: (entities: unknown[]) => applied.push(...entities),
+    };
+    join.attachWorld({
+      voxels: null,
+      groundItems: groundItems as unknown as Parameters<typeof join.attachWorld>[0]["groundItems"],
+      parent: new Group(),
+      getPose: () => POSE,
+    });
+
+    expect(groundItems.remote).toBe(true);
+    net.host.broadcast({
+      kind: "groundItems",
+      entities: [{ id: "loot:1", itemId: "wood", count: 3, x: 1, y: 0, z: 2 }],
+    });
+
+    expect(applied).toEqual([{ id: "loot:1", itemId: "wood", count: 3, x: 1, y: 0, z: 2 }]);
+  });
+
+  it("sends a groundItems pickup intent to the host as an interact('pickup') message", async () => {
+    const { join, connect, net: hostNet } = await joinedSetup();
+    connect();
+    await join.waitForWelcome(5000);
+    const groundItems = {
+      remote: false,
+      onInteractIntent: null as ((targetId: string) => void) | null,
+      applySnapshot: () => {},
+    };
+    join.attachWorld({
+      voxels: null,
+      groundItems: groundItems as unknown as Parameters<typeof join.attachWorld>[0]["groundItems"],
+      parent: new Group(),
+      getPose: () => POSE,
+    });
+
+    const interacts: Array<{ action: string; targetId: string }> = [];
+    hostNet.host.onMessage((_id, raw) => {
+      const m = raw as { kind: string; action?: string; targetId?: string };
+      if (m.kind === "interact") interacts.push({ action: m.action!, targetId: m.targetId! });
+    });
+
+    groundItems.onInteractIntent?.("loot:1");
+
+    expect(interacts).toEqual([{ action: "pickup", targetId: "loot:1" }]);
   });
 
   it("sends a pose every ~100ms of update() and shows the host avatar", async () => {

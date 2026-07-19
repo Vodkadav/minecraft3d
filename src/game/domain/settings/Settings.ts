@@ -31,6 +31,10 @@ export const GRAPHICS_PRESETS: readonly GraphicsPreset[] = [
 export const TEXT_SCALE_MIN = 0.8;
 export const TEXT_SCALE_MAX = 2.0;
 
+// ---- E4.3: autoloot radius bounds (metres) ----
+export const AUTOLOOT_RADIUS_MIN_M = 1;
+export const AUTOLOOT_RADIUS_MAX_M = 15;
+
 export interface Settings {
   readonly graphicsPreset: GraphicsPreset;
   /** Normalized 0..1; feeds M5 spawn density. */
@@ -51,6 +55,10 @@ export interface Settings {
   readonly difficulty: Difficulty;
   /** Full day/night cycle length in seconds (Workstream E0.3); DAY_LENGTH_MIN..MAX_SECONDS. */
   readonly dayLengthSeconds: number;
+  // ---- E4.3: autoloot ----
+  readonly autolootEnabled: boolean;
+  /** Metres; AUTOLOOT_RADIUS_MIN..MAX_M. */
+  readonly autolootRadiusM: number;
 }
 
 /** Mutable/plain shape accepted by the factory before validation. */
@@ -68,6 +76,8 @@ export type SettingsInput = {
   readonly ambientVolume: number;
   readonly difficulty: Difficulty;
   readonly dayLengthSeconds: number;
+  readonly autolootEnabled: boolean;
+  readonly autolootRadiusM: number;
 };
 
 export type SettingsError =
@@ -77,7 +87,8 @@ export type SettingsError =
   | { readonly kind: "BoundaryRadiusOutOfRange"; readonly value: number }
   | { readonly kind: "VolumeOutOfRange"; readonly bus: string; readonly value: number }
   | { readonly kind: "UnknownDifficulty"; readonly value: string }
-  | { readonly kind: "DayLengthOutOfRange"; readonly value: number };
+  | { readonly kind: "DayLengthOutOfRange"; readonly value: number }
+  | { readonly kind: "AutolootRadiusOutOfRange"; readonly value: number };
 
 function isGraphicsPreset(value: string): value is GraphicsPreset {
   return (GRAPHICS_PRESETS as readonly string[]).includes(value);
@@ -129,6 +140,13 @@ export function makeSettings(input: SettingsInput): Result<Settings, SettingsErr
   ) {
     return err({ kind: "DayLengthOutOfRange", value: input.dayLengthSeconds });
   }
+  if (
+    !Number.isFinite(input.autolootRadiusM) ||
+    input.autolootRadiusM < AUTOLOOT_RADIUS_MIN_M ||
+    input.autolootRadiusM > AUTOLOOT_RADIUS_MAX_M
+  ) {
+    return err({ kind: "AutolootRadiusOutOfRange", value: input.autolootRadiusM });
+  }
   return ok({
     graphicsPreset: input.graphicsPreset,
     animalDensity: input.animalDensity,
@@ -143,6 +161,8 @@ export function makeSettings(input: SettingsInput): Result<Settings, SettingsErr
     ambientVolume: input.ambientVolume,
     difficulty: input.difficulty,
     dayLengthSeconds: input.dayLengthSeconds,
+    autolootEnabled: input.autolootEnabled,
+    autolootRadiusM: input.autolootRadiusM,
   });
 }
 
@@ -161,6 +181,10 @@ export function defaultSettings(): Settings {
     ambientVolume: 0.6,
     difficulty: "normal",
     dayLengthSeconds: DEFAULT_DAY_LENGTH_SECONDS,
+    // Cozy default: autoloot ON with a comfortable walk-up radius — kids
+    // shouldn't need to discover a toggle to get the "walk over it" feel.
+    autolootEnabled: true,
+    autolootRadiusM: 3,
   };
 }
 

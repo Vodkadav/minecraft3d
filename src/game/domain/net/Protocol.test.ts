@@ -65,6 +65,12 @@ const HAPPY: NetMessage[] = [
     ],
   },
   { kind: "creatures", entities: [] },
+  { kind: "interact", action: "pickup", targetId: "loot:1" },
+  {
+    kind: "groundItems",
+    entities: [{ id: "loot:1", itemId: "wood", count: 3, x: 1, y: 2, z: 3 }],
+  },
+  { kind: "groundItems", entities: [] },
   { kind: "peerJoined", peerId: "p2", playerName: "Andrea" },
   { kind: "peerLeft", peerId: "p2" },
   { kind: "hostClosing" },
@@ -148,6 +154,26 @@ describe("parseMessage — malformed input is an error value", () => {
         { id: "x", species: "deer", kind: "creature", x: 1, y: 2, z: 3, yaw: 0, tamed: "yes" },
       ],
     }, // tamed wrong type
+    { kind: "groundItems" }, // missing entities
+    { kind: "groundItems", entities: {} }, // not an array
+    { kind: "groundItems", entities: [{ id: "loot:1", itemId: "wood", count: 3, x: 1, y: 2 }] }, // no z
+    { kind: "groundItems", entities: [{ id: "", itemId: "wood", count: 3, x: 1, y: 2, z: 3 }] }, // empty id
+    { kind: "groundItems", entities: [{ id: "loot:1", itemId: "wood", count: 0, x: 1, y: 2, z: 3 }] }, // non-positive count
+    {
+      kind: "groundItems",
+      entities: [{ id: "loot:1", itemId: "wood", count: 1000, x: 1, y: 2, z: 3 }],
+    }, // oversized count
+    {
+      kind: "groundItems",
+      entities: Array.from({ length: 300 }, (_, i) => ({
+        id: `loot:${i}`,
+        itemId: "wood",
+        count: 1,
+        x: 0,
+        y: 0,
+        z: 0,
+      })),
+    }, // oversized array (DoS-shaped payload)
     { kind: "placeableInteract", action: "danceOnChest", placeableId: "piece:1" }, // unknown action
     { kind: "placeableInteract", action: "toggleDoor" }, // missing placeableId
     { kind: "placeableInteract", action: "toggleDoor", placeableId: 7 }, // wrong type

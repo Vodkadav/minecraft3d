@@ -348,6 +348,7 @@ async function bootEngine(hooks: LaasHooks, launch: MenuLaunch | null): Promise<
     const world = launch.join.attachWorld({
       voxels: ctx.world?.voxels ?? null,
       spawns: ctx.world?.spawns ?? null,
+      groundItems: ctx.world?.groundItems ?? null,
       placeables: ctx.world?.placeables ?? null,
       parent: engine.scene,
       getPose: () => camPoseToPlayerState(fly.getPose()),
@@ -363,6 +364,7 @@ async function bootEngine(hooks: LaasHooks, launch: MenuLaunch | null): Promise<
       getPose: () => camPoseToPlayerState(fly.getPose()),
       voxels: ctx.world?.voxels ?? null,
       spawns: ctx.world?.spawns ?? null,
+      groundItems: ctx.world?.groundItems ?? null,
       placeables: ctx.world?.placeables ?? null,
       ...(ctx.world?.registry ? { registry: ctx.world.registry } : {}),
       parent: engine.scene,

@@ -724,6 +724,84 @@ describe("HostSession", () => {
       expect(state?.slots[0]).toEqual({ itemId: "wood", count: 6 });
     });
 
+    // ---- E0.5: ground-item pickup ----
+
+    it("pickup: credits the sender's inventory and removes the ground item on success", () => {
+      const removed: string[] = [];
+      const net2 = makeTransportNetwork();
+      const session2 = new HostSession(
+        net2.host,
+        () => SNAPSHOT,
+        {
+          onWorldEdit: () => {},
+          onGroundItemPeek: (targetId) =>
+            targetId === "loot:1" ? { itemId: "wood", count: 3 } : undefined,
+          onGroundItemRemove: (targetId) => removed.push(targetId),
+        },
+        { registry: REGISTRY },
+      );
+      void session2;
+      const alice = net2.addPeer("alice");
+      alice.broadcast({ kind: "join", playerName: "Alice" });
+      const inbox = collect(alice);
+
+      alice.broadcast({ kind: "interact", action: "pickup", targetId: "loot:1" });
+
+      expect(removed).toEqual(["loot:1"]);
+      const state = inventoryStateOf(inbox);
+      expect(state?.slots[0]).toEqual({ itemId: "wood", count: 3 });
+    });
+
+    it("pickup: a full inventory leaves the drop on the ground (no removal, no inventoryState)", () => {
+      const removed: string[] = [];
+      const net2 = makeTransportNetwork();
+      new HostSession(
+        net2.host,
+        () => SNAPSHOT,
+        {
+          onWorldEdit: () => {},
+          onGroundItemPeek: () => ({ itemId: "wood", count: 3 }),
+          onGroundItemRemove: (targetId) => removed.push(targetId),
+        },
+        { registry: REGISTRY, playerInventoryCapacity: 1 },
+      );
+      const alice = net2.addPeer("alice");
+      alice.broadcast({
+        kind: "join",
+        playerName: "Alice",
+        inventory: { capacity: 1, slots: [{ itemId: "stone", count: 16 }] },
+      });
+      const inbox = collect(alice);
+
+      alice.broadcast({ kind: "interact", action: "pickup", targetId: "loot:1" });
+
+      expect(removed).toEqual([]);
+      expect(inbox).toEqual([]);
+    });
+
+    it("pickup: nothing there (peek returns undefined) is a silent no-op", () => {
+      const removed: string[] = [];
+      const net2 = makeTransportNetwork();
+      new HostSession(
+        net2.host,
+        () => SNAPSHOT,
+        {
+          onWorldEdit: () => {},
+          onGroundItemPeek: () => undefined,
+          onGroundItemRemove: (targetId) => removed.push(targetId),
+        },
+        { registry: REGISTRY },
+      );
+      const alice = net2.addPeer("alice");
+      alice.broadcast({ kind: "join", playerName: "Alice" });
+      const inbox = collect(alice);
+
+      alice.broadcast({ kind: "interact", action: "pickup", targetId: "loot:ghost" });
+
+      expect(removed).toEqual([]);
+      expect(inbox).toEqual([]);
+    });
+
     it("inventoryOp: dropped entirely from an unknown peer (no session record yet)", () => {
       const { net: net2, session: session2 } = hostedSession(undefined);
       void session2;

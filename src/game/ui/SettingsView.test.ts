@@ -51,6 +51,8 @@ describe("SettingsView", () => {
       "laas-vol-ambient",
       "laas-difficulty",
       "laas-daylength",
+      "laas-autoloot",
+      "laas-autoloot-radius",
     ]) {
       const label = el.querySelector(`label[for="${id}"]`);
       expect(label, `label for ${id}`).toBeTruthy();
@@ -107,6 +109,27 @@ describe("SettingsView", () => {
     expect(controller.settings.dayLengthSeconds).toBe(600);
     const reloaded = await store.load();
     if (isOk(reloaded)) expect(reloaded.value.dayLengthSeconds).toBe(600);
+  });
+
+  it("flows autoloot toggle + radius changes through the controller and store (E4.3)", async () => {
+    const { el, controller, store } = await build();
+    const enabled = control<HTMLInputElement>(el, "laas-autoloot");
+    enabled.checked = false;
+    enabled.dispatchEvent(new Event("change"));
+    await flush();
+    expect(controller.settings.autolootEnabled).toBe(false);
+
+    const radius = control<HTMLInputElement>(el, "laas-autoloot-radius");
+    radius.value = "6";
+    radius.dispatchEvent(new Event("change"));
+    await flush();
+    expect(controller.settings.autolootRadiusM).toBe(6);
+
+    const reloaded = await store.load();
+    if (isOk(reloaded)) {
+      expect(reloaded.value.autolootEnabled).toBe(false);
+      expect(reloaded.value.autolootRadiusM).toBe(6);
+    }
   });
 
   it("flows a music-volume change through the controller and store", async () => {

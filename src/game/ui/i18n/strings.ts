@@ -49,6 +49,8 @@ export const UI_STRINGS: Catalog = {
     "settings.difficulty.normal": "Normal",
     "settings.difficulty.hard": "Hard",
     "settings.dayLength": "Day/night length (minutes)",
+    "settings.autoloot": "Autoloot",
+    "settings.autolootRadius": "Autoloot radius (m)",
     "settings.back": "Back",
 
     "lobby.title": "Online worlds",
@@ -85,6 +87,7 @@ export const UI_STRINGS: Catalog = {
     "hud.vitals.hunger.label": "Food {n}/{max}",
     "hud.toast.loot": "Picked up {name} x{count}",
     "hud.toast.ate": "Ate {name}",
+    "hud.toast.bagFull": "Bag full — some loot is still on the ground",
 
     "item.wood.name": "Wood",
     "item.stone.name": "Stone",
@@ -324,6 +327,8 @@ export const UI_STRINGS: Catalog = {
     "settings.difficulty.normal": "Normal",
     "settings.difficulty.hard": "Difícil",
     "settings.dayLength": "Duración del día/noche (minutos)",
+    "settings.autoloot": "Recolección automática",
+    "settings.autolootRadius": "Radio de recolección automática (m)",
     "settings.back": "Atrás",
 
     "lobby.title": "Mundos en línea",
@@ -360,6 +365,7 @@ export const UI_STRINGS: Catalog = {
     "hud.vitals.hunger.label": "Comida {n}/{max}",
     "hud.toast.loot": "Conseguiste {name} x{count}",
     "hud.toast.ate": "Comiste {name}",
+    "hud.toast.bagFull": "Bolsa llena — queda botín en el suelo",
 
     "item.wood.name": "Madera",
     "item.stone.name": "Piedra",
@@ -599,6 +605,8 @@ export const UI_STRINGS: Catalog = {
     "settings.difficulty.normal": "Normal",
     "settings.difficulty.hard": "Svær",
     "settings.dayLength": "Dag/nat-længde (minutter)",
+    "settings.autoloot": "Automatisk opsamling",
+    "settings.autolootRadius": "Radius for automatisk opsamling (m)",
     "settings.back": "Tilbage",
 
     "lobby.title": "Online-verdener",
@@ -635,6 +643,7 @@ export const UI_STRINGS: Catalog = {
     "hud.vitals.hunger.label": "Mad {n}/{max}",
     "hud.toast.loot": "Samlede {name} x{count}",
     "hud.toast.ate": "Spiste {name}",
+    "hud.toast.bagFull": "Taske fuld — noget bytte ligger stadig på jorden",
 
     "item.wood.name": "Træ",
     "item.stone.name": "Sten",

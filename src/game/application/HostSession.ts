@@ -83,6 +83,14 @@ export interface HostSessionHooks {
     itemId: string | undefined,
     count: number | undefined,
   ): PlaceableHookOutcome | undefined | null;
+  /** A validated `pickup` interact intent (E0.5) — peek the ground item's
+   *  stack WITHOUT mutating host state (undefined = nothing there / already
+   *  gone). `HostSession` credits the sender's authoritative inventory FIRST
+   *  and only calls `onGroundItemRemove` on success — a full bag leaves the
+   *  drop on the ground, the same never-conjure/never-lose contract as
+   *  withdraw/harvest. */
+  onGroundItemPeek?(targetId: string): { itemId: string; count: number } | undefined;
+  onGroundItemRemove?(targetId: string): void;
 }
 
 export interface HostSessionDeps {
@@ -179,6 +187,10 @@ export class HostSession {
         });
         return;
       case "interact":
+        if (msg.action === "pickup") {
+          this.handlePickup(peerId, msg.targetId);
+          return;
+        }
         this.hooks.onInteract?.(msg.action, msg.targetId, peerId);
         return;
       case "placeableInteract":
@@ -356,6 +368,21 @@ export class HostSession {
     }
     peer.inventory = credited.value;
     this.broadcastPlaceableState(placeableId, outcome.state);
+    this.sendInventoryState(peerId, peer.inventory);
+  }
+
+  /** E0.5: peek the ground item (never mutates host state), credit the
+   *  sender's inventory, and only THEN remove it — a full bag leaves the
+   *  drop on the ground instead of being conjured/lost. */
+  private handlePickup(peerId: string, targetId: string): void {
+    const peer = this.peers.get(peerId);
+    if (!peer) return;
+    const stack = this.hooks.onGroundItemPeek?.(targetId);
+    if (!stack) return;
+    const credited = peer.inventory.add(stack.itemId, stack.count);
+    if (!isOk(credited)) return;
+    peer.inventory = credited.value;
+    this.hooks.onGroundItemRemove?.(targetId);
     this.sendInventoryState(peerId, peer.inventory);
   }
 

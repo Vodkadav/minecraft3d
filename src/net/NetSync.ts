@@ -26,6 +26,7 @@ import type { WorldSaveStore } from "../game/application/ports/WorldSaveStore";
 import type { ItemRegistry } from "../game/domain/items/ItemRegistry";
 import type {
   CreatureEntity,
+  GroundItemEntity,
   InventoryOp,
   SerializedInventoryWire,
   WelcomeMsg,
@@ -34,6 +35,7 @@ import type {
 import { makeRoomCode } from "../game/domain/net/RoomCode";
 import type { PlayerState } from "../game/domain/world/WorldSaveData";
 import { makeTrysteroTransport } from "../game/infrastructure/net/TrysteroTransport";
+import type { GroundItemFieldHandle } from "../spawn/GroundItemField";
 import type { SpawnFieldHandle } from "../spawn/SpawnFieldView";
 import type { PlaceableInteractionHandle } from "../voxel/placement/PlaceableInteractionTool";
 import { RemotePlayers } from "./RemotePlayers";
@@ -66,6 +68,9 @@ export interface HostNetDeps {
   readonly voxels: EditableVoxels | null;
   /** The host's spawn field — streamed to joiners, joiner intents applied to it. */
   readonly spawns?: SpawnFieldHandle | null;
+  /** The host's ground-drop loot field (E0.5) — streamed to joiners; pickup
+   *  intents resolve through it via HostSession's ground-item hooks. */
+  readonly groundItems?: GroundItemFieldHandle | null;
   /** The host's functional placeables (Workstream 8.1, S7b) — joiner
    *  placeableInteract intents resolve against it. */
   readonly placeables?: PlaceableInteractionHandle | null;
@@ -137,6 +142,8 @@ export async function attachHostNet(deps: HostNetDeps): Promise<HostNetHandle> {
       onInteract: (action, targetId, peerId) => deps.spawns?.applyInteract(action, targetId, peerId),
       onPlaceableInteract: (action, placeableId, peerId, itemId, count) =>
         deps.placeables?.resolveHostIntent(action, placeableId, peerId, itemId, count),
+      onGroundItemPeek: (targetId) => deps.groundItems?.peek(targetId),
+      onGroundItemRemove: (targetId) => deps.groundItems?.remove(targetId),
     },
     { ...(deps.registry ? { registry: deps.registry } : {}) },
   );
@@ -151,6 +158,10 @@ export async function attachHostNet(deps: HostNetDeps): Promise<HostNetHandle> {
   // stream the host's live spawn field to joiners (~10 Hz; ADR 0003)
   if (deps.spawns) {
     deps.spawns.onSnapshot = (entities) => transport.broadcast({ kind: "creatures", entities });
+  }
+  // stream the host's live ground-drop loot field to joiners (E0.5)
+  if (deps.groundItems) {
+    deps.groundItems.onSnapshot = (entities) => transport.broadcast({ kind: "groundItems", entities });
   }
 
   let poseAcc = 0;
@@ -175,6 +186,7 @@ export async function attachHostNet(deps: HostNetDeps): Promise<HostNetHandle> {
     dispose(): void {
       if (deps.voxels) deps.voxels.onLocalEdit = null;
       if (deps.spawns) deps.spawns.onSnapshot = null;
+      if (deps.groundItems) deps.groundItems.onSnapshot = null;
       remote.dispose();
       session.close();
     },
@@ -188,6 +200,9 @@ export interface JoinWorldDeps {
   readonly voxels: EditableVoxels | null;
   /** The joiner's spawn field — puppeted by the host's stream (ADR 0003). */
   readonly spawns?: SpawnFieldHandle | null;
+  /** The joiner's ground-drop loot field (E0.5) — puppeted by the host's
+   *  stream; pickup/autoloot become intents, never local mutation. */
+  readonly groundItems?: GroundItemFieldHandle | null;
   /** The joiner's functional placeables (Workstream 8.1, S7b) — `E` sends an
    *  intent instead of resolving locally; broadcast state reconciles it. */
   readonly placeables?: PlaceableInteractionHandle | null;
@@ -250,6 +265,7 @@ export function createJoinNet(code: string, opts: JoinNetOptions = {}): JoinNetH
   let world: {
     readonly voxels: EditableVoxels | null;
     readonly spawns: SpawnFieldHandle | null;
+    readonly groundItems: GroundItemFieldHandle | null;
     readonly placeables: PlaceableInteractionHandle | null;
     readonly remote: RemotePlayers;
     readonly onHostGone?: () => void;
@@ -310,6 +326,10 @@ export function createJoinNet(code: string, opts: JoinNetOptions = {}): JoinNetH
     // re-sends the full active set, so there's nothing to buffer (ADR 0003).
     onCreatures: (entities: readonly CreatureEntity[]): void =>
       world?.spawns?.applySnapshot(entities),
+    // ground-item snapshots arriving before attachWorld are dropped too —
+    // the next tick re-sends the full active set (E0.5, mirrors onCreatures).
+    onGroundItems: (entities: readonly GroundItemEntity[]): void =>
+      world?.groundItems?.applySnapshot(entities),
     onHostClosing: onHostLost,
     onPlaceableState: (placeableId: string, state: unknown): void =>
       world?.placeables?.applyRemoteState(placeableId, state),
@@ -367,6 +387,7 @@ export function createJoinNet(code: string, opts: JoinNetOptions = {}): JoinNetH
       const attached = {
         voxels: deps.voxels,
         spawns: deps.spawns ?? null,
+        groundItems: deps.groundItems ?? null,
         placeables: deps.placeables ?? null,
         remote,
         ...(deps.onHostGone ? { onHostGone: deps.onHostGone } : {}),
@@ -383,6 +404,11 @@ export function createJoinNet(code: string, opts: JoinNetOptions = {}): JoinNetH
         deps.spawns.remote = true;
         deps.spawns.onInteractIntent = (action, targetId) =>
           session?.sendInteract(action, targetId);
+      }
+      // joiner: pickup/autoloot become `interact` "pickup" intents (E0.5)
+      if (deps.groundItems) {
+        deps.groundItems.remote = true;
+        deps.groundItems.onInteractIntent = (targetId) => session?.sendInteract("pickup", targetId);
       }
       // joiner: E on a placeable becomes an intent too (Workstream 8.1, S7b)
       if (deps.placeables) {
@@ -413,6 +439,7 @@ export function createJoinNet(code: string, opts: JoinNetOptions = {}): JoinNetH
         dispose(): void {
           if (deps.voxels) deps.voxels.onLocalEdit = null;
           if (deps.spawns) deps.spawns.onInteractIntent = null;
+          if (deps.groundItems) deps.groundItems.onInteractIntent = null;
           if (deps.placeables) deps.placeables.onInteractIntent = null;
           remote.dispose();
           world = null;

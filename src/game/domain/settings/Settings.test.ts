@@ -24,6 +24,8 @@ function validInput(overrides: Partial<SettingsInput> = {}): SettingsInput {
     ambientVolume: 0.6,
     difficulty: "normal",
     dayLengthSeconds: DEFAULT_DAY_LENGTH_SECONDS,
+    autolootEnabled: true,
+    autolootRadiusM: 3,
     ...overrides,
   };
 }
@@ -162,6 +164,38 @@ describe("Settings", () => {
     const r = updateSettings(defaultSettings(), { dayLengthSeconds: 600 });
     expect(isOk(r)).toBe(true);
     if (isOk(r)) expect(r.value.dayLengthSeconds).toBe(600);
+  });
+
+  it("defaults autoloot on with a 3m radius (E4.3: cozy walk-up-and-collect)", () => {
+    expect(defaultSettings().autolootEnabled).toBe(true);
+    expect(defaultSettings().autolootRadiusM).toBe(3);
+  });
+
+  it("rejects an autoloot radius below the minimum", () => {
+    const r = makeSettings(validInput({ autolootRadiusM: 0 }));
+    expect(isErr(r)).toBe(true);
+    if (isErr(r)) expect(r.error.kind).toBe("AutolootRadiusOutOfRange");
+  });
+
+  it("rejects an autoloot radius above the maximum", () => {
+    const r = makeSettings(validInput({ autolootRadiusM: 100 }));
+    expect(isErr(r)).toBe(true);
+    if (isErr(r)) expect(r.error.kind).toBe("AutolootRadiusOutOfRange");
+  });
+
+  it("rejects a non-finite autoloot radius", () => {
+    const r = makeSettings(validInput({ autolootRadiusM: Number.NaN }));
+    expect(isErr(r)).toBe(true);
+    if (isErr(r)) expect(r.error.kind).toBe("AutolootRadiusOutOfRange");
+  });
+
+  it("updates autolootEnabled/autolootRadiusM while keeping the rest", () => {
+    const r = updateSettings(defaultSettings(), { autolootEnabled: false, autolootRadiusM: 8 });
+    expect(isOk(r)).toBe(true);
+    if (isOk(r)) {
+      expect(r.value.autolootEnabled).toBe(false);
+      expect(r.value.autolootRadiusM).toBe(8);
+    }
   });
 
   it("updates a single bus volume while keeping the rest", () => {
