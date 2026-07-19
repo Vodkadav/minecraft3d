@@ -111,6 +111,10 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
   // Workstream 5.5: hoisted so the spawnsOn block below can trigger the
   // sleep-fade transition without re-mounting a second overlay.
   let screenEffectsRef: ReturnType<typeof mountScreenEffects> | null = null;
+  // Workstream 9.4: hoisted so attachSpawnField's streaming pop-in fade below
+  // can honor the settings-aware reducedMotion (not just the OS media query
+  // its own default fallback uses) — same hoist reason as feel/screenEffects.
+  let reducedMotionRef: (() => boolean) | null = null;
   if (ctx.audio) {
     settingsController = new SettingsController(new LocalStorageSettingsStore());
     await settingsController.load();
@@ -126,6 +130,7 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
     const reducedMotion = (): boolean =>
       settingsRef.settings.reducedMotion ||
       (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false);
+    reducedMotionRef = reducedMotion;
     const damageNumbers = mountDamageNumbers(document, engine.camera, engine.renderer.domElement);
     const screenEffects = mountScreenEffects(document, reducedMotion);
     screenEffectsRef = screenEffects;
@@ -730,6 +735,7 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
       },
       isNight: () => isNight(sunSky.timeOfDay),
       creatureDamageMult: difficultyRules(settings.settings.difficulty).creatureDamage,
+      ...(reducedMotionRef ? { reducedMotion: reducedMotionRef } : {}),
       ...(voxelsRef
         ? {
             save: {
