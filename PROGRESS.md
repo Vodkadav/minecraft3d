@@ -157,7 +157,12 @@ item re-verified by the orchestrator (full `npm run ci` + diff inspection), not 
   loading screen for the ~48 s boot, streaming pop-in grow-in
 - [x] W10 Presentation: procedural Diggy World wordmark + menu backdrop, credits (EN/ES/DA),
   first-run pulse, menu/lobby/settings theme sweep
-- [ ] Security review of all new intent-path mutations (dispatched, in flight)
+- [x] Security review of all new intent-path mutations — done 2026-07-19; material findings fixed
+  in 6f03bf8: inventory-touching placeable actions gated off the wire until a host-side
+  inventory-authority protocol exists (a joiner could conjure items into shared chests — the host
+  holds no joiner inventory to debit), and joiners now pin the host peerId at welcome (trystero is
+  a full mesh — host-kind messages from other joiners are dropped). Joiner chest/campfire/plot
+  actions are consequently no-ops until the inventory-sync protocol lands (recorded deferral)
 - [ ] Playtest gate (structured session — owner schedules)
 
 Deferred (explicit, recorded in the plan doc): minimap/compass, breeding + boss, Tauri wrapper
