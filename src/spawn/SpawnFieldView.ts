@@ -63,6 +63,7 @@ import { feed, startTaming, TAMING_RULES, type TamingState } from "../game/domai
 import { hashUnitFloat } from "../game/domain/rng/hash";
 import type { ItemStack } from "../game/domain/inventory/Inventory";
 import type { AudioPort } from "../game/application/ports/AudioPort";
+import type { FeelPort } from "../game/application/ports/FeelPort";
 import { nearestWithin, SPECIES_VISUAL, validGround, type SpawnGround } from "./SpawnPlacement";
 
 /** Seconds between proximity re-steps when no cell is crossed. */
@@ -71,6 +72,8 @@ const STEP_INTERVAL_S = 1.0;
 const REACH_M = 3.5;
 /** Player hit damage per attack press (tools/weapons arrive later). */
 const ATTACK_DAMAGE = 10;
+/** Deterministic crit chance on a player attack — feel-only (Workstream 2). */
+const CRIT_CHANCE = 0.15;
 /** How close an aggressive creature must get to bite the player (m). */
 const CONTACT_RANGE_M = 2.2;
 /** Minimum gap between a creature's bites on the player (s). */
@@ -101,6 +104,9 @@ export interface SpawnFieldDeps {
   /** Workstream 1.6: hit/harvest/tame play here; a bite on the player plays
    *  the 2D "hurt" sound (no position — it's about the player, not a place). */
   readonly audio?: AudioPort;
+  /** Workstream 2: attack/kill/hurt/harvest/tame each also fan out here —
+   *  shake, hit-stop, vignette, damage numbers, particles, rumble. */
+  readonly feel?: FeelPort;
   /** Called with the stacks gained from a kill/harvest (HUD hook). */
   onLoot?(stacks: readonly ItemStack[]): void;
   /** An aggressive creature bit the player (M6 player health). */
@@ -403,10 +409,18 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
     if (target.dying !== null) return;
     const r = applyDamage(target.combat, ATTACK_DAMAGE);
     target.combat = r.state;
-    deps.audio?.play("hit", {
-      position: [target.obj.position.x, target.obj.position.y, target.obj.position.z],
-    });
+    const pos: [number, number, number] = [
+      target.obj.position.x,
+      target.obj.position.y,
+      target.obj.position.z,
+    ];
+    deps.audio?.play("hit", { position: pos });
+    // deterministic crit roll (same shape as the loot roll below) — a
+    // presentation flourish only, never affects the damage actually dealt
+    const crit = hashUnitFloat(deps.seed, clockMs | 0, 0x6f10) < CRIT_CHANCE;
+    deps.feel?.trigger("attackHit", { worldPos: pos, damageValue: ATTACK_DAMAGE, crit });
     if (!r.died) return;
+    deps.feel?.trigger("kill", { worldPos: pos, damageValue: ATTACK_DAMAGE, crit });
     const roll = hashUnitFloat(deps.seed, clockMs | 0, 0x6f00);
     grantLoot(lootFor(target.entity.species, roll));
     persistRemoved(target.entity.id);
@@ -428,17 +442,25 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
     if (r.becameTamed) {
       tamed.add(target.entity.id);
       deps.save?.setEntity("taming.tamed", [...tamed]);
-      deps.audio?.play("tame", {
-        position: [target.obj.position.x, target.obj.position.y, target.obj.position.z],
-      });
+      const pos: [number, number, number] = [
+        target.obj.position.x,
+        target.obj.position.y,
+        target.obj.position.z,
+      ];
+      deps.audio?.play("tame", { position: pos });
+      deps.feel?.trigger("tame", { worldPos: pos });
     }
   }
 
   function resolveHarvest(target: { entity: SpawnEntity; obj: Object3D }): void {
     grantLoot(NODE_YIELD[target.entity.species] ?? []);
-    deps.audio?.play("harvest", {
-      position: [target.obj.position.x, target.obj.position.y, target.obj.position.z],
-    });
+    const pos: [number, number, number] = [
+      target.obj.position.x,
+      target.obj.position.y,
+      target.obj.position.z,
+    ];
+    deps.audio?.play("harvest", { position: pos });
+    deps.feel?.trigger("harvest", { worldPos: pos });
     remove(target.entity.id);
     persistRemoved(target.entity.id);
   }
@@ -530,8 +552,13 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
   function stepCreatures(dt: number): void {
     const [px, pz] = deps.getPlayerXZ();
     const epoch = Math.floor(clockMs / WANDER_EPOCH_MS);
+    // Workstream 2.3 hit-stop: PRESENTATION-only dt dip on the animation
+    // mixer step. Every other use of `dt` in this function (steering,
+    // positions, wander epoch, clockMs, the net snapshot cadence) keeps the
+    // real dt — simulation/netcode must never see the scaled value.
+    const animDt = deps.feel?.presentationDt ? deps.feel.presentationDt(dt) : dt;
     for (const c of creatures.values()) {
-      c.instance?.update(dt);
+      c.instance?.update(animDt);
       if (c.dying !== null) {
         if (ridingId === c.entity.id) setRiding(null);
         if (c.riddenBy !== null) resolveDismountPeer(c.riddenBy);
@@ -569,6 +596,7 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
         c.lastBiteMs = clockMs;
         deps.onPlayerHit?.(stats.damage);
         deps.audio?.play("hurt");
+        deps.feel?.trigger("takeDamage", { damageValue: stats.damage });
       }
       const behavior = decideBehavior(
         c.entity.species,
@@ -747,8 +775,11 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
       if (remote) {
         const k = smoothingFactor(dt);
         const [px, pz] = deps.getPlayerXZ();
+        // presentation-only (see stepCreatures) — network smoothing below
+        // keeps the real dt untouched
+        const animDt = deps.feel?.presentationDt ? deps.feel.presentationDt(dt) : dt;
         for (const c of creatures.values()) {
-          c.instance?.update(dt);
+          c.instance?.update(animDt);
           // Own mount: glue zero-lag to the local player instead of the
           // network-smoothed stream target (ADR 0003 addendum) — the host
           // echoes this creature's transform back too, but it would only add

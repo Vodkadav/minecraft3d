@@ -37,6 +37,12 @@ import { attachTreasureField } from '../voxel/treasure/TreasureField';
 import { attachSpawnField } from '../spawn/SpawnFieldView';
 import { createPlayerHealthBar } from '../spawn/PlayerHealthBar';
 import { mountGameHud } from '../spawn/GameHud';
+import { stepCameraShake } from '../feel/CameraShake';
+import { mountDamageNumbers } from '../feel/DamageNumbers';
+import { FeelDirector } from '../feel/FeelDirector';
+import { attachGamepadRumble } from '../feel/GamepadRumble';
+import { mountImpactParticles } from '../feel/ImpactParticles';
+import { mountScreenEffects } from '../feel/ScreenEffects';
 import {
   PLAYER_MAX_HEALTH,
   damagePlayer,
@@ -58,6 +64,9 @@ import { PersistentWorldSaveStore } from '../game/infrastructure/persistence/Per
 import type { WorldContext } from './Scenes';
 import type { CamPose } from '../core/Hooks';
 
+/** Health fraction at/below which the persistent low-health vignette shows (Workstream 2.5). */
+const LOW_HEALTH_FRACTION = 0.25;
+
 export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
   const { engine, params, seed } = ctx;
 
@@ -65,6 +74,10 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
   // audio port, and start the ambient wind bed + calm music loop for a real
   // game boot. The spawn block below reuses this same loaded controller.
   let settingsController: SettingsController | null = null;
+  // Workstream 2: the juice layer only mounts on the same real-game-boot gate
+  // as audio (never a tooling/dev URL scene) — mirrors `ctx.audio`'s own
+  // gating in main.ts, so a no-flags desktop boot stays pixel-identical.
+  let feel: FeelDirector | null = null;
   if (ctx.audio) {
     settingsController = new SettingsController(new LocalStorageSettingsStore());
     await settingsController.load();
@@ -75,6 +88,36 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
     ctx.audio.setBusVolume('ambient', s.ambientVolume);
     ctx.audio.startAmbient('ambientWind');
     ctx.audio.startMusicState('calm');
+
+    const settingsRef = settingsController;
+    const reducedMotion = (): boolean =>
+      settingsRef.settings.reducedMotion ||
+      (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false);
+    const damageNumbers = mountDamageNumbers(document, engine.camera, engine.renderer.domElement);
+    const screenEffects = mountScreenEffects(document, reducedMotion);
+    // the largest new instance carpet is skipped outright on the mobile
+    // preset, same policy as GroundRing/froxels above
+    const particles = params.preset === 'mobile' ? undefined : mountImpactParticles(engine.scene);
+    const rumble = attachGamepadRumble(reducedMotion);
+    feel = new FeelDirector({
+      damageNumbers,
+      screenEffects,
+      ...(particles ? { particles } : {}),
+      rumble,
+    });
+    const feelRef = feel;
+    engine.onUpdate((dt) => feelRef.tick(dt));
+    // registered AFTER main.ts's `fly.update` onUpdate call (buildScene runs
+    // strictly after that registration) — shakes the camera FlyCamera just
+    // finished computing this frame, never accumulates (see CameraShake.ts).
+    engine.onUpdate(() =>
+      stepCameraShake({
+        camera: engine.camera,
+        getShakeMagnitude: () => feelRef.shakeMagnitude(),
+        getHitStopActive: () => feelRef.hitStopActive(),
+        reducedMotion,
+      }),
+    );
   }
 
   const hf = await Heightfield.generate(
@@ -375,7 +418,7 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
     voxelsRef = voxels;
     if (ctx.world) ctx.world.voxels = voxels; // M7 net glue reaches it here
     engine.scene.add(voxels.group);
-    new DigTool(voxels, engine.camera, engine.renderer.domElement, ctx.audio);
+    new DigTool(voxels, engine.camera, engine.renderer.domElement, ctx.audio, feel ?? undefined);
     crosshairRef = Crosshair();
     window.addEventListener('pagehide', () => voxels.flushSave());
     // tooling probe handle (tools/voxel-shot.ts) — programmatic digs in CI-less runs
@@ -402,6 +445,7 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
       dom: engine.renderer.domElement,
       parent: engine.scene,
       ...(ctx.audio ? { audio: ctx.audio } : {}),
+      ...(feel ? { feel } : {}),
       save: {
         load: () => voxels.entity('placement.pieces'),
         persist: (data) => voxels.setEntity('placement.pieces', data),
@@ -491,15 +535,19 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
       density: settings.settings.animalDensity,
       dom: engine.renderer.domElement,
       ...(ctx.audio ? { audio: ctx.audio } : {}),
+      ...(feel ? { feel } : {}),
       onPlayerHit: (amount) => {
         const r = damagePlayer(vitals, amount);
         vitals = r.state;
-        healthBar.set(vitals.health / PLAYER_MAX_HEALTH);
+        const frac = vitals.health / PLAYER_MAX_HEALTH;
+        healthBar.set(frac);
         healthBar.flashDamage();
+        feel?.setLowHealth(frac > 0 && frac <= LOW_HEALTH_FRACTION);
         if (r.died) {
           vitals = respawnPlayer(vitals);
           if (respawnPose) ctx.hooks.setPose?.(respawnPose);
           healthBar.set(1);
+          feel?.setLowHealth(false);
         }
       },
       setMoveSpeedScale: (s) => ctx.hooks.setMoveSpeedScale?.(s),
@@ -524,7 +572,11 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
       if (!respawnPose) respawnPose = ctx.hooks.getPose?.() ?? null; // spawn = respawn
       const before = vitals.health;
       vitals = tickVitals(vitals, dt);
-      if (vitals.health !== before) healthBar.set(vitals.health / PLAYER_MAX_HEALTH);
+      if (vitals.health !== before) {
+        const frac = vitals.health / PLAYER_MAX_HEALTH;
+        healthBar.set(frac);
+        feel?.setLowHealth(frac > 0 && frac <= LOW_HEALTH_FRACTION);
+      }
     });
     engine.onUpdate(() => {
       const placing = placementRef?.isBuildMode() ?? false;
