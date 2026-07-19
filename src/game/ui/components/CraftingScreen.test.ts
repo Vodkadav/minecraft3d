@@ -47,8 +47,9 @@ describe("CraftingScreen", () => {
       unlockedTier: 1,
     });
     screen.render(invWith(reg, []));
+    const tierCount = new Set(STARTER_RECIPES.map((r) => r.unlockTier)).size;
     expect(screen.el.querySelectorAll(".lw-recipe")).toHaveLength(STARTER_RECIPES.length);
-    expect(screen.el.querySelectorAll(".lw-crafting-tier")).toHaveLength(2); // tier 0 and 1
+    expect(screen.el.querySelectorAll(".lw-crafting-tier")).toHaveLength(tierCount);
   });
 
   it("shows locked recipes as locked and disables their craft button", () => {
@@ -77,7 +78,7 @@ describe("CraftingScreen", () => {
     const search = screen.el.querySelector<HTMLInputElement>('input[type="text"]');
     expect(search).toBeTruthy();
     if (!search) return;
-    search.value = "pickaxe";
+    search.value = "iron pickaxe";
     search.dispatchEvent(new Event("input", { bubbles: true }));
     const rows = screen.el.querySelectorAll(".lw-recipe");
     expect(rows).toHaveLength(1);

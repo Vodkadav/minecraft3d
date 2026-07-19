@@ -2,7 +2,14 @@ import { describe, expect, it } from "vitest";
 import { isErr, isOk } from "../Result";
 import { Inventory } from "../inventory/Inventory";
 import { ItemRegistry } from "../items/ItemRegistry";
-import { canCraft, craftableRecipes, doCraft, ingredientStatus, type Recipe } from "./Crafting";
+import {
+  canCraft,
+  craftableRecipes,
+  doCraft,
+  ingredientStatus,
+  stationSatisfied,
+  type Recipe,
+} from "./Crafting";
 
 const registry = (() => {
   const r = ItemRegistry.create([
@@ -126,6 +133,41 @@ describe("crafting", () => {
 
     const atTier1 = craftableRecipes(inv, all, 1).map((r) => r.id).sort();
     expect(atTier1).toEqual(["ingot", "planks", "sticks"]);
+  });
+
+  describe("station gating (Workstream 8.4)", () => {
+    const COOK: Recipe = {
+      id: "cook-meat",
+      ingredients: [{ itemId: "wood", count: 1 }],
+      output: { itemId: "plank", count: 1 },
+      unlockTier: 0,
+      station: "campfire",
+    };
+
+    it("rejects with StationRequired when the station is absent", () => {
+      const inv = invWith([["wood", 1]]);
+      const r = doCraft(inv, COOK, 0);
+      expect(isErr(r)).toBe(true);
+      if (isErr(r)) expect(r.error).toEqual({ kind: "StationRequired", station: "campfire" });
+    });
+
+    it("succeeds once the required station is nearby", () => {
+      const inv = invWith([["wood", 1]]);
+      const r = doCraft(inv, COOK, 0, new Set(["campfire"]));
+      expect(isOk(r)).toBe(true);
+    });
+
+    it("a station-less recipe is unaffected by nearbyStations", () => {
+      const inv = invWith([["wood", 1]]);
+      expect(isOk(doCraft(inv, PLANKS, 0))).toBe(true);
+      expect(isOk(doCraft(inv, PLANKS, 0, new Set()))).toBe(true);
+    });
+
+    it("stationSatisfied mirrors the gate directly", () => {
+      expect(stationSatisfied(COOK, new Set())).toBe(false);
+      expect(stationSatisfied(COOK, new Set(["campfire"]))).toBe(true);
+      expect(stationSatisfied(PLANKS, new Set())).toBe(true);
+    });
   });
 
   describe("ingredientStatus", () => {

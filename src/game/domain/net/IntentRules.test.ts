@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
+import type { PlaceableInteractMsg } from "./Protocol";
 import type { PlayerState } from "../world/WorldSaveData";
-import { validateDig, validatePose } from "./IntentRules";
+import { validateDig, validatePlaceableInteract, validatePose } from "./IntentRules";
 
 function pose(x: number, y: number, z: number): PlayerState {
   return { position: [x, y, z], yaw: 0, pitch: 0 };
@@ -65,5 +66,37 @@ describe("validateDig", () => {
     expect(validateDig(NaN, 0, 0, 1)).toBe(false);
     expect(validateDig(0, Infinity, 0, 1)).toBe(false);
     expect(validateDig(0, 0, 0, NaN)).toBe(false);
+  });
+});
+
+function placeableMsg(overrides: Partial<PlaceableInteractMsg> = {}): PlaceableInteractMsg {
+  return { kind: "placeableInteract", action: "toggleDoor", placeableId: "piece:1", ...overrides };
+}
+
+describe("validatePlaceableInteract", () => {
+  it("accepts a bare action + placeableId", () => {
+    expect(validatePlaceableInteract(placeableMsg())).toBe(true);
+  });
+
+  it("accepts a valid itemId + count", () => {
+    expect(
+      validatePlaceableInteract(placeableMsg({ action: "depositChest", itemId: "wood", count: 4 })),
+    ).toBe(true);
+  });
+
+  it("rejects an empty placeableId", () => {
+    expect(validatePlaceableInteract(placeableMsg({ placeableId: "" }))).toBe(false);
+  });
+
+  it("rejects an empty itemId", () => {
+    expect(validatePlaceableInteract(placeableMsg({ itemId: "" }))).toBe(false);
+  });
+
+  it("rejects a non-positive, non-integer, or oversized count", () => {
+    expect(validatePlaceableInteract(placeableMsg({ count: 0 }))).toBe(false);
+    expect(validatePlaceableInteract(placeableMsg({ count: -1 }))).toBe(false);
+    expect(validatePlaceableInteract(placeableMsg({ count: 1.5 }))).toBe(false);
+    expect(validatePlaceableInteract(placeableMsg({ count: 1000 }))).toBe(false);
+    expect(validatePlaceableInteract(placeableMsg({ count: 999 }))).toBe(true);
   });
 });

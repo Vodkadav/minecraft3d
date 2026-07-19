@@ -14,11 +14,20 @@ export interface ItemQuantity {
   readonly count: number;
 }
 
+/** A required nearby placeable (Workstream 8.4) — absent means craftable anywhere. */
+export type Station = "workbench" | "campfire";
+
+/** Cooking jobs (domain/placeables/Campfire) default to this when unset. */
+export const DEFAULT_COOK_DURATION_S = 10;
+
 export interface Recipe {
   readonly id: string;
   readonly ingredients: readonly ItemQuantity[];
   readonly output: ItemQuantity;
   readonly unlockTier: number;
+  readonly station?: Station;
+  /** Cooking duration (s) — meaningful only when station === "campfire". */
+  readonly cookDurationS?: number;
 }
 
 export interface MissingIngredient {
@@ -30,15 +39,25 @@ export interface MissingIngredient {
 export type CraftError =
   | { readonly kind: "Locked"; readonly requiredTier: number; readonly unlockedTier: number }
   | { readonly kind: "MissingIngredients"; readonly missing: readonly MissingIngredient[] }
-  | { readonly kind: "OutputWontFit"; readonly itemId: string; readonly remaining: number };
+  | { readonly kind: "OutputWontFit"; readonly itemId: string; readonly remaining: number }
+  | { readonly kind: "StationRequired"; readonly station: Station };
+
+/** True when the recipe has no station requirement or the required one is nearby. */
+export function stationSatisfied(recipe: Recipe, nearbyStations: ReadonlySet<Station>): boolean {
+  return recipe.station === undefined || nearbyStations.has(recipe.station);
+}
 
 function attempt(
   inventory: Inventory,
   recipe: Recipe,
   unlockedTier: number,
+  nearbyStations: ReadonlySet<Station> = new Set(),
 ): Result<Inventory, CraftError> {
   if (recipe.unlockTier > unlockedTier) {
     return err({ kind: "Locked", requiredTier: recipe.unlockTier, unlockedTier });
+  }
+  if (!stationSatisfied(recipe, nearbyStations)) {
+    return err({ kind: "StationRequired", station: recipe.station as Station });
   }
 
   const missing = recipe.ingredients
@@ -65,8 +84,9 @@ export function canCraft(
   inventory: Inventory,
   recipe: Recipe,
   unlockedTier: number,
+  nearbyStations: ReadonlySet<Station> = new Set(),
 ): Result<void, CraftError> {
-  const r = attempt(inventory, recipe, unlockedTier);
+  const r = attempt(inventory, recipe, unlockedTier, nearbyStations);
   return isOk(r) ? ok(undefined) : r;
 }
 
@@ -74,16 +94,18 @@ export function doCraft(
   inventory: Inventory,
   recipe: Recipe,
   unlockedTier: number,
+  nearbyStations: ReadonlySet<Station> = new Set(),
 ): Result<Inventory, CraftError> {
-  return attempt(inventory, recipe, unlockedTier);
+  return attempt(inventory, recipe, unlockedTier, nearbyStations);
 }
 
 export function craftableRecipes(
   inventory: Inventory,
   recipes: readonly Recipe[],
   unlockedTier: number,
+  nearbyStations: ReadonlySet<Station> = new Set(),
 ): readonly Recipe[] {
-  return recipes.filter((r) => isOk(canCraft(inventory, r, unlockedTier)));
+  return recipes.filter((r) => isOk(canCraft(inventory, r, unlockedTier, nearbyStations)));
 }
 
 export interface IngredientStatus extends MissingIngredient {

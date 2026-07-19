@@ -231,6 +231,77 @@ describe("HostSession", () => {
     warn.mockRestore();
   });
 
+  it("resolves a valid placeableInteract via the hook and broadcasts the state to ALL peers", () => {
+    const calls: Array<{ action: string; placeableId: string; peerId: string }> = [];
+    net = makeTransportNetwork();
+    session = new HostSession(net.host, () => SNAPSHOT, {
+      onWorldEdit: () => {},
+      onPlaceableInteract: (action, placeableId, peerId) => {
+        calls.push({ action, placeableId, peerId });
+        return { open: true };
+      },
+    });
+    const alice = net.addPeer("alice");
+    const bob = net.addPeer("bob");
+    const aliceInbox = collect(alice);
+    const bobInbox = collect(bob);
+
+    alice.broadcast({ kind: "placeableInteract", action: "toggleDoor", placeableId: "piece:1" });
+
+    expect(calls).toEqual([{ action: "toggleDoor", placeableId: "piece:1", peerId: "alice" }]);
+    const expected = { kind: "placeableState", placeableId: "piece:1", state: { open: true } };
+    expect(aliceInbox).toContainEqual(expected);
+    expect(bobInbox).toContainEqual(expected);
+  });
+
+  it("passes itemId/count through to the hook", () => {
+    const calls: Array<{ itemId?: string; count?: number }> = [];
+    net = makeTransportNetwork();
+    session = new HostSession(net.host, () => SNAPSHOT, {
+      onWorldEdit: () => {},
+      onPlaceableInteract: (_a, _p, _peer, itemId, count) => {
+        calls.push({ itemId, count });
+        return { ok: true };
+      },
+    });
+    const alice = net.addPeer("alice");
+    alice.broadcast({
+      kind: "placeableInteract",
+      action: "depositChest",
+      placeableId: "piece:2",
+      itemId: "wood",
+      count: 4,
+    });
+    expect(calls).toEqual([{ itemId: "wood", count: 4 }]);
+  });
+
+  it("does not broadcast when the hook rejects (undefined/null)", () => {
+    net = makeTransportNetwork();
+    session = new HostSession(net.host, () => SNAPSHOT, {
+      onWorldEdit: () => {},
+      onPlaceableInteract: () => undefined,
+    });
+    const alice = net.addPeer("alice");
+    const inbox = collect(alice);
+    alice.broadcast({ kind: "placeableInteract", action: "toggleDoor", placeableId: "piece:1" });
+    expect(inbox).toEqual([]);
+  });
+
+  it("drops a placeableInteract with an empty placeableId (no hook call)", () => {
+    const calls: string[] = [];
+    net = makeTransportNetwork();
+    session = new HostSession(net.host, () => SNAPSHOT, {
+      onWorldEdit: () => {},
+      onPlaceableInteract: (_a, placeableId) => {
+        calls.push(placeableId);
+        return { ok: true };
+      },
+    });
+    const alice = net.addPeer("alice");
+    alice.broadcast({ kind: "placeableInteract", action: "toggleDoor", placeableId: "" });
+    expect(calls).toEqual([]);
+  });
+
   it("broadcasts hostClosing on close", () => {
     const alice = net.addPeer("alice");
     const inbox = collect(alice);

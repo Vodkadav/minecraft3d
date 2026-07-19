@@ -6,6 +6,7 @@
  * trivially testable.
  */
 
+import type { PlaceableInteractMsg } from "./Protocol";
 import type { PlayerState } from "../world/WorldSaveData";
 
 /** Generous sprint+knockback ceiling; anything faster is a teleport. */
@@ -58,4 +59,22 @@ export function validateDig(x: number, y: number, z: number, radius: number): bo
     radius > 0 &&
     radius <= MAX_DIG_RADIUS
   );
+}
+
+/** Generous cap on a single deposit/withdraw stack — matches the largest
+ *  item maxStackSize in the registry with headroom, not a game-balance cap. */
+const MAX_STACK_COUNT = 999;
+
+/** Sanity for a placeable intent (Workstream 8.1): non-empty placeableId, and
+ *  when present, a non-empty itemId and a finite positive integer count.
+ *  Deeper checks (does this placeable exist, is it a chest, do you own the
+ *  door) are the domain's job at the hook call site — this only rejects
+ *  garbage shapes a hostile peer could send. */
+export function validatePlaceableInteract(msg: PlaceableInteractMsg): boolean {
+  if (msg.placeableId.length === 0) return false;
+  if (msg.itemId !== undefined && msg.itemId.length === 0) return false;
+  if (msg.count !== undefined) {
+    if (!Number.isInteger(msg.count) || msg.count <= 0 || msg.count > MAX_STACK_COUNT) return false;
+  }
+  return true;
 }

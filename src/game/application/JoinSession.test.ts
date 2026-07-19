@@ -107,6 +107,41 @@ describe("JoinSession", () => {
     ]);
   });
 
+  it("sendPlaceableInteract reaches the host's onPlaceableInteract hook, tagged with the sender", () => {
+    const net = makeTransportNetwork();
+    const calls: Array<[string, string, string, string | undefined, number | undefined]> = [];
+    new HostSession(net.host, () => SNAPSHOT, {
+      onWorldEdit: () => {},
+      onPlaceableInteract: (action, placeableId, peerId, itemId, count) => {
+        calls.push([action, placeableId, peerId, itemId, count]);
+        return { resolved: true };
+      },
+    });
+    const alice = new JoinSession(net.addPeer("alice"), "Alice", {});
+
+    alice.sendPlaceableInteract("toggleDoor", "piece:1");
+    alice.sendPlaceableInteract("depositChest", "piece:2", "wood", 4);
+
+    expect(calls).toEqual([
+      ["toggleDoor", "piece:1", "alice", undefined, undefined],
+      ["depositChest", "piece:2", "alice", "wood", 4],
+    ]);
+  });
+
+  it("surfaces the host's resolved placeable state via onPlaceableState", () => {
+    const net = makeTransportNetwork();
+    new HostSession(net.host, () => SNAPSHOT, {
+      onWorldEdit: () => {},
+      onPlaceableInteract: () => ({ open: true }),
+    });
+    const onPlaceableState = vi.fn();
+    const alice = new JoinSession(net.addPeer("alice"), "Alice", { onPlaceableState });
+
+    alice.sendPlaceableInteract("toggleDoor", "piece:1");
+
+    expect(onPlaceableState).toHaveBeenCalledExactlyOnceWith("piece:1", { open: true });
+  });
+
   it("surfaces peerJoined and peerLeft", () => {
     const { net } = makeHostedNetwork();
     const onPeerJoined = vi.fn();

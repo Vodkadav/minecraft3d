@@ -48,7 +48,30 @@ export interface InteractMsg {
   readonly targetId: string;
 }
 
-export type JoinerMessage = JoinMsg | PoseMsg | DigMsg | FillMsg | InteractMsg;
+/** Shared-world placeable mutations (Workstream 8.1) — chest deposit/withdraw,
+ *  door toggle, campfire cook start/collect, crop plant/harvest. Every one is
+ *  a joiner *intent*; the host resolves it against its own placeable state
+ *  and rebroadcasts the outcome as `placeableState` (mirrors dig/fill §6). */
+export type PlaceableAction =
+  | "toggleDoor"
+  | "depositChest"
+  | "withdrawChest"
+  | "startCook"
+  | "collectCook"
+  | "plantCrop"
+  | "harvestCrop";
+
+export interface PlaceableInteractMsg {
+  readonly kind: "placeableInteract";
+  readonly action: PlaceableAction;
+  readonly placeableId: string;
+  /** Item involved (deposit/withdraw/startCook/plantCrop item or seed id). */
+  readonly itemId?: string;
+  /** Stack count involved (deposit/withdraw). */
+  readonly count?: number;
+}
+
+export type JoinerMessage = JoinMsg | PoseMsg | DigMsg | FillMsg | InteractMsg | PlaceableInteractMsg;
 
 // ---- Host → Joiner ----
 
@@ -128,6 +151,16 @@ export interface HostClosingMsg {
   readonly kind: "hostClosing";
 }
 
+/** The host's resolved placeable state, rebroadcast to every joiner after a
+ *  valid `placeableInteract` (WorldEditMsg's pattern, generalized: the
+ *  domain state is opaque JSON the placeable's own module (de)serializes —
+ *  the protocol doesn't need to know its shape). */
+export interface PlaceableStateMsg {
+  readonly kind: "placeableState";
+  readonly placeableId: string;
+  readonly state: unknown;
+}
+
 export type HostMessage =
   | WelcomeMsg
   | PeerPoseMsg
@@ -136,7 +169,8 @@ export type HostMessage =
   | CreaturesMsg
   | PeerJoinedMsg
   | PeerLeftMsg
-  | HostClosingMsg;
+  | HostClosingMsg
+  | PlaceableStateMsg;
 
 export type NetMessage = JoinerMessage | HostMessage;
 
@@ -184,6 +218,16 @@ function isWorldEdit(v: unknown): v is WorldEdit {
 
 const INTERACT_ACTIONS: readonly string[] = ["attack", "harvest", "feed", "mount", "dismount"];
 
+const PLACEABLE_ACTIONS: readonly string[] = [
+  "toggleDoor",
+  "depositChest",
+  "withdrawChest",
+  "startCook",
+  "collectCook",
+  "plantCrop",
+  "harvestCrop",
+];
+
 function isCreatureEntity(v: unknown): v is CreatureEntity {
   return (
     isRecord(v) &&
@@ -210,6 +254,13 @@ const VALIDATORS: Record<string, (m: Record<string, unknown>) => boolean> = {
     isNum(m.x) && isNum(m.y) && isNum(m.z) && isNum(m.radius) && isNum(m.materialId),
   interact: (m) =>
     isStr(m.action) && INTERACT_ACTIONS.includes(m.action) && isStr(m.targetId),
+  placeableInteract: (m) =>
+    isStr(m.action) &&
+    PLACEABLE_ACTIONS.includes(m.action) &&
+    isStr(m.placeableId) &&
+    (m.itemId === undefined || isStr(m.itemId)) &&
+    (m.count === undefined || isNum(m.count)),
+  placeableState: (m) => isStr(m.placeableId) && "state" in m,
   welcome: (m) =>
     isNum(m.seed) &&
     isStr(m.worldId) &&

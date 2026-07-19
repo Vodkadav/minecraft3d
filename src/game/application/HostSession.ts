@@ -9,12 +9,14 @@
  */
 
 import { isErr } from "../domain/Result";
-import { validateDig, validatePose } from "../domain/net/IntentRules";
+import { validateDig, validatePlaceableInteract, validatePose } from "../domain/net/IntentRules";
 import {
   parseMessage,
   type DigMsg,
   type FillMsg,
   type InteractAction,
+  type PlaceableAction,
+  type PlaceableInteractMsg,
   type PoseMsg,
   type WorldEdit,
 } from "../domain/net/Protocol";
@@ -42,6 +44,18 @@ export interface HostSessionHooks {
   onPeerPose?(peerId: string, state: PlayerState): void;
   onPeerJoined?(peerId: string, playerName: string): void;
   onPeerLeft?(peerId: string): void;
+  /** A validated placeable intent (Workstream 8.1) — the host resolves it
+   *  against its own placeable state (chest/door/campfire/plot) and returns
+   *  the new state to broadcast, or `undefined`/`null` to reject silently
+   *  (e.g. locked door, empty chest slot, no recipe) — mirrors the dig/fill
+   *  "drop silently on rejection" contract, never a throw. */
+  onPlaceableInteract?(
+    action: PlaceableAction,
+    placeableId: string,
+    peerId: string,
+    itemId: string | undefined,
+    count: number | undefined,
+  ): unknown;
 }
 
 export interface HostSessionDeps {
@@ -110,6 +124,9 @@ export class HostSession {
       case "interact":
         this.hooks.onInteract?.(msg.action, msg.targetId, peerId);
         return;
+      case "placeableInteract":
+        this.handlePlaceableInteract(peerId, msg);
+        return;
       default:
         // host->joiner kinds echoed back at the host: no-op.
         return;
@@ -125,6 +142,22 @@ export class HostSession {
     peer.lastPose = { state: msg.state, at: now };
     this.sendToOthers(peerId, { kind: "peerPose", peerId, state: msg.state });
     this.hooks.onPeerPose?.(peerId, msg.state);
+  }
+
+  /** Only broadcasts when the hook resolves a state (undefined/null = reject,
+   *  e.g. a locked door or an empty chest slot — same silent-drop contract
+   *  as an oversized dig). */
+  private handlePlaceableInteract(peerId: string, msg: PlaceableInteractMsg): void {
+    if (!validatePlaceableInteract(msg)) return;
+    const state = this.hooks.onPlaceableInteract?.(
+      msg.action,
+      msg.placeableId,
+      peerId,
+      msg.itemId,
+      msg.count,
+    );
+    if (state === undefined || state === null) return;
+    this.transport.broadcast({ kind: "placeableState", placeableId: msg.placeableId, state });
   }
 
   private handleEdit(msg: DigMsg | FillMsg, edit: WorldEdit): void {

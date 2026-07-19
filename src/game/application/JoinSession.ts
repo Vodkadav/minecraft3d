@@ -10,6 +10,7 @@ import { isErr } from "../domain/Result";
 import type {
   CreatureEntity,
   InteractAction,
+  PlaceableAction,
   WelcomeMsg,
   WorldEdit,
 } from "../domain/net/Protocol";
@@ -26,6 +27,10 @@ export interface JoinSessionHooks {
   onPeerJoined?(peerId: string, playerName: string): void;
   onPeerLeft?(peerId: string): void;
   onHostClosing?(): void;
+  /** The host's resolved outcome of a placeableInteract intent (Workstream 8.1)
+   *  — a joiner NEVER mutates placeable state locally; this is the only path
+   *  a joiner's UI updates from. */
+  onPlaceableState?(placeableId: string, state: unknown): void;
 }
 
 export class JoinSession {
@@ -66,6 +71,9 @@ export class JoinSession {
         case "hostClosing":
           hooks.onHostClosing?.();
           return;
+        case "placeableState":
+          hooks.onPlaceableState?.(msg.placeableId, msg.state);
+          return;
         default:
           // Joiner-intent kinds arriving at a joiner: not ours to handle.
           return;
@@ -88,5 +96,14 @@ export class JoinSession {
 
   sendInteract(action: InteractAction, targetId: string): void {
     this.transport.broadcast({ kind: "interact", action, targetId });
+  }
+
+  sendPlaceableInteract(
+    action: PlaceableAction,
+    placeableId: string,
+    itemId?: string,
+    count?: number,
+  ): void {
+    this.transport.broadcast({ kind: "placeableInteract", action, placeableId, itemId, count });
   }
 }

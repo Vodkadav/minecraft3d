@@ -68,6 +68,17 @@ const HAPPY: NetMessage[] = [
   { kind: "peerJoined", peerId: "p2", playerName: "Andrea" },
   { kind: "peerLeft", peerId: "p2" },
   { kind: "hostClosing" },
+  { kind: "placeableInteract", action: "toggleDoor", placeableId: "piece:1" },
+  {
+    kind: "placeableInteract",
+    action: "depositChest",
+    placeableId: "piece:2",
+    itemId: "wood",
+    count: 4,
+  },
+  { kind: "placeableInteract", action: "plantCrop", placeableId: "piece:3", itemId: "wheat-seed" },
+  { kind: "placeableState", placeableId: "piece:1", state: { open: true, ownerId: null, locked: false } },
+  { kind: "placeableState", placeableId: "piece:2", state: null },
 ];
 
 describe("parseMessage — happy paths", () => {
@@ -119,6 +130,14 @@ describe("parseMessage — malformed input is an error value", () => {
         { id: "x", species: "deer", kind: "creature", x: 1, y: 2, z: 3, yaw: 0, tamed: "yes" },
       ],
     }, // tamed wrong type
+    { kind: "placeableInteract", action: "danceOnChest", placeableId: "piece:1" }, // unknown action
+    { kind: "placeableInteract", action: "toggleDoor" }, // missing placeableId
+    { kind: "placeableInteract", action: "toggleDoor", placeableId: 7 }, // wrong type
+    { kind: "placeableInteract", action: "depositChest", placeableId: "p:1", itemId: 5 }, // wrong type
+    { kind: "placeableInteract", action: "depositChest", placeableId: "p:1", count: "4" }, // wrong type
+    { kind: "placeableState", state: {} }, // missing placeableId
+    { kind: "placeableState", placeableId: 7, state: {} }, // wrong type
+    { kind: "placeableState", placeableId: "p:1" }, // missing state key entirely
   ];
 
   it.each(BAD.map((m) => [JSON.stringify(m) ?? String(m), m] as const))(
