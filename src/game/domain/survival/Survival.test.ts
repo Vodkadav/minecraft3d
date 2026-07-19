@@ -106,4 +106,34 @@ describe("Survival (hunger + stamina)", () => {
     expect(restoreHunger(hungry, 0)).toBe(hungry);
     expect(restoreHunger(hungry, -5)).toBe(hungry);
   });
+
+  // E1.4b: an explicit maxEnergy (from effectiveMaxEnergyMultiplier) scales
+  // spawn/regen-cap/gate-threshold; omitting it is identical to today.
+  describe("maxEnergy multiplier plumbing", () => {
+    it("spawns at the given maxEnergy instead of the default", () => {
+      expect(spawnSurvival(150).stamina).toBe(150);
+    });
+
+    it("regen caps at the given maxEnergy, not the base constant", () => {
+      const near = { hunger: HUNGER_MAX, stamina: 140, staminaGated: false };
+      const regened = tickSurvival(near, 999, { sprinting: false, maxEnergy: 150 });
+      expect(regened.stamina).toBe(150);
+    });
+
+    it("gate-recovery threshold scales with the given maxEnergy", () => {
+      // 20 out of a 150 max is 13.3% — below the 20% recovery fraction of 150
+      // (30), so still gated, even though it would have cleared a 100 max.
+      const empty = { hunger: HUNGER_MAX, stamina: 0, staminaGated: true };
+      const stillGated = tickSurvival(empty, 2, { sprinting: false, maxEnergy: 150 }); // +28 -> 28
+      expect(stillGated.staminaGated).toBe(true);
+      const cleared = tickSurvival(empty, 3, { sprinting: false, maxEnergy: 150 }); // +42 -> 42 > 30
+      expect(cleared.staminaGated).toBe(false);
+    });
+
+    it("drainStaminaForAttack's gate threshold also scales with maxEnergy", () => {
+      const nearEmpty = { hunger: HUNGER_MAX, stamina: 12, staminaGated: false };
+      const hit = drainStaminaForAttack(nearEmpty, 150); // 12 - 12 = 0 -> gated regardless
+      expect(hit.staminaGated).toBe(true);
+    });
+  });
 });

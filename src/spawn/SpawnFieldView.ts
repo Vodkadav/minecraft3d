@@ -132,6 +132,15 @@ export interface SpawnFieldDeps {
   /** Workstream 5.6: difficulty multiplier on contact-bite damage (peaceful
    *  = 0 disables player-facing creature damage entirely). Defaults to 1. */
   creatureDamageMult?: number;
+  /** E1.4b: character `effectiveAttackPowerMultiplier` — scales the
+   *  player's own attack damage. Defaults to 1 (today's flat ATTACK_DAMAGE). */
+  attackPowerMult?: number;
+  /** E1.4b: character `effectiveGatherPowerMultiplier` — scales harvested
+   *  node yield counts. Defaults to 1 (today's flat NODE_YIELD). */
+  gatherPowerMult?: number;
+  /** E1.4b: character `effectiveLootMultiplier` — scales creature kill loot
+   *  counts. Defaults to 1 (today's flat lootFor() amounts). */
+  lootMult?: number;
   /** Workstream 9.4 streaming pop-in smoothing: true suppresses the
    *  materialize scale-up (an instant pop instead) — defaults to the OS
    *  prefers-reduced-motion query when omitted. */
@@ -416,6 +425,14 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
     deps.save?.setEntity("spawn.removed", [...removed]);
   }
 
+  /** E1.4b: scale a granted stack's count by a character multiplier (loot,
+   *  gather power) — a no-op at the default mult of 1. Never rounds a
+   *  positive count down to 0 (cozy: a multiplier only ever adds). */
+  function scaleStacks(stacks: readonly ItemStack[], mult: number): readonly ItemStack[] {
+    if (mult === 1) return stacks;
+    return stacks.map((s) => ({ ...s, count: Math.max(1, Math.round(s.count * mult)) }));
+  }
+
   function grantLoot(stacks: readonly ItemStack[]): void {
     if (deps.save) {
       const prior = deps.save.entity("spawn.loot");
@@ -484,7 +501,8 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
   // joiner's remote intent here must never advance the host's own tracker.
   function resolveAttack(target: CreatureEntry): boolean {
     if (target.dying !== null) return false;
-    const r = applyDamage(target.combat, ATTACK_DAMAGE);
+    const attackDamage = ATTACK_DAMAGE * (deps.attackPowerMult ?? 1);
+    const r = applyDamage(target.combat, attackDamage);
     target.combat = r.state;
     const pos: [number, number, number] = [
       target.obj.position.x,
@@ -495,11 +513,11 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
     // deterministic crit roll (same shape as the loot roll below) — a
     // presentation flourish only, never affects the damage actually dealt
     const crit = hashUnitFloat(deps.seed, clockMs | 0, 0x6f10) < CRIT_CHANCE;
-    deps.feel?.trigger("attackHit", { worldPos: pos, damageValue: ATTACK_DAMAGE, crit });
+    deps.feel?.trigger("attackHit", { worldPos: pos, damageValue: attackDamage, crit });
     if (!r.died) return false;
-    deps.feel?.trigger("kill", { worldPos: pos, damageValue: ATTACK_DAMAGE, crit });
+    deps.feel?.trigger("kill", { worldPos: pos, damageValue: attackDamage, crit });
     const roll = hashUnitFloat(deps.seed, clockMs | 0, 0x6f00);
-    grantLoot(lootFor(target.entity.species, roll));
+    grantLoot(scaleStacks(lootFor(target.entity.species, roll), deps.lootMult ?? 1));
     persistRemoved(target.entity.id);
     if (tamed.delete(target.entity.id)) deps.save?.setEntity("taming.tamed", [...tamed]);
     if (ridingId === target.entity.id) setRiding(null);
@@ -532,7 +550,7 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
   }
 
   function resolveHarvest(target: { entity: SpawnEntity; obj: Object3D }): void {
-    grantLoot(NODE_YIELD[target.entity.species] ?? []);
+    grantLoot(scaleStacks(NODE_YIELD[target.entity.species] ?? [], deps.gatherPowerMult ?? 1));
     const pos: [number, number, number] = [
       target.obj.position.x,
       target.obj.position.y,

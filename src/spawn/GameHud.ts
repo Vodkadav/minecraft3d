@@ -25,9 +25,22 @@
  * `onEat`/`onLoot`/`onAttack` at the TerrainScene/SpawnFieldView/DigTool call
  * sites) — it settles objectives/achievements, toasts anything new, updates
  * the tracker, and live-updates the crafting screen's recipe-tier gate.
+ *
+ * E1.4b/E1.5b: this HUD also owns the session's `CharacterState`, mounts
+ * `CharacterScreen` (`C` to open, mirroring `InventoryScreen`'s `I`) with a
+ * mouse-only open button next to the inventory one, and — since
+ * `recordProgress` is already the single entry point every dig/craft/kill/
+ * harvest/tame call site threads through — grants XP into the character's
+ * leveling on every one of those events, live, at runtime (closing the
+ * "tested, never wired" E1.4 deferral for XP without touching the engine
+ * dirs that fire those events). A level-up toasts. Persisting the character
+ * (`CharacterPersistence`) and applying its `effective*Multiplier`s to
+ * `PlayerVitals`/`Survival`/`SpawnFieldView` remain the composition root's
+ * job — see `onCharacterChange` and PROGRESS.md for the exact remaining gap.
  */
 
 import { isOk } from "../game/domain/Result";
+import { type CharacterState, grantXpForEvent, newCharacter } from "../game/domain/character/Character";
 import { ACHIEVEMENTS } from "../game/domain/progression/Achievements";
 import {
   emptyKeyhintState,
@@ -63,6 +76,7 @@ import { Hotbar } from "../game/ui/components/Hotbar";
 import { Keyhint } from "../game/ui/components/Keyhint";
 import { ObjectiveTracker } from "../game/ui/components/ObjectiveTracker";
 import { createToastHost } from "../game/ui/components/Toast";
+import { mountCharacterScreen } from "../game/ui/CharacterScreen";
 import { mountInventoryScreen } from "../game/ui/InventoryScreen";
 
 const INVENTORY_CAPACITY = 27;
@@ -94,6 +108,14 @@ export interface GameHudOptions {
   readonly initialInventory?: Inventory;
   readonly initialProgression?: ProgressionState;
   readonly initialKeyhints?: KeyhintState;
+  /** E1.4b: seeds the session's character (level/attributes/talents) from a
+   *  prior save (`CharacterPersistence.load`) — undefined starts at
+   *  `newCharacter()`, identical to a stats-less save. */
+  readonly initialCharacter?: CharacterState;
+  /** E1.4b: fired whenever the character changes (XP grant, stat/talent
+   *  spend, respec) — the composition root's seam to persist it and to
+   *  re-derive `PlayerVitals`/`Survival`/`SpawnFieldView` multipliers. */
+  onCharacterChange?(next: CharacterState): void;
 }
 
 export interface GameHudHandle {
@@ -128,6 +150,7 @@ export interface GameHudHandle {
   readonly inventory: Inventory;
   readonly progression: ProgressionState;
   readonly keyhints: KeyhintState;
+  readonly character: CharacterState;
   dispose(): void;
 }
 
@@ -138,6 +161,7 @@ export function mountGameHud(opts: GameHudOptions): GameHudHandle {
   let inventory = opts.initialInventory ?? Inventory.empty(registry, INVENTORY_CAPACITY);
   let progression = opts.initialProgression ?? emptyProgression();
   let keyhints = opts.initialKeyhints ?? emptyKeyhintState();
+  let character = opts.initialCharacter ?? newCharacter();
 
   const hotbar = Hotbar({
     registry,
@@ -191,6 +215,28 @@ export function mountGameHud(opts: GameHudOptions): GameHudHandle {
   inventoryButton.classList.add("lw-inv-open-button");
   doc.body.appendChild(inventoryButton);
 
+  // E1.5b: mount the character sheet the same way — `C` is CharacterScreen's
+  // own self-bound shortcut (mirrors InventoryScreen's self-bound `I`), this
+  // button is the discoverable mouse-only entry point.
+  const characterScreen = mountCharacterScreen({
+    loc,
+    character,
+    ...(opts.setInputEnabled ? { setInputEnabled: opts.setInputEnabled } : {}),
+    doc,
+    onCharacterChange: (next) => {
+      character = next;
+      opts.onCharacterChange?.(character);
+    },
+  });
+  const characterButton = Button({
+    label: loc.t("character.title"),
+    ariaLabel: loc.t("character.open.aria"),
+    variant: "quiet",
+    onClick: () => characterScreen.toggle(),
+  });
+  characterButton.classList.add("lw-character-open-button");
+  doc.body.appendChild(characterButton);
+
   function renderTracker(): void {
     const excluded = progression.tutorialSkipped ? TUTORIAL_EXCLUDE : undefined;
     const objective = currentObjective(progression, TUTORIAL_OBJECTIVES, excluded);
@@ -218,6 +264,16 @@ export function mountGameHud(opts: GameHudOptions): GameHudHandle {
     inventoryScreen.setUnlockedTier(unlockedTierFor(progression.completedObjectives, TUTORIAL_OBJECTIVES));
     inventoryScreen.setUnlockedAchievements(progression.unlockedAchievements);
     renderTracker();
+
+    // E1.4b: this IS the runtime XP-to-leveling flow — every dig/craft/kill/
+    // harvest/tame call site already threads its event through here.
+    const xpResult = grantXpForEvent(character, event);
+    character = xpResult.character;
+    characterScreen.setCharacter(character);
+    opts.onCharacterChange?.(character);
+    if (xpResult.levelsGained > 0) {
+      toasts.push("character.toast.levelUp", { n: character.level.level }, OBJECTIVE_TOAST_TTL_MS);
+    }
   }
 
   const activeKeyhintTimers = new Set<number>();
@@ -274,6 +330,9 @@ export function mountGameHud(opts: GameHudOptions): GameHudHandle {
     get keyhints() {
       return keyhints;
     },
+    get character() {
+      return character;
+    },
     addLoot(stacks: readonly ItemStack[]): void {
       let gainedFood = false;
       for (const stack of stacks) {
@@ -327,6 +386,8 @@ export function mountGameHud(opts: GameHudOptions): GameHudHandle {
       tracker.dispose();
       inventoryScreen.dispose();
       inventoryButton.remove();
+      characterScreen.dispose();
+      characterButton.remove();
       const win = doc.defaultView ?? window;
       for (const timer of activeKeyhintTimers) win.clearTimeout(timer);
       activeKeyhintTimers.clear();
