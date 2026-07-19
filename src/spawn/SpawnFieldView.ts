@@ -66,6 +66,7 @@ import type { ItemStack } from "../game/domain/inventory/Inventory";
 import type { AudioPort } from "../game/application/ports/AudioPort";
 import type { FeelPort } from "../game/application/ports/FeelPort";
 import type { ProgressionEventId } from "../game/domain/progression/ProgressionEvents";
+import type { MapMarker } from "../game/domain/map/MinimapModel";
 import { SPECIES_VISUAL, validGround, type SpawnGround } from "./SpawnPlacement";
 
 /** Seconds between proximity re-steps when no cell is crossed. */
@@ -175,6 +176,11 @@ export interface SpawnFieldHandle {
   /** Host: a peer disconnected — drop whatever creature it was riding so a
    *  vanished joiner doesn't leave a creature stuck frozen forever. */
   releaseRider(peerId: string): void;
+  /** Minimap/map marker source (E3.2) — a small additive read-only seam:
+   *  the current creatures' and resource nodes' live positions, in the
+   *  pluggable `MapMarker` shape `MinimapModel` consumes. Pull-based (no
+   *  new per-frame cost of its own — the caller decides how often to ask). */
+  liveMarkers(): readonly MapMarker[];
 }
 
 interface CreatureEntry {
@@ -970,6 +976,18 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
       if (node) return true;
       const creature = pickTarget(creatures);
       return creature !== null && creature.dying === null && creature.taming.phase === "tamed";
+    },
+
+    liveMarkers(): readonly MapMarker[] {
+      const out: MapMarker[] = [];
+      for (const c of creatures.values()) {
+        if (c.dying !== null) continue;
+        out.push({ id: c.entity.id, kind: "creature", x: c.obj.position.x, z: c.obj.position.z });
+      }
+      for (const n of nodes.values()) {
+        out.push({ id: n.entity.id, kind: "resourceNode", x: n.obj.position.x, z: n.obj.position.z });
+      }
+      return out;
     },
   };
 }
