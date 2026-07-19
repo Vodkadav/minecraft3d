@@ -48,6 +48,7 @@ export const UI_STRINGS: Catalog = {
     "settings.difficulty.peaceful": "Peaceful",
     "settings.difficulty.normal": "Normal",
     "settings.difficulty.hard": "Hard",
+    "settings.dayLength": "Day/night length (minutes)",
     "settings.back": "Back",
 
     "lobby.title": "Online worlds",
@@ -280,6 +281,7 @@ export const UI_STRINGS: Catalog = {
     "settings.difficulty.peaceful": "Pacífico",
     "settings.difficulty.normal": "Normal",
     "settings.difficulty.hard": "Difícil",
+    "settings.dayLength": "Duración del día/noche (minutos)",
     "settings.back": "Atrás",
 
     "lobby.title": "Mundos en línea",
@@ -512,6 +514,7 @@ export const UI_STRINGS: Catalog = {
     "settings.difficulty.peaceful": "Fredelig",
     "settings.difficulty.normal": "Normal",
     "settings.difficulty.hard": "Svær",
+    "settings.dayLength": "Dag/nat-længde (minutter)",
     "settings.back": "Tilbage",
 
     "lobby.title": "Online-verdener",

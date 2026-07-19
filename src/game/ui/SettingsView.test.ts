@@ -50,6 +50,7 @@ describe("SettingsView", () => {
       "laas-vol-sfx",
       "laas-vol-ambient",
       "laas-difficulty",
+      "laas-daylength",
     ]) {
       const label = el.querySelector(`label[for="${id}"]`);
       expect(label, `label for ${id}`).toBeTruthy();
@@ -94,6 +95,18 @@ describe("SettingsView", () => {
     select.dispatchEvent(new Event("change"));
     await flush();
     expect(controller.settings.difficulty).toBe("hard");
+  });
+
+  it("flows a day-length change (minutes -> seconds) through the controller and store", async () => {
+    const { el, controller, store } = await build();
+    const dayLength = control<HTMLInputElement>(el, "laas-daylength");
+    dayLength.value = "10";
+    dayLength.dispatchEvent(new Event("change"));
+    await flush();
+
+    expect(controller.settings.dayLengthSeconds).toBe(600);
+    const reloaded = await store.load();
+    if (isOk(reloaded)) expect(reloaded.value.dayLengthSeconds).toBe(600);
   });
 
   it("flows a music-volume change through the controller and store", async () => {

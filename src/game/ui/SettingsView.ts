@@ -17,6 +17,7 @@ import {
   type GraphicsPreset,
   type SettingsInput,
 } from "../domain/settings/Settings";
+import { DAY_LENGTH_MAX_SECONDS, DAY_LENGTH_MIN_SECONDS } from "../domain/time/WorldClock";
 import { DIFFICULTIES, type Difficulty } from "../domain/settings/Difficulty";
 import { wireButtonSound } from "./audioUi";
 import { applyAccessibility, injectStyles } from "./styles";
@@ -151,6 +152,18 @@ export function SettingsView(
     apply({ difficulty: difficulty.value as Difficulty }),
   );
   field(doc, root, "laas-difficulty", loc.t("settings.difficulty"), difficulty);
+
+  // Day/night length (Workstream E0.3) — shown in whole minutes, stored in seconds
+  const dayLength = doc.createElement("input");
+  dayLength.type = "number";
+  dayLength.min = String(Math.ceil(DAY_LENGTH_MIN_SECONDS / 60));
+  dayLength.max = String(Math.floor(DAY_LENGTH_MAX_SECONDS / 60));
+  dayLength.step = "1";
+  dayLength.value = String(Math.round(s.dayLengthSeconds / 60));
+  dayLength.addEventListener("change", () =>
+    apply({ dayLengthSeconds: Number(dayLength.value) * 60 }),
+  );
+  field(doc, root, "laas-daylength", loc.t("settings.dayLength"), dayLength);
 
   // Reduced motion
   const motion = doc.createElement("input");
