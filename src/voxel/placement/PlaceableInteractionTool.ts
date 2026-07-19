@@ -23,7 +23,10 @@ import { isOk } from '../../game/domain/Result';
 import type { Recipe } from '../../game/domain/crafting/Crafting';
 import { growthStage, type PlotState } from '../../game/domain/farming/Farming';
 import { Inventory, type ItemStack } from '../../game/domain/inventory/Inventory';
+import { defaultFilterRules } from '../../game/domain/inventory/ItemFilter';
 import type { ItemRegistry } from '../../game/domain/items/ItemRegistry';
+import type { ItemFilterStore } from '../../game/application/ports/ItemFilterStore';
+import { LocalStorageItemFilterStore } from '../../game/infrastructure/persistence/LocalStorageItemFilterStore';
 import type { PlaceableAction } from '../../game/domain/net/Protocol';
 import type { CampfireState } from '../../game/domain/placeables/Campfire';
 import type { ChestState } from '../../game/domain/placeables/ChestTransfer';
@@ -66,6 +69,10 @@ export interface PlaceableInteractionDeps {
   audio?: AudioPort;
   feel?: FeelPort;
   save?: PlaceableSave;
+  /** Item-filter rule persistence (Workstream E4.2) — the chest UI applies
+   *  whatever the player last saved from `InventoryScreen`'s Filter tab
+   *  read-only; defaults to the same localStorage-backed store. */
+  filterStore?: ItemFilterStore;
   getInventory(): Inventory;
   setInventory(inv: Inventory): void;
   addLoot(stacks: readonly ItemStack[]): void;
@@ -202,11 +209,19 @@ export function attachPlaceableInteraction(deps: PlaceableInteractionDeps): Plac
   }
 
   // ---- chest UI ----
+  const filterStore = deps.filterStore ?? new LocalStorageItemFilterStore();
   const chestScreen: ChestScreenHandle = mountChestScreen({
     loc,
     registry,
+    filterRules: defaultFilterRules(),
     ...(deps.setInputEnabled ? { setInputEnabled: deps.setInputEnabled } : {}),
     doc,
+  });
+  // Best-effort async load (mirrors GameHud's own item-filter load) — the
+  // chest already renders with the domain defaults, so a slow/failed load
+  // just means a brief moment before the player's saved rules apply.
+  void filterStore.load().then((r) => {
+    if (r.ok) chestScreen.setFilterRules(r.value);
   });
   let openChestPieceId: string | null = null;
   function openChest(piece: PlacedPiece, chest: ChestState): void {

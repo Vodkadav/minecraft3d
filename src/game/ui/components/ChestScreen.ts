@@ -11,8 +11,10 @@
  */
 
 import { isOk } from "../../domain/Result";
+import { autosort } from "../../domain/inventory/InventorySort";
 import { transferBetween } from "../../domain/inventory/CrossInventoryTransfer";
 import { Inventory } from "../../domain/inventory/Inventory";
+import type { FilterRule } from "../../domain/inventory/ItemFilter";
 import type { ItemRegistry } from "../../domain/items/ItemRegistry";
 import type { Localizer } from "../../application/i18n/Localizer";
 import { Button } from "./Button";
@@ -23,6 +25,10 @@ import { injectStyles } from "../styles";
 export interface ChestScreenOptions {
   readonly loc: Localizer;
   readonly registry: ItemRegistry;
+  /** Item-filter rules (Workstream E4.2), read-only here — the rule
+   *  BUILDER lives in `InventoryScreen`'s Filter tab; the chest only
+   *  applies whatever the player last saved there. */
+  readonly filterRules?: readonly FilterRule[];
   setInputEnabled?(enabled: boolean): void;
   readonly doc?: Document;
 }
@@ -37,6 +43,9 @@ export interface ChestScreenHandle {
     onChange: (player: Inventory, chest: Inventory) => void,
   ): void;
   close(): void;
+  /** Live item-filter rule update (e.g. once the composition root's async
+   *  store load resolves) — no remount required. */
+  setFilterRules(rules: readonly FilterRule[]): void;
   dispose(): void;
 }
 
@@ -79,6 +88,7 @@ export function mountChestScreen(opts: ChestScreenOptions): ChestScreenHandle {
     loc: opts.loc,
     ariaLabel: opts.loc.t("placeable.chest.player"),
     gridId: "chest-player",
+    filterRules: opts.filterRules,
     doc,
     onChange: (next) => {
       player = next;
@@ -103,6 +113,7 @@ export function mountChestScreen(opts: ChestScreenOptions): ChestScreenHandle {
     ariaLabel: opts.loc.t("placeable.chest.title"),
     hotbarSize: 0,
     gridId: "chest-chest",
+    filterRules: opts.filterRules,
     doc,
     onChange: (next) => {
       chest = next;
@@ -121,9 +132,37 @@ export function mountChestScreen(opts: ChestScreenOptions): ChestScreenHandle {
     },
   });
 
+  const sortPlayerBtn = Button({
+    label: opts.loc.t("inventory.sort"),
+    ariaLabel: opts.loc.t("placeable.chest.sort.player.aria"),
+    variant: "quiet",
+    onClick: () => {
+      player = autosort(opts.registry, player);
+      playerGrid.render(player);
+      onChange?.(player, chest);
+    },
+  });
+  const sortChestBtn = Button({
+    label: opts.loc.t("inventory.sort"),
+    ariaLabel: opts.loc.t("placeable.chest.sort.chest.aria"),
+    variant: "quiet",
+    onClick: () => {
+      chest = autosort(opts.registry, chest);
+      chestGrid.render(chest);
+      onChange?.(player, chest);
+    },
+  });
+
+  const playerColumn = doc.createElement("div");
+  playerColumn.className = "lw-chest-column";
+  playerColumn.append(sortPlayerBtn, playerGrid.el);
+  const chestColumn = doc.createElement("div");
+  chestColumn.className = "lw-chest-column";
+  chestColumn.append(sortChestBtn, chestGrid.el);
+
   const body = doc.createElement("div");
   body.className = "lw-chest-body";
-  body.append(playerGrid.el, chestGrid.el);
+  body.append(playerColumn, chestColumn);
 
   const panel = Panel([header, body], { className: "lw-inv-overlay-panel" });
   overlay.appendChild(panel);
@@ -161,6 +200,10 @@ export function mountChestScreen(opts: ChestScreenOptions): ChestScreenHandle {
       opts.setInputEnabled?.(false);
     },
     close,
+    setFilterRules(rules: readonly FilterRule[]): void {
+      playerGrid.setFilterRules(rules);
+      chestGrid.setFilterRules(rules);
+    },
     dispose(): void {
       (doc.defaultView ?? window).removeEventListener("keydown", onKeyDown);
       playerGrid.dispose();

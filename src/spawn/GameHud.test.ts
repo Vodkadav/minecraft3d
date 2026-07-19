@@ -10,6 +10,8 @@ import { markKeyhintShown } from "../game/domain/progression/Keyhints";
 import { emptyProgression, recordProgressionEvent } from "../game/domain/progression/ProgressionState";
 import { TUTORIAL_OBJECTIVES } from "../game/domain/progression/Objectives";
 import { ACHIEVEMENTS } from "../game/domain/progression/Achievements";
+import { defaultFilterRules } from "../game/domain/inventory/ItemFilter";
+import { InMemoryItemFilterStore } from "../game/infrastructure/persistence/InMemoryItemFilterStore";
 import { createLocalizer } from "../game/ui/i18n/strings";
 import { mountGameHud } from "./GameHud";
 
@@ -218,6 +220,39 @@ describe("mountGameHud", () => {
     const prompts = [...document.querySelectorAll(".lw-keyhint-prompt")];
     expect(prompts).toHaveLength(1);
     expect(prompts[0]?.textContent).toContain("Feed");
+    hud.dispose();
+  });
+
+  it("loads item-filter rules from the injected store and applies them to the inventory overlay", async () => {
+    const store = new InMemoryItemFilterStore();
+    await store.save([{ id: "r1", enabled: true, match: { kind: "tag", tag: "food" }, action: "highlight" }]);
+    const hud = mountGameHud({ loc: createLocalizer("en"), registry: registry(), filterStore: store });
+    hud.addLoot([{ itemId: "meat", count: 1 }]);
+    await Promise.resolve(); // let the async filterStore.load() resolve
+    await Promise.resolve();
+    const openButton = document.querySelector<HTMLButtonElement>(".lw-inv-open-button");
+    openButton?.click();
+    const meatCell = [...document.querySelectorAll<HTMLElement>(".lw-inv-slot")].find((c) =>
+      c.textContent?.includes("Meat"),
+    );
+    expect(meatCell?.dataset.filterAction).toBe("highlight");
+    hud.dispose();
+  });
+
+  it("persists an item-filter rule added through the Filter tab", async () => {
+    const store = new InMemoryItemFilterStore();
+    const hud = mountGameHud({ loc: createLocalizer("en"), registry: registry(), filterStore: store });
+    await Promise.resolve();
+    await Promise.resolve();
+    const openButton = document.querySelector<HTMLButtonElement>(".lw-inv-open-button");
+    openButton?.click();
+    const filterTab = [...document.querySelectorAll("button")].find((b) => b.textContent === "Filter");
+    filterTab?.click();
+    document.querySelector<HTMLButtonElement>(".lw-filter-add button[type='submit']")?.click();
+
+    const saved = await store.load();
+    expect(saved.ok).toBe(true);
+    if (saved.ok) expect(saved.value.length).toBe(defaultFilterRules().length + 1);
     hud.dispose();
   });
 
