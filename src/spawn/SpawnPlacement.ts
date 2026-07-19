@@ -5,6 +5,8 @@
  * models replace SPECIES_VISUAL in M6 — the registry key is the seam.
  */
 
+import { CREATURE_REGISTRY } from "../game/domain/creatures/CreatureRegistry";
+
 export interface SpawnGround {
   heightAt(x: number, z: number): number;
   /** Water surface y at (x,z); omit in scenes without water. */
@@ -60,18 +62,9 @@ export interface SpeciesVisual {
   readonly lift: number;
 }
 
-export const SPECIES_VISUAL: Readonly<Record<string, SpeciesVisual>> = {
+const NODE_VISUAL: Readonly<Record<string, SpeciesVisual>> = {
   "stone-node": { shape: "box", color: 0x8a8d90, size: 0.9, lift: 0.35 },
   "berry-bush": { shape: "sphere", color: 0x7a2b3c, size: 0.7, lift: 0.45 },
-  deer: { shape: "cone", color: 0xb98a5a, size: 1.4, lift: 0.7 },
-  wolf: { shape: "cone", color: 0x5d4633, size: 1.0, lift: 0.5 },
-
-  // ---- Workstream 7.2/7.4 fallback primitives (used until/unless a rigged
-  // model is loaded for the species — CreatureModelLibrary.has() gates it) ----
-  elk: { shape: "cone", color: 0x8a6a45, size: 1.7, lift: 0.85 },
-  fox: { shape: "cone", color: 0xc5622a, size: 0.7, lift: 0.35 },
-  boar: { shape: "cone", color: 0x4a3728, size: 1.1, lift: 0.5 },
-  rabbit: { shape: "sphere", color: 0xcfc6b8, size: 0.4, lift: 0.2 },
 
   // resource nodes (7.4)
   "clay-deposit": { shape: "box", color: 0x9a5a3c, size: 0.8, lift: 0.3 },
@@ -85,4 +78,16 @@ export const SPECIES_VISUAL: Readonly<Record<string, SpeciesVisual>> = {
   "carrot-patch": { shape: "sphere", color: 0xe07a2a, size: 0.45, lift: 0.22 },
   "potato-patch": { shape: "sphere", color: 0xc9a86a, size: 0.5, lift: 0.25 },
   "fishing-spot": { shape: "sphere", color: 0x3a7ca5, size: 0.6, lift: 0.1 },
+};
+
+/** Fallback primitives for creatures (used until/unless a rigged model is
+ *  loaded for the species — CreatureModelLibrary.has() gates it), derived
+ *  from CreatureRegistry (E0.2) instead of hand-maintained here. */
+const CREATURE_VISUAL: Readonly<Record<string, SpeciesVisual>> = Object.fromEntries(
+  CREATURE_REGISTRY.all().map((c) => [c.id, c.visual]),
+);
+
+export const SPECIES_VISUAL: Readonly<Record<string, SpeciesVisual>> = {
+  ...NODE_VISUAL,
+  ...CREATURE_VISUAL,
 };

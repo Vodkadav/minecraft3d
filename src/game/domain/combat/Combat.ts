@@ -6,6 +6,7 @@
  */
 
 import type { ItemStack } from "../inventory/Inventory";
+import { CREATURE_REGISTRY } from "../creatures/CreatureRegistry";
 
 export interface CreatureStats {
   readonly maxHealth: number;
@@ -20,57 +21,12 @@ export interface LootRule {
   readonly max: number;
 }
 
-/** Keyed by spawn-species id (SPAWN_SPECIES `kind: "creature"`). */
-export const CREATURE_STATS: Readonly<Record<string, CreatureStats>> = {
-  deer: {
-    maxHealth: 20,
-    damage: 0,
-    loot: [
-      { itemId: "meat", min: 1, max: 2 },
-      { itemId: "hide", min: 1, max: 1 },
-    ],
-  },
-  wolf: {
-    maxHealth: 35,
-    damage: 6,
-    loot: [
-      { itemId: "meat", min: 2, max: 3 },
-      { itemId: "hide", min: 1, max: 2 },
-    ],
-  },
-
-  // ---- Workstream 7.2 creature variety ----
-  elk: {
-    maxHealth: 40,
-    damage: 0,
-    loot: [
-      { itemId: "meat", min: 2, max: 4 },
-      { itemId: "hide", min: 1, max: 2 },
-      { itemId: "wool", min: 1, max: 2 },
-    ],
-  },
-  fox: {
-    maxHealth: 14,
-    damage: 0,
-    loot: [
-      { itemId: "hide", min: 1, max: 1 },
-      { itemId: "feather", min: 0, max: 1 },
-    ],
-  },
-  boar: {
-    maxHealth: 28,
-    damage: 5,
-    loot: [
-      { itemId: "meat", min: 1, max: 2 },
-      { itemId: "hide", min: 1, max: 1 },
-    ],
-  },
-  rabbit: {
-    maxHealth: 6,
-    damage: 0,
-    loot: [{ itemId: "feather", min: 1, max: 2 }],
-  },
-};
+/** Keyed by spawn-species id (SPAWN_SPECIES `kind: "creature"`). Derived from
+ *  CreatureRegistry (E0.2) — see its doc comment for why this stays a thin
+ *  projection instead of a hand-maintained table. */
+export const CREATURE_STATS: Readonly<Record<string, CreatureStats>> = Object.fromEntries(
+  CREATURE_REGISTRY.all().map((c) => [c.id, c.stats]),
+);
 
 export interface CombatState {
   readonly species: string;
