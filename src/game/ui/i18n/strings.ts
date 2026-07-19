@@ -283,6 +283,13 @@ export const UI_STRINGS: Catalog = {
     "loading.tip.4": "Press B to enter build mode and place a piece.",
     "loading.tip.5": "Eat with H when your hunger runs low.",
     "loading.tip.6": "Sleep through the night with Z once you have a bed.",
+    "loading.tip.7": "Press K to open your bank — the shared tab follows you everywhere.",
+
+    "bank.title": "Bank",
+    "bank.open.aria": "Open bank",
+    "bank.close.aria": "Close bank",
+    "bank.tab.shared": "Shared",
+    "bank.tab.character": "Character",
   },
   es: {
     "app.title": "Diggy World",
@@ -558,6 +565,13 @@ export const UI_STRINGS: Catalog = {
     "loading.tip.4": "Pulsa B para entrar en modo construcción y colocar una pieza.",
     "loading.tip.5": "Come con H cuando tu hambre esté baja.",
     "loading.tip.6": "Duerme durante la noche con Z una vez que tengas una cama.",
+    "loading.tip.7": "Pulsa K para abrir tu banco: la pestaña compartida te sigue a todas partes.",
+
+    "bank.title": "Banco",
+    "bank.open.aria": "Abrir banco",
+    "bank.close.aria": "Cerrar banco",
+    "bank.tab.shared": "Compartido",
+    "bank.tab.character": "Personaje",
   },
   da: {
     "app.title": "Diggy World",
@@ -833,6 +847,13 @@ export const UI_STRINGS: Catalog = {
     "loading.tip.4": "Tryk B for at gå i byggetilstand og placere en del.",
     "loading.tip.5": "Spis med H, når din sult er lav.",
     "loading.tip.6": "Sov gennem natten med Z, når du har en seng.",
+    "loading.tip.7": "Tryk K for at åbne din bank — den delte fane følger dig overalt.",
+
+    "bank.title": "Bank",
+    "bank.open.aria": "Åbn bank",
+    "bank.close.aria": "Luk bank",
+    "bank.tab.shared": "Delt",
+    "bank.tab.character": "Karakter",
   },
 };
 

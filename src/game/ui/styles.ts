@@ -421,6 +421,9 @@ ${THEME_CSS_VARS}
   right: var(--lw-space-4);
   z-index: 25;
 }
+.lw-bank-open-button {
+  top: calc(var(--lw-space-4) + 44px);
+}
 
 /* Inventory/crafting overlay */
 .lw-inv-overlay {
