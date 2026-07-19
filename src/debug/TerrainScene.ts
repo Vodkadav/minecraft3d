@@ -40,6 +40,7 @@ import {
 import { attachTreasureField } from '../voxel/treasure/TreasureField';
 import { attachSpawnField } from '../spawn/SpawnFieldView';
 import { mountGameHud } from '../spawn/GameHud';
+import { mountNameplateView } from '../spawn/NameplateView';
 import { stepCameraShake } from '../feel/CameraShake';
 import { mountDamageNumbers } from '../feel/DamageNumbers';
 import { FeelDirector } from '../feel/FeelDirector';
@@ -747,6 +748,33 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
         : {}),
     });
     if (ctx.world) ctx.world.spawns = spawns; // M7.x net glue streams creatures here
+
+    // E2.2/E2.3: creature nameplates + overhead lifebars, gated purely by
+    // this `spawnsOn` composition branch — a boot with spawns off never
+    // mounts it. Mobile preset gets a much smaller billboard pool/culling
+    // distance (same graphicsPreset seam RenderPreset.ts already reads),
+    // since a wall of readable-at-a-distance nameplate DOM is a mobile
+    // frame-budget risk the desktop/high path doesn't have.
+    const NAMEPLATE_POOL_SIZE = settings.settings.graphicsPreset === 'mobile' ? 8 : 24;
+    const NAMEPLATE_MAX_DISTANCE_M = settings.settings.graphicsPreset === 'mobile' ? 18 : 30;
+    const nameplates = mountNameplateView({
+      doc: document,
+      camera: engine.camera,
+      canvas: engine.renderer.domElement,
+      poolSize: NAMEPLATE_POOL_SIZE,
+      maxDistance: NAMEPLATE_MAX_DISTANCE_M,
+      loc,
+      getPolicy: () => ({
+        mode: settings.settings.nameplateMode,
+        friendly: settings.settings.nameplateFriendly,
+        neutral: settings.settings.nameplateNeutral,
+        hostile: settings.settings.nameplateHostile,
+        tamed: settings.settings.nameplateTamed,
+        player: settings.settings.nameplatePlayers,
+      }),
+      isHovered: (id) => spawns.hoveredCreatureId === id,
+      isInCombat: () => spawns.inCombat,
+    });
     // creature-sync probe seam (tools/net-probe.ts)
     (window as unknown as { __laasDbg?: Record<string, unknown> }).__laasDbg = Object.assign(
       (window as unknown as { __laasDbg?: Record<string, unknown> }).__laasDbg ?? {},
@@ -759,6 +787,9 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
     const SPRINT_SPEED_THRESHOLD_MPS = 6;
     let lastPlayerX = engine.camera.position.x;
     let lastPlayerZ = engine.camera.position.z;
+    engine.onUpdate(() => {
+      nameplates.sync(spawns.nameplateTargets());
+    });
     engine.onUpdate((dt) => {
       spawns.update(dt);
       if (!respawnPose) {

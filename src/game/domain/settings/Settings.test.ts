@@ -24,6 +24,12 @@ function validInput(overrides: Partial<SettingsInput> = {}): SettingsInput {
     ambientVolume: 0.6,
     difficulty: "normal",
     dayLengthSeconds: DEFAULT_DAY_LENGTH_SECONDS,
+    nameplateMode: "always",
+    nameplateFriendly: true,
+    nameplateNeutral: true,
+    nameplateHostile: true,
+    nameplateTamed: true,
+    nameplatePlayers: true,
     ...overrides,
   };
 }
@@ -162,6 +168,38 @@ describe("Settings", () => {
     const r = updateSettings(defaultSettings(), { dayLengthSeconds: 600 });
     expect(isOk(r)).toBe(true);
     if (isOk(r)) expect(r.value.dayLengthSeconds).toBe(600);
+  });
+
+  it("defaults nameplates to always-on, every faction visible (cozy default)", () => {
+    const s = defaultSettings();
+    expect(s.nameplateMode).toBe("always");
+    expect(s.nameplateFriendly).toBe(true);
+    expect(s.nameplateNeutral).toBe(true);
+    expect(s.nameplateHostile).toBe(true);
+    expect(s.nameplateTamed).toBe(true);
+    expect(s.nameplatePlayers).toBe(true);
+  });
+
+  it("accepts every declared nameplate mode", () => {
+    for (const nameplateMode of ["always", "onHover", "inCombat", "off"] as const) {
+      expect(isOk(makeSettings(validInput({ nameplateMode })))).toBe(true);
+    }
+  });
+
+  it("rejects an unknown nameplate mode", () => {
+    const r = makeSettings(validInput({ nameplateMode: "screaming" as never }));
+    expect(isErr(r)).toBe(true);
+    if (isErr(r)) expect(r.error.kind).toBe("UnknownNameplateMode");
+  });
+
+  it("updates a single nameplate faction toggle while keeping the rest", () => {
+    const r = updateSettings(defaultSettings(), { nameplateHostile: false });
+    expect(isOk(r)).toBe(true);
+    if (isOk(r)) {
+      expect(r.value.nameplateHostile).toBe(false);
+      expect(r.value.nameplateFriendly).toBe(true);
+      expect(r.value.nameplateMode).toBe("always");
+    }
   });
 
   it("updates a single bus volume while keeping the rest", () => {

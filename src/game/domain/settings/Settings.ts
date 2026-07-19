@@ -11,6 +11,7 @@
 
 import { err, ok, type Result } from "../Result";
 import { DEFAULT_BOUNDARY_RADIUS } from "../boundary/Boundary";
+import { NAMEPLATE_MODES, type NameplateMode } from "../hud/Nameplate";
 import type { Locale } from "../i18n/translate";
 import {
   DAY_LENGTH_MAX_SECONDS,
@@ -51,6 +52,13 @@ export interface Settings {
   readonly difficulty: Difficulty;
   /** Full day/night cycle length in seconds (Workstream E0.3); DAY_LENGTH_MIN..MAX_SECONDS. */
   readonly dayLengthSeconds: number;
+  /** Global nameplate show/hide policy (E2.2); per-faction toggles below narrow it further. */
+  readonly nameplateMode: NameplateMode;
+  readonly nameplateFriendly: boolean;
+  readonly nameplateNeutral: boolean;
+  readonly nameplateHostile: boolean;
+  readonly nameplateTamed: boolean;
+  readonly nameplatePlayers: boolean;
 }
 
 /** Mutable/plain shape accepted by the factory before validation. */
@@ -68,6 +76,12 @@ export type SettingsInput = {
   readonly ambientVolume: number;
   readonly difficulty: Difficulty;
   readonly dayLengthSeconds: number;
+  readonly nameplateMode: NameplateMode;
+  readonly nameplateFriendly: boolean;
+  readonly nameplateNeutral: boolean;
+  readonly nameplateHostile: boolean;
+  readonly nameplateTamed: boolean;
+  readonly nameplatePlayers: boolean;
 };
 
 export type SettingsError =
@@ -77,7 +91,8 @@ export type SettingsError =
   | { readonly kind: "BoundaryRadiusOutOfRange"; readonly value: number }
   | { readonly kind: "VolumeOutOfRange"; readonly bus: string; readonly value: number }
   | { readonly kind: "UnknownDifficulty"; readonly value: string }
-  | { readonly kind: "DayLengthOutOfRange"; readonly value: number };
+  | { readonly kind: "DayLengthOutOfRange"; readonly value: number }
+  | { readonly kind: "UnknownNameplateMode"; readonly value: string };
 
 function isGraphicsPreset(value: string): value is GraphicsPreset {
   return (GRAPHICS_PRESETS as readonly string[]).includes(value);
@@ -85,6 +100,10 @@ function isGraphicsPreset(value: string): value is GraphicsPreset {
 
 function isDifficulty(value: string): value is Difficulty {
   return (DIFFICULTIES as readonly string[]).includes(value);
+}
+
+function isNameplateMode(value: string): value is NameplateMode {
+  return (NAMEPLATE_MODES as readonly string[]).includes(value);
 }
 
 export function makeSettings(input: SettingsInput): Result<Settings, SettingsError> {
@@ -129,6 +148,9 @@ export function makeSettings(input: SettingsInput): Result<Settings, SettingsErr
   ) {
     return err({ kind: "DayLengthOutOfRange", value: input.dayLengthSeconds });
   }
+  if (!isNameplateMode(input.nameplateMode)) {
+    return err({ kind: "UnknownNameplateMode", value: String(input.nameplateMode) });
+  }
   return ok({
     graphicsPreset: input.graphicsPreset,
     animalDensity: input.animalDensity,
@@ -143,6 +165,12 @@ export function makeSettings(input: SettingsInput): Result<Settings, SettingsErr
     ambientVolume: input.ambientVolume,
     difficulty: input.difficulty,
     dayLengthSeconds: input.dayLengthSeconds,
+    nameplateMode: input.nameplateMode,
+    nameplateFriendly: input.nameplateFriendly,
+    nameplateNeutral: input.nameplateNeutral,
+    nameplateHostile: input.nameplateHostile,
+    nameplateTamed: input.nameplateTamed,
+    nameplatePlayers: input.nameplatePlayers,
   });
 }
 
@@ -161,6 +189,16 @@ export function defaultSettings(): Settings {
     ambientVolume: 0.6,
     difficulty: "normal",
     dayLengthSeconds: DEFAULT_DAY_LENGTH_SECONDS,
+    // Cozy default: nameplates always on, every faction visible — the
+    // overlay itself only ever mounts once a world with creatures is
+    // running (src/spawn/NameplateView.ts), so this default costs nothing
+    // on menus/boot.
+    nameplateMode: "always",
+    nameplateFriendly: true,
+    nameplateNeutral: true,
+    nameplateHostile: true,
+    nameplateTamed: true,
+    nameplatePlayers: true,
   };
 }
 

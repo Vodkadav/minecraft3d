@@ -51,6 +51,12 @@ describe("SettingsView", () => {
       "laas-vol-ambient",
       "laas-difficulty",
       "laas-daylength",
+      "laas-nameplate-mode",
+      "laas-nameplate-friendly",
+      "laas-nameplate-neutral",
+      "laas-nameplate-hostile",
+      "laas-nameplate-tamed",
+      "laas-nameplate-players",
     ]) {
       const label = el.querySelector(`label[for="${id}"]`);
       expect(label, `label for ${id}`).toBeTruthy();
@@ -107,6 +113,33 @@ describe("SettingsView", () => {
     expect(controller.settings.dayLengthSeconds).toBe(600);
     const reloaded = await store.load();
     if (isOk(reloaded)) expect(reloaded.value.dayLengthSeconds).toBe(600);
+  });
+
+  it("renders the four nameplate modes and flows a change through the controller", async () => {
+    const { el, controller } = await build();
+    const select = control<HTMLSelectElement>(el, "laas-nameplate-mode");
+    expect([...select.options].map((o) => o.value)).toEqual([
+      "always",
+      "onHover",
+      "inCombat",
+      "off",
+    ]);
+    select.value = "onHover";
+    select.dispatchEvent(new Event("change"));
+    await flush();
+    expect(controller.settings.nameplateMode).toBe("onHover");
+  });
+
+  it("flows a nameplate faction toggle through the controller and store", async () => {
+    const { el, controller, store } = await build();
+    const hostile = control<HTMLInputElement>(el, "laas-nameplate-hostile");
+    expect(hostile.checked).toBe(true); // cozy default: on
+    hostile.checked = false;
+    hostile.dispatchEvent(new Event("change"));
+    await flush();
+    expect(controller.settings.nameplateHostile).toBe(false);
+    const reloaded = await store.load();
+    if (isOk(reloaded)) expect(reloaded.value.nameplateHostile).toBe(false);
   });
 
   it("flows a music-volume change through the controller and store", async () => {

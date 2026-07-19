@@ -84,6 +84,9 @@ const BITE_COOLDOWN_S = 1.2;
 const WANDER_EPOCH_MS = 8000;
 /** Walk-speed multiplier while mounted — a mount outpaces jogging (M6.5). */
 const RIDE_SPEED_MULT = 1.6;
+/** E2.2: how long after an attack-given/bite-received the nameplate policy's
+ *  `inCombat` mode stays true (ms). */
+const COMBAT_WINDOW_MS = 6000;
 /** Host→joiner snapshot cadence (ADR 0003) — matches the pose loop's 10 Hz. */
 const SNAPSHOT_INTERVAL_S = 0.1;
 
@@ -138,6 +141,22 @@ export interface SpawnFieldDeps {
   reducedMotion?(): boolean;
 }
 
+/**
+ * E2.2/E2.3: one live (non-dying) creature's nameplate-relevant state, read
+ * fresh each frame by `src/spawn/NameplateView.ts` — species doubles as the
+ * `CreatureRegistry`/i18n key (see `starterCreatures.ts`). `health`/`maxHealth`
+ * are null for a species with no combat stats (none exist today, but a future
+ * unkillable creature shouldn't need a fake health value).
+ */
+export interface NameplateTargetEntity {
+  readonly id: string;
+  readonly species: string;
+  readonly worldPos: readonly [number, number, number];
+  readonly health: number | null;
+  readonly maxHealth: number | null;
+  readonly tamed: boolean;
+}
+
 export interface SpawnFieldHandle {
   update(dt: number): void;
   dispose(): void;
@@ -175,6 +194,17 @@ export interface SpawnFieldHandle {
   /** Host: a peer disconnected — drop whatever creature it was riding so a
    *  vanished joiner doesn't leave a creature stuck frozen forever. */
   releaseRider(peerId: string): void;
+  /** E2.2/E2.3: every live (non-dying) creature's nameplate-relevant state,
+   *  read fresh each frame by the billboard nameplate adapter. Works in both
+   *  host and joiner (remote) mode — the `creatures` map is populated either
+   *  way (locally simulated or streamed). */
+  nameplateTargets(): readonly NameplateTargetEntity[];
+  /** The creature currently at F-attack/interact reach, or null — feeds the
+   *  nameplate policy's `onHover` mode (crosshair state seam). */
+  readonly hoveredCreatureId: string | null;
+  /** True for a short window after the player last attacked or was bitten —
+   *  feeds the nameplate policy's `inCombat` mode. */
+  readonly inCombat: boolean;
 }
 
 interface CreatureEntry {
@@ -297,6 +327,8 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
   let lastCz: number | null = null;
   let sinceStep = Infinity; // first update always steps
   let clockMs = 0;
+  // E2.2: last time the player attacked or was bitten — feeds inCombat.
+  let lastCombatMs = -Infinity;
   // M6.5 ride: the walk controller stays the mover; the mount is glued under
   // the camera and animated by player speed. ponytail: no controller surgery,
   // no speed boost yet - add when riding should outrun running.
@@ -484,6 +516,7 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
   // joiner's remote intent here must never advance the host's own tracker.
   function resolveAttack(target: CreatureEntry): boolean {
     if (target.dying !== null) return false;
+    lastCombatMs = clockMs;
     const r = applyDamage(target.combat, ATTACK_DAMAGE);
     target.combat = r.state;
     const pos: [number, number, number] = [
@@ -679,6 +712,7 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
         clockMs - c.lastBiteMs >= BITE_COOLDOWN_S * 1000
       ) {
         c.lastBiteMs = clockMs;
+        lastCombatMs = clockMs;
         const damage =
           stats.damage * (night ? NIGHT_DAMAGE_MULT : 1) * (deps.creatureDamageMult ?? 1);
         if (damage > 0) {
@@ -970,6 +1004,32 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
       if (node) return true;
       const creature = pickTarget(creatures);
       return creature !== null && creature.dying === null && creature.taming.phase === "tamed";
+    },
+
+    nameplateTargets(): readonly NameplateTargetEntity[] {
+      const out: NameplateTargetEntity[] = [];
+      for (const c of creatures.values()) {
+        if (c.dying !== null) continue;
+        const stats = CREATURE_STATS[c.entity.species];
+        out.push({
+          id: c.entity.id,
+          species: c.entity.species,
+          worldPos: [c.obj.position.x, c.obj.position.y, c.obj.position.z],
+          health: stats ? c.combat.health : null,
+          maxHealth: stats ? stats.maxHealth : null,
+          tamed: c.taming.phase === "tamed",
+        });
+      }
+      return out;
+    },
+
+    get hoveredCreatureId(): string | null {
+      const t = pickTarget(creatures);
+      return t && t.dying === null ? t.entity.id : null;
+    },
+
+    get inCombat(): boolean {
+      return clockMs - lastCombatMs < COMBAT_WINDOW_MS;
     },
   };
 }
