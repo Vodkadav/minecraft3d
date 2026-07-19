@@ -118,6 +118,11 @@ export interface SpawnFieldHandle {
   /** Host: ids currently ridden by a peer (probe/tooling seam — asserts a
    *  joiner's mount intent round-trips through the host, ADR 0003 addendum). */
   readonly riddenIds: readonly string[];
+  /** A live creature is within F-attack reach (crosshair state seam, HUD). */
+  hasAttackTarget(): boolean;
+  /** A harvestable node or a tamed/feedable-or-mountable creature is in
+   *  reach (crosshair state seam, HUD). */
+  hasInteractTarget(): boolean;
   /** Joiner mode (ADR 0003): no local AI/proximity/resolution — puppet the
    *  host's stream. Set by the net glue before the first frame. */
   remote: boolean;
@@ -807,6 +812,23 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
 
     get riddenIds(): readonly string[] {
       return [...creatures.entries()].filter(([, c]) => c.riddenBy !== null).map(([id]) => id);
+    },
+
+    /** A live creature is within F-attack reach (crosshair state seam). */
+    hasAttackTarget(): boolean {
+      const target = pickTarget(creatures);
+      return target !== null && target.dying === null;
+    },
+
+    /** A harvestable node OR a feedable/mountable creature is in reach
+     *  (crosshair state seam — deliberately coarse: it doesn't distinguish
+     *  which of E/T/G would fire, only that *something* other than attack is
+     *  available). */
+    hasInteractTarget(): boolean {
+      const node = pickTarget(nodes);
+      if (node) return true;
+      const creature = pickTarget(creatures);
+      return creature !== null && creature.dying === null && creature.taming.phase === "tamed";
     },
   };
 }

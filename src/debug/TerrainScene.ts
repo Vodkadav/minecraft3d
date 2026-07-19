@@ -7,6 +7,7 @@
  * ?alt=N puts the camera N meters above ground (ground-clamped spawn).
  */
 
+import { Vector3 } from 'three';
 import { BOOKMARKS, installBookmarks } from './Bookmarks';
 import { Froxels } from '../gpu/passes/Froxels';
 import { PARTICLE_COUNT, Particles } from '../gpu/passes/Particles';
@@ -29,12 +30,13 @@ import { setupSunShadows } from '../render/ShadowSetup';
 import { Clouds } from '../sky/Clouds';
 import { SunSky } from '../sky/SunSky';
 import { DigMask } from '../voxel/DigMask';
-import { DigTool } from '../voxel/DigTool';
+import { DigTool, REACH_M as DIG_REACH_M } from '../voxel/DigTool';
 import { VoxelTerrain } from '../voxel/VoxelTerrain';
-import { attachPlacementTool } from '../voxel/placement/PlacementTool';
+import { attachPlacementTool, type PlacementToolHandle } from '../voxel/placement/PlacementTool';
 import { attachTreasureField } from '../voxel/treasure/TreasureField';
 import { attachSpawnField } from '../spawn/SpawnFieldView';
 import { createPlayerHealthBar } from '../spawn/PlayerHealthBar';
+import { mountGameHud } from '../spawn/GameHud';
 import {
   PLAYER_MAX_HEALTH,
   damagePlayer,
@@ -42,6 +44,12 @@ import {
   spawnPlayerVitals,
   tickVitals,
 } from '../game/domain/combat/PlayerVitals';
+import { isOk } from '../game/domain/Result';
+import { ItemRegistry } from '../game/domain/items/ItemRegistry';
+import { STARTER_ITEMS } from '../game/domain/items/starterItems';
+import { resolveCrosshairState } from '../game/domain/ui/CrosshairState';
+import { Crosshair } from '../game/ui/components/Crosshair';
+import { createLocalizer } from '../game/ui/i18n/strings';
 import { LocalStorageSettingsStore } from '../game/infrastructure/persistence/LocalStorageSettingsStore';
 import { SettingsController } from '../game/application/SettingsController';
 import { IndexedDbKeyValueStore } from '../game/infrastructure/persistence/IndexedDbKeyValueStore';
@@ -312,9 +320,22 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
     water: hf.waterYAtCpu(x, z),
   });
 
+  // M5 proximity-gated spawns — same gate shape as the voxel subsystem (menu
+  // launch always; URL boots opt in with ?spawns=1); computed early so the
+  // dig-only crosshair fallback below knows whether the spawns block (which
+  // drives the fuller crosshair state) will also run this scene.
+  const spawnsOn =
+    ctx.world !== undefined ||
+    new URLSearchParams(window.location.search).get('spawns') === '1';
+
   // M8 voxel digging: chunk meshes + dig input + delta persistence. The
   // ground probe becomes cavern-aware so walk mode can descend into digs.
   let voxelsRef: VoxelTerrain | null = null;
+  let placementRef: PlacementToolHandle | null = null;
+  // Mounted alongside DigTool regardless of whether spawns are also on (dev
+  // URL boots can have ?voxel=1 without ?spawns=1) — matches the crosshair's
+  // old unconditional-with-DigTool presence exactly.
+  let crosshairRef: ReturnType<typeof Crosshair> | null = null;
   if (digMask && view !== 'split') {
     // menu launch: the SAME store instance the menu uses, keyed to the real
     // worldId; URL boots keep the per-seed demo id over a fresh OPFS store
@@ -339,6 +360,7 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
     if (ctx.world) ctx.world.voxels = voxels; // M7 net glue reaches it here
     engine.scene.add(voxels.group);
     new DigTool(voxels, engine.camera, engine.renderer.domElement);
+    crosshairRef = Crosshair();
     window.addEventListener('pagehide', () => voxels.flushSave());
     // tooling probe handle (tools/voxel-shot.ts) — programmatic digs in CI-less runs
     (
@@ -369,6 +391,7 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
       },
     });
     engine.onUpdate(() => placement.update());
+    placementRef = placement;
 
     const claimed = voxels.entity('treasure.discovered');
     const treasures = attachTreasureField({
@@ -384,11 +407,35 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
     engine.onUpdate((dt) => treasures.update(dt));
   }
 
-  // M5 proximity-gated spawns — same gate shape as the voxel subsystem (menu
-  // launch always; URL boots opt in with ?spawns=1); density = the M4 slider
-  const spawnsOn =
-    ctx.world !== undefined ||
-    new URLSearchParams(window.location.search).get('spawns') === '1';
+  // Dig-only crosshair state (mine/place, no attack/interact — spawns won't
+  // run this scene): the fuller updater inside the spawns block below takes
+  // over instead when spawns ARE on, so this only wires when they aren't.
+  if (crosshairRef && !spawnsOn) {
+    const AIM_DIR = new Vector3();
+    const crosshair = crosshairRef;
+    engine.onUpdate(() => {
+      const placing = placementRef?.isBuildMode() ?? false;
+      let hasMineTarget = false;
+      if (!placing && voxelsRef) {
+        AIM_DIR.set(0, 0, -1).applyQuaternion(engine.camera.quaternion).normalize();
+        const hit = voxelsRef.raycastSolid(
+          [engine.camera.position.x, engine.camera.position.y, engine.camera.position.z],
+          [AIM_DIR.x, AIM_DIR.y, AIM_DIR.z],
+          DIG_REACH_M,
+        );
+        hasMineTarget = hit !== null;
+      }
+      crosshair.setState(
+        resolveCrosshairState({
+          placing,
+          hasAttackTarget: false,
+          hasInteractTarget: false,
+          hasMineTarget,
+        }),
+      );
+    });
+  }
+
   if (spawnsOn && view !== 'split') {
     const settings = new SettingsController(new LocalStorageSettingsStore());
     await settings.load();
@@ -400,6 +447,22 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
     // a raw camera.position.set is stomped by fly.update the same frame)
     let respawnPose: CamPose | null = null;
     const healthBar = createPlayerHealthBar();
+
+    // themed HUD (Workstream 3): hotbar + toasts + crosshair. Digit-key
+    // hotbar selection is off here — keys 1-9 already jump to the camera
+    // bookmarks (Bookmarks.ts) in this scene; wheel/click selection still
+    // works.
+    const loc = createLocalizer(settings.settings.locale);
+    const itemsReg = ItemRegistry.create(STARTER_ITEMS);
+    if (!isOk(itemsReg)) throw new Error(`bad starter item table: ${itemsReg.error.kind}`);
+    const hud = mountGameHud({
+      loc,
+      registry: itemsReg.value,
+      enableHotbarDigitKeys: false,
+      ...(crosshairRef ? { crosshair: crosshairRef } : {}),
+    });
+    const AIM_DIR = new Vector3();
+
     const spawns = attachSpawnField({
       seed: params.seed,
       ground: {
@@ -422,6 +485,7 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
         }
       },
       setMoveSpeedScale: (s) => ctx.hooks.setMoveSpeedScale?.(s),
+      onLoot: (stacks) => hud.addLoot(stacks),
       ...(voxelsRef
         ? {
             save: {
@@ -443,6 +507,27 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
       const before = vitals.health;
       vitals = tickVitals(vitals, dt);
       if (vitals.health !== before) healthBar.set(vitals.health / PLAYER_MAX_HEALTH);
+    });
+    engine.onUpdate(() => {
+      const placing = placementRef?.isBuildMode() ?? false;
+      let hasMineTarget = false;
+      if (!placing && voxelsRef) {
+        AIM_DIR.set(0, 0, -1).applyQuaternion(engine.camera.quaternion).normalize();
+        const hit = voxelsRef.raycastSolid(
+          [engine.camera.position.x, engine.camera.position.y, engine.camera.position.z],
+          [AIM_DIR.x, AIM_DIR.y, AIM_DIR.z],
+          DIG_REACH_M,
+        );
+        hasMineTarget = hit !== null;
+      }
+      hud.setCrosshairState(
+        resolveCrosshairState({
+          placing,
+          hasAttackTarget: spawns.hasAttackTarget(),
+          hasInteractTarget: spawns.hasInteractTarget(),
+          hasMineTarget,
+        }),
+      );
     });
   }
 

@@ -1,7 +1,10 @@
 /**
  * Dig/build input (M8.3): while pointer-locked, left click carves an air
- * pocket at the aimed surface, right click packs stone back in. A minimal
- * crosshair dot marks the aim point (no text — nothing to localize).
+ * pocket at the aimed surface, right click packs stone back in. The themed
+ * `Crosshair` component (Workstream 3) is owned by the scene, not here — the
+ * scene combines this tool's mine-target read with the spawn field's
+ * attack/interact targets and the placement tool's build mode into one
+ * reticle state each frame.
  *
  * The full placement system — ghost preview, rotation, smart snapping — is
  * plan 8.5 [O, after the 8.6 research pass]; this tool only owns the dig loop.
@@ -11,7 +14,8 @@ import type { PerspectiveCamera } from 'three';
 import { Vector3 } from 'three';
 import type { VoxelTerrain } from './VoxelTerrain';
 
-const REACH_M = 9;
+/** Exported: the scene reuses this reach to probe a per-frame mine-target for the crosshair. */
+export const REACH_M = 9;
 const CARVE_RADIUS_M = 1.6;
 const FILL_RADIUS_M = 1.2;
 /** Push the carve center into the surface so a hit takes a real bite. */
@@ -56,24 +60,5 @@ export class DigTool {
     dom.addEventListener('contextmenu', (e) => {
       if (document.pointerLockElement === dom) e.preventDefault();
     });
-    installCrosshair();
   }
-}
-
-function installCrosshair(): void {
-  const dot = document.createElement('div');
-  dot.style.cssText = [
-    'position:fixed',
-    'left:50%',
-    'top:50%',
-    'width:4px',
-    'height:4px',
-    'margin:-2px 0 0 -2px',
-    'border-radius:50%',
-    'background:rgba(255,255,255,0.8)',
-    'box-shadow:0 0 2px rgba(0,0,0,0.9)',
-    'pointer-events:none',
-    'z-index:10',
-  ].join(';');
-  document.body.appendChild(dot);
 }
