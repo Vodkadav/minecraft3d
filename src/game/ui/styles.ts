@@ -452,6 +452,63 @@ ${THEME_CSS_VARS}
   margin-bottom: var(--lw-space-2);
 }
 
+/* Character screen (Phase E1.5) */
+.lw-character-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lw-space-3);
+  max-height: 70vh;
+  overflow-y: auto;
+}
+.lw-character-level {
+  font-weight: 700;
+  font-size: var(--lw-font-md);
+  color: var(--lw-fg);
+}
+.lw-character-xp,
+.lw-character-points {
+  font-size: var(--lw-font-sm);
+  color: var(--lw-fg-muted);
+}
+.lw-character-attribute-list,
+.lw-character-talent-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lw-space-2);
+}
+.lw-character-attribute,
+.lw-character-talent {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--lw-space-3);
+  background: var(--lw-bg-panel);
+  border: 1px solid var(--lw-border);
+  border-radius: var(--lw-radius-md);
+  padding: var(--lw-space-2) var(--lw-space-3);
+}
+.lw-character-talent[data-allocated="true"] {
+  border-color: var(--lw-accent);
+}
+.lw-character-attribute-title,
+.lw-character-talent-title {
+  font-weight: 700;
+}
+.lw-character-attribute-desc,
+.lw-character-talent-desc {
+  font-size: var(--lw-font-xs);
+  color: var(--lw-fg-muted);
+}
+.lw-character-talent-lock {
+  font-size: var(--lw-font-xs);
+  color: var(--lw-warning);
+}
+.lw-character-attribute-actions {
+  display: flex;
+  gap: var(--lw-space-2);
+  flex-shrink: 0;
+}
+
 /* Keyhint */
 .lw-keyhint {
   display: inline-flex;
