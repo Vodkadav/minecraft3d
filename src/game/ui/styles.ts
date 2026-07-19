@@ -241,6 +241,164 @@ ${THEME_CSS_VARS}
 .lw-crosshair[data-state="place"]::before,
 .lw-crosshair[data-state="place"]::after { content: none; }
 
+/* Inventory grid (Workstream 4) */
+.lw-inv-grid {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lw-space-1);
+}
+.lw-inv-row {
+  display: flex;
+  gap: var(--lw-space-1);
+}
+.lw-inv-row-divider {
+  padding-top: var(--lw-space-2);
+  border-top: 1px dashed var(--lw-border);
+  margin-top: var(--lw-space-1);
+}
+.lw-inv-slot {
+  position: relative;
+  width: 48px;
+  height: 48px;
+  min-width: 48px;
+  min-height: 48px;
+  background: var(--lw-bg-panel);
+  border: 2px solid var(--lw-border);
+  border-radius: var(--lw-radius-md);
+  color: var(--lw-fg);
+  font-size: var(--lw-font-xs);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  overflow: hidden;
+  padding: var(--lw-space-1);
+  cursor: pointer;
+}
+.lw-inv-slot[data-picked="true"] {
+  border-color: var(--lw-accent);
+  box-shadow: 0 0 0 2px var(--lw-accent);
+}
+.lw-inv-slot:focus-visible {
+  outline: 3px solid var(--lw-focus);
+  outline-offset: 2px;
+}
+.lw-inv-slot-name {
+  font-size: 0.65rem;
+  line-height: 1.1;
+}
+.lw-inv-slot-count {
+  position: absolute;
+  bottom: 1px;
+  right: 3px;
+  font-size: 0.65rem;
+  color: var(--lw-fg);
+  text-shadow: 0 1px 1px #000;
+}
+
+/* Crafting screen (Workstream 4) */
+.lw-crafting {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lw-space-3);
+  max-height: 70vh;
+  overflow-y: auto;
+}
+.lw-crafting-controls {
+  display: flex;
+  gap: var(--lw-space-2);
+  align-items: center;
+}
+.lw-crafting-controls input[type="text"] {
+  flex: 1;
+  background: var(--lw-bg-track);
+  color: var(--lw-fg);
+  border: 1px solid var(--lw-border);
+  border-radius: var(--lw-radius-sm);
+  padding: var(--lw-space-1) var(--lw-space-2);
+}
+.lw-crafting-tier {
+  font-weight: 700;
+  color: var(--lw-fg-muted);
+  margin: var(--lw-space-2) 0 0;
+}
+.lw-crafting-empty {
+  color: var(--lw-fg-muted);
+}
+.lw-recipe {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--lw-space-3);
+  background: var(--lw-bg-panel);
+  border: 1px solid var(--lw-border);
+  border-radius: var(--lw-radius-md);
+  padding: var(--lw-space-2) var(--lw-space-3);
+  margin-bottom: var(--lw-space-2);
+}
+.lw-recipe[data-locked="true"] {
+  opacity: 0.6;
+}
+.lw-recipe-title {
+  font-weight: 700;
+}
+.lw-recipe-lock {
+  font-size: var(--lw-font-xs);
+  color: var(--lw-warning);
+}
+.lw-recipe-ingredients {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--lw-space-2);
+  font-size: var(--lw-font-xs);
+  color: var(--lw-fg-muted);
+}
+.lw-recipe-ingredient[data-satisfied="false"] {
+  color: var(--lw-danger);
+}
+.lw-recipe-actions {
+  display: flex;
+  gap: var(--lw-space-2);
+  flex-shrink: 0;
+}
+
+.lw-inv-open-button {
+  position: fixed;
+  top: var(--lw-space-4);
+  right: var(--lw-space-4);
+  z-index: 25;
+}
+
+/* Inventory/crafting overlay */
+.lw-inv-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.55);
+  z-index: 60;
+}
+.lw-inv-overlay-panel {
+  min-width: 420px;
+  max-width: min(720px, 92vw);
+}
+.lw-inv-tabs {
+  display: flex;
+  gap: var(--lw-space-2);
+  margin-bottom: var(--lw-space-3);
+}
+.lw-inv-tabs button[aria-selected="true"] {
+  background: var(--lw-accent);
+  color: var(--lw-bg);
+}
+.lw-inv-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--lw-space-2);
+}
+
 /* Keyhint */
 .lw-keyhint {
   display: inline-flex;

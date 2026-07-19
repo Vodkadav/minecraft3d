@@ -465,10 +465,12 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
     let respawnPose: CamPose | null = null;
     const healthBar = createPlayerHealthBar();
 
-    // themed HUD (Workstream 3): hotbar + toasts + crosshair. Digit-key
-    // hotbar selection is off here — keys 1-9 already jump to the camera
-    // bookmarks (Bookmarks.ts) in this scene; wheel/click selection still
-    // works.
+    // themed HUD (Workstream 3+4): hotbar + toasts + crosshair + the
+    // inventory/crafting overlay. Digit-key hotbar selection is off here —
+    // keys 1-9 already jump to the camera bookmarks (Bookmarks.ts) in this
+    // scene; wheel/click selection still works. Opening the overlay pauses
+    // camera-look input through the same `flyCamEnabled` seam the flythrough
+    // uses (main.ts) — it already releases pointer lock itself.
     const loc = createLocalizer(settings.settings.locale);
     const itemsReg = ItemRegistry.create(STARTER_ITEMS);
     if (!isOk(itemsReg)) throw new Error(`bad starter item table: ${itemsReg.error.kind}`);
@@ -477,6 +479,8 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
       registry: itemsReg.value,
       enableHotbarDigitKeys: false,
       ...(crosshairRef ? { crosshair: crosshairRef } : {}),
+      ...(ctx.audio ? { audio: ctx.audio } : {}),
+      setInputEnabled: (on) => ctx.hooks.flyCamEnabled?.(on),
     });
     const AIM_DIR = new Vector3();
 

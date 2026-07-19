@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { isOk } from "../game/domain/Result";
 import { ItemRegistry } from "../game/domain/items/ItemRegistry";
 import { STARTER_ITEMS } from "../game/domain/items/starterItems";
@@ -44,5 +44,39 @@ describe("mountGameHud", () => {
     expect(document.querySelector(".lw-hotbar")).toBeNull();
     expect(document.querySelector(".lw-toast-region")).toBeNull();
     expect(document.querySelector(".lw-crosshair")).toBeNull();
+    expect(document.querySelector(".lw-inv-overlay")).toBeNull();
+    expect(document.querySelector(".lw-inv-open-button")).toBeNull();
+  });
+
+  it("the mouse-only inventory-open button toggles the overlay with no keyboard", () => {
+    const hud = mountGameHud({ loc: createLocalizer("en"), registry: registry() });
+    const openButton = document.querySelector<HTMLButtonElement>(".lw-inv-open-button");
+    expect(openButton).toBeTruthy();
+    openButton?.click();
+    expect(document.querySelector(".lw-inv-overlay")?.hasAttribute("hidden")).toBe(false);
+    openButton?.click();
+    expect(document.querySelector(".lw-inv-overlay")?.hasAttribute("hidden")).toBe(true);
+    hud.dispose();
+  });
+
+  it("wires the I key to the inventory overlay and calls setInputEnabled on open/close", () => {
+    const setInputEnabled = vi.fn();
+    const hud = mountGameHud({ loc: createLocalizer("en"), registry: registry(), setInputEnabled });
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "i", bubbles: true }));
+    expect(document.querySelector(".lw-inv-overlay")?.hasAttribute("hidden")).toBe(false);
+    expect(setInputEnabled).toHaveBeenCalledWith(false);
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "i", bubbles: true }));
+    expect(setInputEnabled).toHaveBeenCalledWith(true);
+    hud.dispose();
+  });
+
+  it("addLoot also updates the inventory overlay's grid", () => {
+    const hud = mountGameHud({ loc: createLocalizer("en"), registry: registry() });
+    hud.addLoot([{ itemId: "wood", count: 2 }]);
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "i", bubbles: true }));
+    const cells = document.querySelectorAll(".lw-inv-slot");
+    const hasWood = [...cells].some((c) => c.textContent?.includes("Wood"));
+    expect(hasWood).toBe(true);
+    hud.dispose();
   });
 });
