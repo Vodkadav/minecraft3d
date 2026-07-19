@@ -13,6 +13,7 @@ import { Engine } from './core/Engine';
 import { FlyCamera } from './core/FlyCamera';
 import { initHooks, type LaasHooks } from './core/Hooks';
 import { createLocalizer } from './game/ui/i18n/strings';
+import { injectStyles } from './game/ui/styles';
 import type { Locale } from './game/domain/i18n/translate';
 import { parseCamString, parseParams, type QualityPreset } from './core/Params';
 import { WorldSeed } from './core/Seed';
@@ -362,6 +363,7 @@ function browserLocale(): Locale {
  * to the menu (a joiner's URL is the plain menu — reload boots straight to it).
  */
 function installHostOfflineWatch(hooks: LaasHooks): { onGone: () => void; onReturned: () => void } {
+  injectStyles(document);
   const loc = createLocalizer(browserLocale());
   const GRACE_S = 30;
   let overlay: HTMLDivElement | null = null;
@@ -383,17 +385,12 @@ function installHostOfflineWatch(hooks: LaasHooks): { onGone: () => void; onRetu
       let remaining = GRACE_S;
       overlay = document.createElement('div');
       overlay.id = 'laas-host-offline';
+      overlay.className = 'laas-ui laas-host-offline';
       overlay.setAttribute('role', 'alertdialog');
       overlay.setAttribute('aria-live', 'assertive');
-      overlay.style.cssText =
-        'position:fixed;inset:0;z-index:40;display:flex;flex-direction:column;' +
-        'align-items:center;justify-content:center;gap:8px;text-align:center;' +
-        'background:rgba(6,10,14,0.82);color:#f2f6fa;padding:24px;' +
-        "font:600 20px/1.4 system-ui,-apple-system,'Segoe UI',sans-serif;";
       const render = (): void => {
         if (overlay) {
           overlay.textContent = `${loc.t('net.hostLeft')}\n${loc.t('net.returningIn', { n: remaining })}`;
-          overlay.style.whiteSpace = 'pre-line';
         }
       };
       render();
@@ -417,13 +414,11 @@ function installHostOfflineWatch(hooks: LaasHooks): { onGone: () => void; onRetu
 
 /** Playtesters read the invite code off this badge (also on the console). */
 function showRoomCodeBadge(code: string): void {
+  injectStyles(document);
   const badge = document.createElement('div');
   badge.id = 'laas-room-code';
+  badge.className = 'laas-ui laas-room-code';
   badge.textContent = code;
-  badge.style.cssText =
-    'position:fixed;top:8px;right:8px;z-index:20;padding:6px 10px;' +
-    'font:700 16px/1.2 ui-monospace,Consolas,monospace;letter-spacing:2px;' +
-    'color:#fff;background:rgba(0,0,0,0.78);border-radius:6px;user-select:text;';
   document.body.appendChild(badge);
 }
 

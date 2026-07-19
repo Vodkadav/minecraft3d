@@ -15,8 +15,15 @@ export const UI_STRINGS: Catalog = {
     "menu.solo": "Solo (offline)",
     "menu.online": "Online",
     "menu.settings": "Settings",
+    "menu.credits": "Credits",
     "menu.solo.aria": "Start a single-player offline world",
     "world.defaultName": "New World",
+
+    "credits.title": "Credits",
+    "credits.tech": "Built with",
+    "credits.assets": "Third-party assets",
+    "credits.madeWith": "Made with Diggy World's own procedural engine (LAAS) and Claude Code.",
+    "credits.back": "Back",
 
     "settings.title": "Settings",
     "settings.graphics": "Graphics quality",
@@ -233,8 +240,15 @@ export const UI_STRINGS: Catalog = {
     "menu.solo": "Individual (sin conexión)",
     "menu.online": "En línea",
     "menu.settings": "Ajustes",
+    "menu.credits": "Créditos",
     "menu.solo.aria": "Iniciar un mundo individual sin conexión",
     "world.defaultName": "Mundo nuevo",
+
+    "credits.title": "Créditos",
+    "credits.tech": "Hecho con",
+    "credits.assets": "Recursos de terceros",
+    "credits.madeWith": "Hecho con el motor procedural propio de Diggy World (LAAS) y Claude Code.",
+    "credits.back": "Atrás",
 
     "settings.title": "Ajustes",
     "settings.graphics": "Calidad gráfica",
@@ -451,8 +465,15 @@ export const UI_STRINGS: Catalog = {
     "menu.solo": "Solo (offline)",
     "menu.online": "Online",
     "menu.settings": "Indstillinger",
+    "menu.credits": "Credits",
     "menu.solo.aria": "Start en offline-verden for én spiller",
     "world.defaultName": "Ny verden",
+
+    "credits.title": "Credits",
+    "credits.tech": "Lavet med",
+    "credits.assets": "Tredjeparts-ressourcer",
+    "credits.madeWith": "Lavet med Diggy Worlds egen procedurelle motor (LAAS) og Claude Code.",
+    "credits.back": "Tilbage",
 
     "settings.title": "Indstillinger",
     "settings.graphics": "Grafikkvalitet",

@@ -471,6 +471,210 @@ ${THEME_CSS_VARS}
   text-align: center;
 }
 
+/* Main menu / lobby / settings shell (Workstream 10.3) */
+.laas-main-menu,
+.laas-lobby,
+.laas-settings,
+.laas-credits {
+  position: relative;
+  z-index: 1;
+  background: var(--lw-bg-panel);
+  color: var(--lw-fg);
+  border: 1px solid var(--lw-border);
+  border-radius: var(--lw-radius-lg);
+  padding: var(--lw-space-5) var(--lw-space-6);
+  max-width: min(480px, 92vw);
+  max-height: 90vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--lw-space-3);
+}
+.laas-main-menu h1,
+.laas-lobby h1,
+.laas-settings h1,
+.laas-credits h1 {
+  color: var(--lw-fg);
+  margin: 0 0 var(--lw-space-2);
+}
+.laas-main-menu nav,
+.laas-lobby-footer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lw-space-2);
+}
+.laas-main-menu button,
+.laas-lobby button,
+.laas-settings button,
+.laas-credits button {
+  background: var(--lw-accent);
+  color: var(--lw-bg);
+  border: 1px solid var(--lw-border);
+  border-radius: var(--lw-radius-md);
+  padding: var(--lw-space-2) var(--lw-space-4);
+  font-size: var(--lw-font-md);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--lw-motion-fast) ease-out;
+}
+.laas-main-menu button:hover,
+.laas-lobby button:hover,
+.laas-settings button:hover,
+.laas-credits button:hover {
+  background: var(--lw-accent-hover);
+}
+.laas-main-menu button[data-first-run="true"] {
+  box-shadow: 0 0 0 3px var(--lw-focus);
+  animation: lw-bar-pulse 1400ms ease-in-out infinite;
+}
+.laas-code-row,
+.laas-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lw-space-1);
+  text-align: left;
+}
+.laas-code-row {
+  flex-direction: row;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.laas-code-input,
+.laas-field input,
+.laas-field select {
+  background: var(--lw-bg-track);
+  color: var(--lw-fg);
+  border: 1px solid var(--lw-border);
+  border-radius: var(--lw-radius-sm);
+  padding: var(--lw-space-1) var(--lw-space-2);
+}
+.laas-code-status,
+.laas-world-empty,
+.laas-storage-status {
+  color: var(--lw-fg-muted);
+  font-size: var(--lw-font-sm);
+}
+.laas-world-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--lw-space-2);
+}
+.laas-world-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--lw-space-2);
+  background: var(--lw-bg-track);
+  border: 1px solid var(--lw-border);
+  border-radius: var(--lw-radius-md);
+  padding: var(--lw-space-2) var(--lw-space-3);
+}
+.laas-seed-picker {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lw-space-1);
+}
+
+/* Wordmark (Workstream 10.1) */
+.lw-wordmark {
+  display: flex;
+  justify-content: center;
+}
+.lw-wordmark svg {
+  width: 100%;
+  max-width: 340px;
+  height: auto;
+}
+.lw-wordmark[data-size="compact"] svg {
+  max-width: 200px;
+}
+
+/* Menu backdrop (Workstream 10.2) — procedural parallax hills, no 3D boot */
+.lw-menu-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  background: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--lw-bg) 70%, #2a3a52),
+    var(--lw-bg)
+  );
+}
+.lw-menu-backdrop-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  animation: lw-backdrop-drift linear infinite;
+}
+.lw-menu-backdrop-layer svg {
+  display: block;
+  width: 200%;
+  height: 100%;
+}
+@keyframes lw-backdrop-drift {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+/* Credits (Workstream 10.3) */
+.lw-credits-list {
+  list-style: none;
+  margin: 0 0 var(--lw-space-3);
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--lw-space-1);
+  text-align: left;
+}
+.lw-credits-list a {
+  color: var(--lw-accent);
+}
+.lw-credits-note {
+  color: var(--lw-fg-muted);
+  font-size: var(--lw-font-sm);
+}
+.lw-credits-madewith {
+  color: var(--lw-fg-muted);
+  font-size: var(--lw-font-sm);
+}
+
+/* Host-offline overlay + room-code badge (src/main.ts) */
+.laas-host-offline {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--lw-space-2);
+  text-align: center;
+  background: rgba(6, 10, 14, 0.82);
+  color: var(--lw-fg);
+  padding: var(--lw-space-6);
+  font: 600 20px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
+  white-space: pre-line;
+}
+.laas-room-code {
+  position: fixed;
+  top: var(--lw-space-2);
+  right: var(--lw-space-2);
+  z-index: 20;
+  padding: var(--lw-space-1) var(--lw-space-3);
+  font: 700 16px/1.2 ui-monospace, Consolas, monospace;
+  letter-spacing: 2px;
+  color: var(--lw-fg);
+  background: var(--lw-bg-panel);
+  border: 1px solid var(--lw-border);
+  border-radius: var(--lw-radius-md);
+  user-select: text;
+}
+
 .laas-ui button,
 .laas-ui select,
 .laas-ui input[type="range"],

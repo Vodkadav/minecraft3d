@@ -11,7 +11,7 @@ import { createNewWorldSave } from "../domain/world/NewWorldSave";
 import type { LoopbackSession } from "./LoopbackSession";
 import type { SaveError, WorldSaveStore } from "./ports/WorldSaveStore";
 
-export type MenuScreen = "menu" | "settings" | "lobby" | "solo";
+export type MenuScreen = "menu" | "settings" | "lobby" | "solo" | "credits";
 
 export interface MainMenuDeps {
   readonly clock?: () => number;
@@ -46,6 +46,10 @@ export class MainMenuController {
 
   openSettings(): void {
     this._screen = "settings";
+  }
+
+  openCredits(): void {
+    this._screen = "credits";
   }
 
   back(): void {

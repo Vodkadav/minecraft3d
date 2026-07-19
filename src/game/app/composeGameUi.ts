@@ -32,6 +32,7 @@ import type { LoopbackSession } from "../application/LoopbackSession";
 import type { MenuScreen } from "../application/MainMenuController";
 import { WorldLifecycle, type WorldLaunch } from "../application/WorldLifecycle";
 import { createLocalizer } from "../ui/i18n/strings";
+import { CreditsScreen } from "../ui/CreditsScreen";
 import { LobbyView } from "../ui/LobbyView";
 import { MainMenuView } from "../ui/MainMenuView";
 import { SettingsView } from "../ui/SettingsView";
@@ -169,6 +170,7 @@ export function mountGameUi(
     else if (screen === "lobby") {
       show(LobbyView(lobby, loc, launch, toMenu, options.onJoinByCode, options.audio));
     }
+    else if (screen === "credits") show(CreditsScreen(loc, toMenu, options.audio));
     else show(MainMenuView(menu, loc, launch, options.audio));
   }
 

@@ -32,6 +32,12 @@ describe("MainMenuController", () => {
     expect(controller.screen).toBe("settings");
   });
 
+  it("opens credits", () => {
+    const { controller } = build();
+    controller.openCredits();
+    expect(controller.screen).toBe("credits");
+  });
+
   it("returns to the menu with back", () => {
     const { controller } = build();
     controller.openSettings();

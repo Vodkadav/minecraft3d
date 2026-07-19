@@ -29,11 +29,24 @@ function button(el: HTMLElement, text: string): HTMLButtonElement {
 const flush = () => new Promise((r) => setTimeout(r, 0));
 
 describe("MainMenuView", () => {
-  it("renders localized Solo, Online, and Settings buttons", () => {
+  it("renders localized Solo, Online, Settings, and Credits buttons", () => {
     const { el } = build();
     expect(button(el, "Solo (offline)")).toBeTruthy();
     expect(button(el, "Online")).toBeTruthy();
     expect(button(el, "Settings")).toBeTruthy();
+    expect(button(el, "Credits")).toBeTruthy();
+  });
+
+  it("Credits opens credits via the controller", () => {
+    const { controller, el } = build();
+    button(el, "Credits").click();
+    expect(controller.screen).toBe("credits");
+  });
+
+  it("renders the wordmark and a decorative backdrop", () => {
+    const { el } = build();
+    expect(el.querySelector(".lw-wordmark")?.getAttribute("aria-label")).toBe("Diggy World");
+    expect(el.querySelector(".lw-menu-backdrop")).toBeTruthy();
   });
 
   it("Online opens the lobby via the controller", () => {
