@@ -13,6 +13,7 @@ function aWorld(overrides: Partial<WorldSaveData> = {}): WorldSaveData {
     modifiedChunks: [{ key: "0,0,0", rev: 1, data: new Uint8Array([1, 2, 3]) }],
     entities: {},
     inventories: {},
+    progression: {},
     playerState: { position: [0, 64, 0], yaw: 0, pitch: 0 },
     ...overrides,
   };

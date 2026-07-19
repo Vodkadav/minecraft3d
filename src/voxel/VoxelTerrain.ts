@@ -49,6 +49,7 @@ interface PreservedSaveFields {
   readonly name: string;
   readonly entities: Readonly<Record<string, unknown>>;
   readonly inventories: Readonly<Record<string, unknown>>;
+  readonly progression: Readonly<Record<string, unknown>>;
   readonly playerState: PlayerState;
 }
 
@@ -117,6 +118,7 @@ export class VoxelTerrain {
       name: loaded.value.name,
       entities: loaded.value.entities,
       inventories: loaded.value.inventories,
+      progression: loaded.value.progression,
       playerState: loaded.value.playerState,
     };
     const restored = this.volume.loadFromDeltas(loaded.value.modifiedChunks);
@@ -326,6 +328,7 @@ export class VoxelTerrain {
         'voxel.digSpheres': this.digMask.toFlatArray(),
       },
       inventories: this.preserved?.inventories ?? {},
+      progression: this.preserved?.progression ?? {},
       playerState:
         this.poseProvider?.() ??
         this.preserved?.playerState ?? { position: [0, 0, 0], yaw: 0, pitch: 0 },

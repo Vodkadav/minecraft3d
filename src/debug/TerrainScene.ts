@@ -63,6 +63,7 @@ import {
   tickSurvival,
 } from '../game/domain/survival/Survival';
 import { eat } from '../game/domain/survival/Eating';
+import type { ProgressionEventId } from '../game/domain/progression/ProgressionEvents';
 import { isNight, MORNING_HOUR } from '../game/domain/time/DayNight';
 import { Crosshair } from '../game/ui/components/Crosshair';
 import { createLocalizer } from '../game/ui/i18n/strings';
@@ -406,6 +407,12 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
   // ground probe becomes cavern-aware so walk mode can descend into digs.
   let voxelsRef: VoxelTerrain | null = null;
   let placementRef: PlacementToolHandle | null = null;
+  // Workstream 6: DigTool/PlacementTool are constructed before the HUD (whose
+  // recordProgress is the real sink) — this indirection lets them fire
+  // progress events the moment the HUD exists without reordering the whole
+  // voxel/spawns boot sequence. Stays a no-op (spawns-off boots never mount
+  // a HUD) if the spawns block below never runs.
+  let progressHook: ((event: ProgressionEventId) => void) | undefined;
   // Mounted alongside DigTool regardless of whether spawns are also on (dev
   // URL boots can have ?voxel=1 without ?spawns=1) — matches the crosshair's
   // old unconditional-with-DigTool presence exactly.
@@ -433,7 +440,14 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
     voxelsRef = voxels;
     if (ctx.world) ctx.world.voxels = voxels; // M7 net glue reaches it here
     engine.scene.add(voxels.group);
-    new DigTool(voxels, engine.camera, engine.renderer.domElement, ctx.audio, feel ?? undefined);
+    new DigTool(
+      voxels,
+      engine.camera,
+      engine.renderer.domElement,
+      ctx.audio,
+      feel ?? undefined,
+      (event) => progressHook?.(event),
+    );
     crosshairRef = Crosshair();
     window.addEventListener('pagehide', () => voxels.flushSave());
     // tooling probe handle (tools/voxel-shot.ts) — programmatic digs in CI-less runs
@@ -461,6 +475,7 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
       parent: engine.scene,
       ...(ctx.audio ? { audio: ctx.audio } : {}),
       ...(feel ? { feel } : {}),
+      onProgress: (event) => progressHook?.(event),
       save: {
         load: () => voxels.entity('placement.pieces'),
         persist: (data) => voxels.setEntity('placement.pieces', data),
@@ -564,6 +579,9 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
         feel?.setLowHealth(frac > 0 && frac <= LOW_HEALTH_FRACTION);
       },
     });
+    // Workstream 6: DigTool/PlacementTool were built before this HUD existed
+    // (see `progressHook` above) — wire the real sink now.
+    progressHook = (event) => hud.recordProgress(event);
     const AIM_DIR = new Vector3();
 
     // Workstream 5.1: an F-attack costs stamina/hunger and is gated while
@@ -604,6 +622,7 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
       onPlayerHit: (amount) => applyPlayerDamage(amount),
       setMoveSpeedScale: (s) => ctx.hooks.setMoveSpeedScale?.(s),
       onLoot: (stacks) => hud.addLoot(stacks),
+      onProgress: (event) => hud.recordProgress(event),
       canAttack: () => canAttackSurvival(survival),
       onAttack: () => {
         survival = drainStaminaForAttack(survival);
@@ -678,6 +697,7 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
         if (pose) captureSpawn(pose);
         ctx.hooks.setTimeOfDay?.(MORNING_HOUR);
         ctx.audio?.play('sleep');
+        hud.recordProgress('sleep');
         await screenEffectsRef?.sleepFadeIn();
       })();
     });
@@ -693,14 +713,18 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
         );
         hasMineTarget = hit !== null;
       }
+      const hasInteractTarget = spawns.hasInteractTarget();
       hud.setCrosshairState(
         resolveCrosshairState({
           placing,
           hasAttackTarget: spawns.hasAttackTarget(),
-          hasInteractTarget: spawns.hasInteractTarget(),
+          hasInteractTarget,
           hasMineTarget,
         }),
       );
+      // Workstream 6.5: first time any tamable/feedable target is in reach,
+      // surface the "[T] Feed" keyhint once (persists dismissed thereafter).
+      if (hasInteractTarget) hud.maybeShowTameHint();
     });
   }
 

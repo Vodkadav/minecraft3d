@@ -362,6 +362,59 @@ ${THEME_CSS_VARS}
   flex-shrink: 0;
 }
 
+/* Objective tracker (Workstream 6.3) */
+.lw-objective-tracker {
+  position: fixed;
+  top: var(--lw-space-4);
+  left: var(--lw-space-4);
+  z-index: 20;
+  min-width: 220px;
+  max-width: 280px;
+}
+.lw-objective-title {
+  font-size: var(--lw-font-xs);
+  font-weight: 700;
+  color: var(--lw-fg-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.lw-objective-text {
+  color: var(--lw-fg);
+  margin: var(--lw-space-1) 0;
+}
+.lw-objective-progress {
+  font-size: var(--lw-font-xs);
+  color: var(--lw-fg-muted);
+  margin-bottom: var(--lw-space-2);
+}
+
+/* Achievements screen (Workstream 6.4) */
+.lw-achievements-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: var(--lw-space-2);
+  max-height: 60vh;
+  overflow-y: auto;
+}
+.lw-achievement {
+  background: var(--lw-bg-panel);
+  border: 1px solid var(--lw-border);
+  border-radius: var(--lw-radius-md);
+  padding: var(--lw-space-2) var(--lw-space-3);
+}
+.lw-achievement[data-unlocked="false"] {
+  opacity: 0.55;
+}
+.lw-achievement-title {
+  font-weight: 700;
+  color: var(--lw-fg);
+}
+.lw-achievement-desc {
+  font-size: var(--lw-font-xs);
+  color: var(--lw-fg-muted);
+  margin-top: var(--lw-space-1);
+}
+
 .lw-inv-open-button {
   position: fixed;
   top: var(--lw-space-4);

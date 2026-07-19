@@ -65,6 +65,7 @@ import { NIGHT_AGGRO_RANGE_MULT, NIGHT_DAMAGE_MULT } from "../game/domain/time/D
 import type { ItemStack } from "../game/domain/inventory/Inventory";
 import type { AudioPort } from "../game/application/ports/AudioPort";
 import type { FeelPort } from "../game/application/ports/FeelPort";
+import type { ProgressionEventId } from "../game/domain/progression/ProgressionEvents";
 import { nearestWithin, SPECIES_VISUAL, validGround, type SpawnGround } from "./SpawnPlacement";
 
 /** Seconds between proximity re-steps when no cell is crossed. */
@@ -108,6 +109,9 @@ export interface SpawnFieldDeps {
   /** Workstream 2: attack/kill/hurt/harvest/tame each also fan out here —
    *  shake, hit-stop, vignette, damage numbers, particles, rumble. */
   readonly feel?: FeelPort;
+  /** Workstream 6: kill/tame/harvest each also fan out here — feeds
+   *  objectives/achievements/the tier curve (same threading as audio/feel). */
+  onProgress?(event: ProgressionEventId): void;
   /** Called with the stacks gained from a kill/harvest (HUD hook). */
   onLoot?(stacks: readonly ItemStack[]): void;
   /** An aggressive creature bit the player (M6 player health). */
@@ -419,9 +423,13 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
   }
 
   // Interaction resolution — reused by the local keydown (host/solo) AND by the
-  // host's applyInteract when a joiner's intent arrives (ADR 0003).
-  function resolveAttack(target: CreatureEntry): void {
-    if (target.dying !== null) return;
+  // host's applyInteract when a joiner's intent arrives (ADR 0003). Each
+  // returns whether its "counts as progress" outcome happened (a kill, a
+  // tame) so the *local-only* call sites below can fire `onProgress` —
+  // progression is local-player state (Workstream 6): the host resolving a
+  // joiner's remote intent here must never advance the host's own tracker.
+  function resolveAttack(target: CreatureEntry): boolean {
+    if (target.dying !== null) return false;
     const r = applyDamage(target.combat, ATTACK_DAMAGE);
     target.combat = r.state;
     const pos: [number, number, number] = [
@@ -434,7 +442,7 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
     // presentation flourish only, never affects the damage actually dealt
     const crit = hashUnitFloat(deps.seed, clockMs | 0, 0x6f10) < CRIT_CHANCE;
     deps.feel?.trigger("attackHit", { worldPos: pos, damageValue: ATTACK_DAMAGE, crit });
-    if (!r.died) return;
+    if (!r.died) return false;
     deps.feel?.trigger("kill", { worldPos: pos, damageValue: ATTACK_DAMAGE, crit });
     const roll = hashUnitFloat(deps.seed, clockMs | 0, 0x6f00);
     grantLoot(lootFor(target.entity.species, roll));
@@ -446,12 +454,13 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
     const duration = target.instance?.playDeath() ?? 0;
     if (duration > 0) target.dying = duration;
     else remove(target.entity.id);
+    return true;
   }
 
-  function resolveFeed(target: CreatureEntry): void {
-    if (target.dying !== null || target.taming.phase === "tamed") return;
+  function resolveFeed(target: CreatureEntry): boolean {
+    if (target.dying !== null || target.taming.phase === "tamed") return false;
     const rules = TAMING_RULES[target.entity.species];
-    if (!rules || !consumeFood(rules.foodItemId)) return;
+    if (!rules || !consumeFood(rules.foodItemId)) return false;
     const r = feed(target.taming, rules.foodItemId, clockMs);
     target.taming = r.state;
     if (r.becameTamed) {
@@ -465,6 +474,7 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
       deps.audio?.play("tame", { position: pos });
       deps.feel?.trigger("tame", { worldPos: pos });
     }
+    return r.becameTamed;
   }
 
   function resolveHarvest(target: { entity: SpawnEntity; obj: Object3D }): void {
@@ -510,7 +520,7 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
       if (!target || target.dying !== null) return;
       deps.onAttack?.();
       if (remote) onInteractIntent?.("attack", target.entity.id);
-      else resolveAttack(target);
+      else if (resolveAttack(target)) deps.onProgress?.("kill");
     } else if (ev.code === "KeyG") {
       // G = mount/dismount (R belongs to the placement tool's rotate)
       if (ridingId !== null) {
@@ -531,12 +541,15 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
       const target = pickTarget(creatures);
       if (!target || target.dying !== null || target.taming.phase === "tamed") return;
       if (remote) onInteractIntent?.("feed", target.entity.id);
-      else resolveFeed(target);
+      else if (resolveFeed(target)) deps.onProgress?.("tame");
     } else if (ev.code === "KeyE") {
       const target = pickTarget(nodes);
       if (!target) return;
       if (remote) onInteractIntent?.("harvest", target.entity.id);
-      else resolveHarvest(target);
+      else {
+        resolveHarvest(target);
+        deps.onProgress?.("harvest");
+      }
     }
   };
   window.addEventListener("keydown", onKeyDown);

@@ -25,6 +25,7 @@ function existingSave(worldId: string, seed: number): WorldSaveData {
     modifiedChunks: [],
     entities: { "quest.flags": ["intro-done"] },
     inventories: { backpack: { slots: [] } },
+    progression: {},
     playerState: POSE,
   };
 }

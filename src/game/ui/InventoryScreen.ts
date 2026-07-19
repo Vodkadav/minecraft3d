@@ -13,8 +13,10 @@
 import type { Recipe } from "../domain/crafting/Crafting";
 import { Inventory } from "../domain/inventory/Inventory";
 import type { ItemRegistry } from "../domain/items/ItemRegistry";
+import type { Achievement } from "../domain/progression/ProgressionState";
 import type { AudioPort } from "../application/ports/AudioPort";
 import type { Localizer } from "../application/i18n/Localizer";
+import { AchievementsScreen } from "./components/AchievementsScreen";
 import { Button } from "./components/Button";
 import { CraftingScreen } from "./components/CraftingScreen";
 import { InventoryGrid } from "./components/InventoryGrid";
@@ -27,9 +29,15 @@ export interface InventoryScreenOptions {
   readonly recipes: readonly Recipe[];
   readonly unlockedTier: number;
   readonly audio?: AudioPort;
+  /** Achievement definitions for the third tab (Workstream 6.4) — omitted
+   *  entirely hides the tab (keeps this screen usable pre-Workstream-6). */
+  readonly achievements?: readonly Achievement[];
   /** Pauses/resumes camera-look input; called on open(false)/close(true). */
   setInputEnabled?(enabled: boolean): void;
   onInventoryChange?(next: Inventory): void;
+  /** Fired after a successful craft/craft-all — threads through to the
+   *  composition root's progression event stream (Workstream 6). */
+  onCraft?(): void;
   readonly doc?: Document;
 }
 
@@ -40,10 +48,14 @@ export interface InventoryScreenHandle {
   toggle(): void;
   setInventory(inventory: Inventory): void;
   readonly inventory: Inventory;
+  /** Live recipe-tier gate update (Workstream 6.1) — no remount required. */
+  setUnlockedTier(tier: number): void;
+  /** Re-renders the achievements grid against the given unlocked-id set. */
+  setUnlockedAchievements(unlockedIds: readonly string[]): void;
   dispose(): void;
 }
 
-type Tab = "inventory" | "crafting";
+type Tab = "inventory" | "crafting" | "achievements";
 
 function isTextInput(el: Element | null): boolean {
   if (!el) return false;
@@ -77,7 +89,12 @@ export function mountInventoryScreen(opts: InventoryScreenOptions): InventoryScr
   craftingTabBtn.className = "laas-ui lw-button";
   craftingTabBtn.dataset.variant = "quiet";
   craftingTabBtn.textContent = opts.loc.t("inventory.tab.crafting");
-  tabs.append(inventoryTabBtn, craftingTabBtn);
+  const achievementsTabBtn = doc.createElement("button");
+  achievementsTabBtn.type = "button";
+  achievementsTabBtn.className = "laas-ui lw-button";
+  achievementsTabBtn.dataset.variant = "quiet";
+  achievementsTabBtn.textContent = opts.loc.t("inventory.tab.achievements");
+  tabs.append(inventoryTabBtn, craftingTabBtn, ...(opts.achievements ? [achievementsTabBtn] : []));
 
   const closeBtn = Button({
     label: opts.loc.t("inventory.close"),
@@ -114,7 +131,12 @@ export function mountInventoryScreen(opts: InventoryScreenOptions): InventoryScr
       opts.onInventoryChange?.(next);
       grid.render(inventory);
     },
+    ...(opts.onCraft ? { onCraft: opts.onCraft } : {}),
   });
+
+  const achievementsScreen = opts.achievements
+    ? AchievementsScreen(opts.loc, opts.achievements, { doc })
+    : null;
 
   const body = doc.createElement("div");
   body.appendChild(grid.el);
@@ -123,12 +145,19 @@ export function mountInventoryScreen(opts: InventoryScreenOptions): InventoryScr
   overlay.appendChild(panel);
   doc.body.appendChild(overlay);
 
+  function elFor(t: Tab): HTMLElement {
+    if (t === "crafting") return craftScreen.el;
+    if (t === "achievements" && achievementsScreen) return achievementsScreen.el;
+    return grid.el;
+  }
   function applyTab(): void {
     inventoryTabBtn.dataset.variant = tab === "inventory" ? "" : "quiet";
     inventoryTabBtn.setAttribute("aria-selected", String(tab === "inventory"));
     craftingTabBtn.dataset.variant = tab === "crafting" ? "" : "quiet";
     craftingTabBtn.setAttribute("aria-selected", String(tab === "crafting"));
-    body.replaceChildren(tab === "inventory" ? grid.el : craftScreen.el);
+    achievementsTabBtn.dataset.variant = tab === "achievements" ? "" : "quiet";
+    achievementsTabBtn.setAttribute("aria-selected", String(tab === "achievements"));
+    body.replaceChildren(elFor(tab));
   }
   inventoryTabBtn.addEventListener("click", () => {
     tab = "inventory";
@@ -136,6 +165,10 @@ export function mountInventoryScreen(opts: InventoryScreenOptions): InventoryScr
   });
   craftingTabBtn.addEventListener("click", () => {
     tab = "crafting";
+    applyTab();
+  });
+  achievementsTabBtn.addEventListener("click", () => {
+    tab = "achievements";
     applyTab();
   });
   applyTab();
@@ -148,7 +181,7 @@ export function mountInventoryScreen(opts: InventoryScreenOptions): InventoryScr
     craftScreen.render(inventory);
     doc.exitPointerLock?.();
     opts.setInputEnabled?.(false);
-    (tab === "inventory" ? grid.el : craftScreen.el).querySelector<HTMLElement>("[tabindex]")?.focus();
+    elFor(tab).querySelector<HTMLElement>("[tabindex]")?.focus();
   }
   function close(): void {
     if (!open) return;
@@ -191,10 +224,17 @@ export function mountInventoryScreen(opts: InventoryScreenOptions): InventoryScr
     get inventory() {
       return inventory;
     },
+    setUnlockedTier(tier: number): void {
+      craftScreen.setUnlockedTier(tier);
+    },
+    setUnlockedAchievements(unlockedIds: readonly string[]): void {
+      achievementsScreen?.render(unlockedIds);
+    },
     dispose(): void {
       (doc.defaultView ?? window).removeEventListener("keydown", onKeyDown);
       grid.dispose();
       craftScreen.dispose();
+      achievementsScreen?.dispose();
       overlay.remove();
     },
   };

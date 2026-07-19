@@ -151,6 +151,36 @@ describe("CraftingScreen", () => {
     expect(next.count("plank")).toBe(12); // 3 crafts x4
   });
 
+  it("setUnlockedTier re-renders the gate live without a remount", () => {
+    const reg = registry();
+    const screen = CraftingScreen({
+      registry: reg,
+      loc: createLocalizer("en"),
+      recipes: STARTER_RECIPES,
+      unlockedTier: 0,
+    });
+    screen.render(invWith(reg, [["ore", 5]]));
+    expect(screen.el.querySelector('[data-recipe-id="ingot"]')?.getAttribute("data-locked")).toBe("true");
+
+    screen.setUnlockedTier(1);
+    expect(screen.el.querySelector('[data-recipe-id="ingot"]')?.getAttribute("data-locked")).toBe("false");
+  });
+
+  it("fires onCraft after a successful craft and craft-all", () => {
+    const reg = registry();
+    const onCraft = vi.fn();
+    const screen = CraftingScreen({
+      registry: reg,
+      loc: createLocalizer("en"),
+      recipes: STARTER_RECIPES,
+      unlockedTier: 1,
+      onCraft,
+    });
+    screen.render(invWith(reg, [["wood", 2]]));
+    screen.el.querySelector('[data-recipe-id="planks"] button')?.dispatchEvent(new MouseEvent("click"));
+    expect(onCraft).toHaveBeenCalledTimes(1);
+  });
+
   it("dispose removes the mounted screen", () => {
     const reg = registry();
     const screen = CraftingScreen({

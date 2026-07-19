@@ -22,6 +22,7 @@ import { BoxGeometry, Color, Group, Mesh, Raycaster, Vector2, Vector3 } from 'th
 import { MeshBasicNodeMaterial, MeshStandardNodeMaterial } from 'three/webgpu';
 import type { AudioPort } from '../../game/application/ports/AudioPort';
 import type { FeelPort } from '../../game/application/ports/FeelPort';
+import type { ProgressionEventId } from '../../game/domain/progression/ProgressionEvents';
 import {
   commit,
   resolvePlacement,
@@ -67,6 +68,7 @@ export interface PlacementToolDeps {
   save?: PlacementSave;
   audio?: AudioPort;
   feel?: FeelPort;
+  onProgress?: (event: ProgressionEventId) => void;
 }
 
 export interface PlacementToolHandle {
@@ -77,7 +79,7 @@ export interface PlacementToolHandle {
 }
 
 export function attachPlacementTool(deps: PlacementToolDeps): PlacementToolHandle {
-  const { terrain, camera, dom, parent, save, audio, feel } = deps;
+  const { terrain, camera, dom, parent, save, audio, feel, onProgress } = deps;
   const sdf = (x: number, y: number, z: number): number => terrain.sdfAtWorld(x, y, z);
 
   const registry = PlacedPieceRegistry.deserialize(save?.load());
@@ -133,6 +135,7 @@ export function attachPlacementTool(deps: PlacementToolDeps): PlacementToolHandl
     persist();
     audio?.play('place', { position: cmd.center });
     feel?.trigger('place', { worldPos: cmd.center });
+    onProgress?.('place');
   };
 
   const raycaster = new Raycaster(undefined, undefined, 0, REACH_M);

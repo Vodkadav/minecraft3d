@@ -21,6 +21,7 @@ function save(worldId: string, seed: number): WorldSaveData {
     modifiedChunks: [{ key: "0,0,0", rev: 1, data: new Uint8Array([9]) }],
     entities: { "quest.flags": ["intro"] },
     inventories: {},
+    progression: {},
     playerState: POSE,
   };
 }

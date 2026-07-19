@@ -32,12 +32,18 @@ export interface CraftingScreenOptions {
   readonly unlockedTier: number;
   readonly audio?: AudioPort;
   onChange?(next: Inventory): void;
+  /** Fired after a successful craft/craft-all (Workstream 6) — the
+   *  composition root feeds this into the progression event stream. */
+  onCraft?(): void;
   readonly doc?: Document;
 }
 
 export interface CraftingScreenHandle {
   readonly el: HTMLElement;
   render(inventory: Inventory): void;
+  /** Updates the recipe-tier gate live (Workstream 6.1) — the crafting UI no
+   *  longer needs a remount when progression unlocks a new tier. */
+  setUnlockedTier(tier: number): void;
   dispose(): void;
 }
 
@@ -76,6 +82,7 @@ export function CraftingScreen(opts: CraftingScreenOptions): CraftingScreenHandl
   let inventory: Inventory | null = null;
   let searchQuery = "";
   let onlyCraftable = false;
+  let unlockedTier = opts.unlockedTier;
 
   function nameFor(itemId: string): string {
     return itemDisplayName(opts.loc, opts.registry, itemId);
@@ -83,19 +90,20 @@ export function CraftingScreen(opts: CraftingScreenOptions): CraftingScreenHandl
 
   function craft(recipe: Recipe): void {
     if (!inventory) return;
-    const result = doCraft(inventory, recipe, opts.unlockedTier);
+    const result = doCraft(inventory, recipe, unlockedTier);
     if (!isOk(result)) return;
     inventory = result.value;
     opts.audio?.play("craft");
     opts.onChange?.(inventory);
+    opts.onCraft?.();
     renderList();
   }
 
   function craftAll(recipe: Recipe): void {
     if (!inventory) return;
     let crafted = 0;
-    while (crafted < MAX_CRAFT_ALL && isOk(canCraft(inventory, recipe, opts.unlockedTier))) {
-      const result = doCraft(inventory, recipe, opts.unlockedTier);
+    while (crafted < MAX_CRAFT_ALL && isOk(canCraft(inventory, recipe, unlockedTier))) {
+      const result = doCraft(inventory, recipe, unlockedTier);
       if (!isOk(result)) break;
       inventory = result.value;
       crafted++;
@@ -103,6 +111,7 @@ export function CraftingScreen(opts: CraftingScreenOptions): CraftingScreenHandl
     if (crafted > 0) {
       opts.audio?.play("craft");
       opts.onChange?.(inventory);
+      opts.onCraft?.();
     }
     renderList();
   }
@@ -113,8 +122,8 @@ export function CraftingScreen(opts: CraftingScreenOptions): CraftingScreenHandl
     row.className = "lw-recipe";
     row.dataset.recipeId = recipe.id;
 
-    const locked = inv ? !isOk(canCraft(inv, recipe, opts.unlockedTier)) : true;
-    const lockedByTier = recipe.unlockTier > opts.unlockedTier;
+    const locked = inv ? !isOk(canCraft(inv, recipe, unlockedTier)) : true;
+    const lockedByTier = recipe.unlockTier > unlockedTier;
     row.dataset.locked = String(lockedByTier);
 
     const info = doc.createElement("div");
@@ -177,7 +186,7 @@ export function CraftingScreen(opts: CraftingScreenOptions): CraftingScreenHandl
     const filtered = filterRecipes({
       recipes: opts.recipes,
       inventory,
-      unlockedTier: opts.unlockedTier,
+      unlockedTier,
       search: searchQuery,
       craftableOnly: onlyCraftable,
       nameOf: nameFor,
@@ -212,6 +221,10 @@ export function CraftingScreen(opts: CraftingScreenOptions): CraftingScreenHandl
     el,
     render(next: Inventory): void {
       inventory = next;
+      renderList();
+    },
+    setUnlockedTier(tier: number): void {
+      unlockedTier = tier;
       renderList();
     },
     dispose(): void {

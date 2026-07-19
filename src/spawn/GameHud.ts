@@ -1,9 +1,10 @@
 /**
- * Composition root for the themed play-HUD (Workstream 3 + 4): mounts a live
- * player Inventory + Hotbar bound to it, a Toast host, a Crosshair, and the
- * togglable Inventory/Crafting overlay (`I` to open), and wires loot pickups
- * (`SpawnFieldDeps.onLoot`) through to both the hotbar (item added) and a
- * toast ("Picked up X x3"). One instance per scene.
+ * Composition root for the themed play-HUD (Workstream 3 + 4 + 6): mounts a
+ * live player Inventory + Hotbar bound to it, a Toast host, a Crosshair, the
+ * togglable Inventory/Crafting/Achievements overlay (`I` to open), the
+ * objective tracker panel, and wires loot pickups (`SpawnFieldDeps.onLoot`)
+ * through to both the hotbar (item added) and a toast ("Picked up X x3").
+ * One instance per scene.
  *
  * Digit-key 1-9 hotbar selection is opt-out (`enableHotbarDigitKeys: false`)
  * for scenes that already bind 1-9 to something else — the terrain scene's
@@ -15,9 +16,30 @@
  * no-op on an empty/non-food slot) — consumes one, restores via `onEat`
  * (the composition root owns hunger/health state, this is a thin hook).
  * Workstream 5.3: `applyDeathPenalty` drops slots per the configured rule.
+ *
+ * Workstream 6: this HUD owns the session's `ProgressionState`/`KeyhintState`
+ * the same way it owns `inventory` — in-memory only; `ProgressionPersistence`
+ * is a tested, not-yet-wired seam (mirrors S4's un-wired `InventoryPersistence`).
+ * `recordProgress(event)` is the one entry point every game-event call site
+ * threads an event through (the same `onX` callback pattern already used for
+ * `onEat`/`onLoot`/`onAttack` at the TerrainScene/SpawnFieldView/DigTool call
+ * sites) — it settles objectives/achievements, toasts anything new, updates
+ * the tracker, and live-updates the crafting screen's recipe-tier gate.
  */
 
 import { isOk } from "../game/domain/Result";
+import { ACHIEVEMENTS } from "../game/domain/progression/Achievements";
+import { emptyKeyhintState, markKeyhintShown, shouldShowKeyhint } from "../game/domain/progression/Keyhints";
+import { TUTORIAL_OBJECTIVE_IDS, TUTORIAL_OBJECTIVES } from "../game/domain/progression/Objectives";
+import {
+  currentObjective,
+  emptyProgression,
+  recordProgressionEvent,
+  skipTutorial,
+  unlockedTierFor,
+  type ProgressionState,
+} from "../game/domain/progression/ProgressionState";
+import type { ProgressionEventId } from "../game/domain/progression/ProgressionEvents";
 import { STARTER_RECIPES } from "../game/domain/crafting/starterRecipes";
 import type { Recipe } from "../game/domain/crafting/Crafting";
 import { Inventory, type ItemStack } from "../game/domain/inventory/Inventory";
@@ -33,14 +55,16 @@ import type { Localizer } from "../game/application/i18n/Localizer";
 import { Button } from "../game/ui/components/Button";
 import { Crosshair, type CrosshairHandle } from "../game/ui/components/Crosshair";
 import { Hotbar } from "../game/ui/components/Hotbar";
+import { Keyhint } from "../game/ui/components/Keyhint";
+import { ObjectiveTracker } from "../game/ui/components/ObjectiveTracker";
 import { createToastHost } from "../game/ui/components/Toast";
 import { mountInventoryScreen } from "../game/ui/InventoryScreen";
 
 const INVENTORY_CAPACITY = 27;
 const LOOT_TOAST_TTL_MS = 3500;
-/** No progression/unlock system yet (Workstream 6) — every starter recipe is
- *  available; the crafting screen's lock UI is exercised by its own tests. */
-const DEFAULT_UNLOCKED_TIER = 1;
+const OBJECTIVE_TOAST_TTL_MS = 4500;
+const KEYHINT_TTL_MS = 4000;
+const TUTORIAL_EXCLUDE = new Set<string>(TUTORIAL_OBJECTIVE_IDS);
 
 export interface GameHudOptions {
   readonly loc: Localizer;
@@ -54,7 +78,6 @@ export interface GameHudOptions {
   readonly audio?: AudioPort;
   readonly feel?: FeelPort;
   readonly recipes?: readonly Recipe[];
-  readonly unlockedTier?: number;
   /** Pauses/resumes camera-look input while the inventory overlay is open —
    *  wire to `ctx.hooks.flyCamEnabled` in the scene composition root. */
   setInputEnabled?(enabled: boolean): void;
@@ -72,7 +95,15 @@ export interface GameHudHandle {
   /** Drops inventory contents per the death-penalty rule (Workstream 5.3);
    *  a no-op for "keep-inventory". */
   applyDeathPenalty(penalty: DeathPenalty): void;
+  /** Feeds one progression event (Workstream 6) — settles objectives,
+   *  achievements, and the crafting-tier gate; toasts anything new. */
+  recordProgress(event: ProgressionEventId): void;
+  /** Shows the "[T] Feed" keyhint once, the first time a tamable creature is
+   *  in reach (Workstream 6.5) — a no-op every subsequent call. Call this
+   *  from the per-frame interact-target poll the scene already runs. */
+  maybeShowTameHint(): void;
   readonly inventory: Inventory;
+  readonly progression: ProgressionState;
   dispose(): void;
 }
 
@@ -81,6 +112,8 @@ export function mountGameHud(opts: GameHudOptions): GameHudHandle {
   const { loc, registry } = opts;
 
   let inventory = Inventory.empty(registry, INVENTORY_CAPACITY);
+  let progression = emptyProgression();
+  let keyhints = emptyKeyhintState();
 
   const hotbar = Hotbar({
     registry,
@@ -98,11 +131,20 @@ export function mountGameHud(opts: GameHudOptions): GameHudHandle {
   const crosshair = opts.crosshair ?? Crosshair(doc);
   const ownsCrosshair = opts.crosshair === undefined;
 
+  const tracker = ObjectiveTracker(loc, {
+    doc,
+    onSkipTutorial: () => {
+      progression = skipTutorial(progression);
+      renderTracker();
+    },
+  });
+
   const inventoryScreen = mountInventoryScreen({
     loc,
     registry,
     recipes: opts.recipes ?? STARTER_RECIPES,
-    unlockedTier: opts.unlockedTier ?? DEFAULT_UNLOCKED_TIER,
+    unlockedTier: unlockedTierFor(progression.completedObjectives, TUTORIAL_OBJECTIVES),
+    achievements: ACHIEVEMENTS,
     ...(opts.audio ? { audio: opts.audio } : {}),
     ...(opts.setInputEnabled ? { setInputEnabled: opts.setInputEnabled } : {}),
     doc,
@@ -110,11 +152,12 @@ export function mountGameHud(opts: GameHudOptions): GameHudHandle {
       inventory = next;
       hotbar.render(inventory);
     },
+    onCraft: () => recordProgress("craft"),
   });
 
-  // Mouse-only access to the inventory/crafting overlay (Pillar 4 gate: no
-  // keyboard memorization required) — `I` is a shortcut, this button is the
-  // discoverable entry point.
+  // Mouse-only access to the inventory/crafting/achievements overlay (Pillar
+  // 4 gate: no keyboard memorization required) — `I` is a shortcut, this
+  // button is the discoverable entry point.
   const inventoryButton = Button({
     label: loc.t("inventory.tab.inventory"),
     ariaLabel: loc.t("inventory.title"),
@@ -123,6 +166,50 @@ export function mountGameHud(opts: GameHudOptions): GameHudHandle {
   });
   inventoryButton.classList.add("lw-inv-open-button");
   doc.body.appendChild(inventoryButton);
+
+  function renderTracker(): void {
+    const excluded = progression.tutorialSkipped ? TUTORIAL_EXCLUDE : undefined;
+    const objective = currentObjective(progression, TUTORIAL_OBJECTIVES, excluded);
+    tracker.render(objective, progression.counts);
+  }
+  renderTracker();
+
+  function recordProgress(event: ProgressionEventId): void {
+    const r = recordProgressionEvent(progression, event, TUTORIAL_OBJECTIVES, ACHIEVEMENTS);
+    progression = r.state;
+    for (const objective of r.newlyCompletedObjectives) {
+      toasts.push(
+        "objective.toast.complete",
+        { title: loc.t(objective.titleKey) },
+        OBJECTIVE_TOAST_TTL_MS,
+      );
+    }
+    for (const achievement of r.newlyUnlockedAchievements) {
+      toasts.push(
+        "achievement.toast.unlocked",
+        { title: loc.t(achievement.titleKey) },
+        OBJECTIVE_TOAST_TTL_MS,
+      );
+    }
+    inventoryScreen.setUnlockedTier(unlockedTierFor(progression.completedObjectives, TUTORIAL_OBJECTIVES));
+    inventoryScreen.setUnlockedAchievements(progression.unlockedAchievements);
+    renderTracker();
+  }
+
+  const activeKeyhintTimers = new Set<number>();
+  function showKeyhint(id: "eat" | "tame", key: string): void {
+    if (!shouldShowKeyhint(keyhints, id)) return;
+    keyhints = markKeyhintShown(keyhints, id);
+    const chip = Keyhint(key, loc.t(`keyhint.${id}`), doc);
+    chip.classList.add("laas-ui", "lw-keyhint-prompt");
+    doc.body.appendChild(chip);
+    const win = doc.defaultView ?? window;
+    const timer = win.setTimeout(() => {
+      chip.remove();
+      activeKeyhintTimers.delete(timer);
+    }, KEYHINT_TTL_MS);
+    activeKeyhintTimers.add(timer);
+  }
 
   function eatSelected(): boolean {
     const slot = inventory.slots[hotbar.selected];
@@ -138,6 +225,7 @@ export function mountGameHud(opts: GameHudOptions): GameHudHandle {
     opts.feel?.trigger("eat");
     toasts.push("hud.toast.ate", { name: def.value.displayName }, LOOT_TOAST_TTL_MS);
     opts.onEat?.(def.value.food);
+    recordProgress("eat");
     return true;
   }
 
@@ -156,17 +244,23 @@ export function mountGameHud(opts: GameHudOptions): GameHudHandle {
     get inventory() {
       return inventory;
     },
+    get progression() {
+      return progression;
+    },
     addLoot(stacks: readonly ItemStack[]): void {
+      let gainedFood = false;
       for (const stack of stacks) {
         const added = inventory.add(stack.itemId, stack.count);
         if (!isOk(added)) continue; // full inventory: loot silently caps (no crash)
         inventory = added.value;
         const def = registry.get(stack.itemId);
         const name = isOk(def) ? def.value.displayName : stack.itemId;
+        if (isOk(def) && def.value.food) gainedFood = true;
         toasts.push("hud.toast.loot", { name, count: stack.count }, LOOT_TOAST_TTL_MS);
       }
       hotbar.render(inventory);
       inventoryScreen.setInventory(inventory);
+      if (gainedFood) showKeyhint("eat", "H");
     },
     setCrosshairState(state: CrosshairState): void {
       crosshair.setState(state);
@@ -181,12 +275,21 @@ export function mountGameHud(opts: GameHudOptions): GameHudHandle {
       hotbar.render(inventory);
       inventoryScreen.setInventory(inventory);
     },
+    recordProgress,
+    maybeShowTameHint(): void {
+      showKeyhint("tame", "T");
+    },
     dispose(): void {
       (doc.defaultView ?? window).removeEventListener("keydown", onEatKeyDown);
       hotbar.dispose();
       toasts.dispose();
+      tracker.dispose();
       inventoryScreen.dispose();
       inventoryButton.remove();
+      const win = doc.defaultView ?? window;
+      for (const timer of activeKeyhintTimers) win.clearTimeout(timer);
+      activeKeyhintTimers.clear();
+      doc.querySelectorAll(".lw-keyhint-prompt").forEach((el) => el.remove());
       if (ownsCrosshair) crosshair.dispose();
     },
   };

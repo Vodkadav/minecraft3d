@@ -54,6 +54,7 @@ function aWorld(overrides: Partial<WorldSaveData> = {}): WorldSaveData {
     modifiedChunks: [],
     entities: {},
     inventories: {},
+    progression: {},
     playerState: { position: [0, 64, 0], yaw: 0, pitch: 0 },
     ...overrides,
   };

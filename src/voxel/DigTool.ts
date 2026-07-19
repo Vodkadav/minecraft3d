@@ -14,6 +14,7 @@ import type { PerspectiveCamera } from 'three';
 import { Vector3 } from 'three';
 import type { AudioPort } from '../game/application/ports/AudioPort';
 import type { FeelPort } from '../game/application/ports/FeelPort';
+import type { ProgressionEventId } from '../game/domain/progression/ProgressionEvents';
 import type { VoxelTerrain } from './VoxelTerrain';
 
 /** Exported: the scene reuses this reach to probe a per-frame mine-target for the crosshair. */
@@ -32,6 +33,7 @@ export class DigTool {
     dom: HTMLElement,
     audio?: AudioPort,
     feel?: FeelPort,
+    onProgress?: (event: ProgressionEventId) => void,
   ) {
     dom.addEventListener('mousedown', (e) => {
       if (document.pointerLockElement !== dom) return;
@@ -53,6 +55,7 @@ export class DigTool {
         );
         audio?.play('dig', { position: hit });
         feel?.trigger('dig', { worldPos: hit });
+        onProgress?.('dig');
       } else {
         // build back toward the player so the fill doesn't swallow the camera
         terrain.fillAt(
@@ -63,6 +66,7 @@ export class DigTool {
         );
         audio?.play('place', { position: hit });
         feel?.trigger('place', { worldPos: hit });
+        onProgress?.('place');
       }
     });
     dom.addEventListener('contextmenu', (e) => {
