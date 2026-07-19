@@ -54,7 +54,9 @@ Live: https://vodkadav.github.io/minecraft3d/ (desktop Chrome + WebGPU).
   health-bar HUD, scene respawn via the fly-camera setPose seam; verified voxeldev boots
   with the bar mounted. Ride speed boost done (2026-07-07): mounts move 1.6× on-foot speed
   via FlyCamera.speedScale + a setMoveSpeedScale hook, toggled on mount/dismount/death.
-  Remaining: player humanoid model (KayKit — remote avatars are capsules today).
+  Humanoid avatars done (2026-07-19): remote players render the rigged CC0 KayKit Knight
+  (CREDITS.md) via `src/net/PlayerModel.ts` — capsule fallback upgrades in place on load,
+  idle/walk/run clips driven by smoothed speed, feet grounded at eye − 1.7 m. Nothing remaining.
 - [x] M7 Multiplayer — 7.1 research resolved + ADR 0002 (trystero/Nostr signaling, Metered TURN,
   room-code lobby, pause-on-host-offline, host validates intents); 7.2/7.5 [O] done TDD
   (`domain/net`: RoomCode/Protocol/IntentRules; `application`: NetTransport port, HostSession
@@ -85,7 +87,8 @@ Live: https://vodkadav.github.io/minecraft3d/ (desktop Chrome + WebGPU).
   (`domain/spawn/CreatureStream`) surfaces a `died` diff so the joiner triggers the one-shot death
   clip once and only removes the instance when the host's own removal drops the id (TDD:
   Protocol/CreatureStream). `tools/net-probe.ts` extended to assert B actually saw the dying flag
-  before removal (`dyingIds` probe seam) — not yet re-run live (needs GPU + P2P Nostr rails).
+  before removal (`dyingIds` probe seam) — live-verified 2026-07-19: both death-clip
+  assertions PASS over public Nostr rails.
   Joiner-side mounting done (2026-07-19, ADR 0003 addendum): G now mounts/dismounts on a joiner
   too — `mount`/`dismount` join the existing `InteractAction` intent path (host validates
   tamed/dying/already-ridden, same as attack/harvest/feed), `HostSessionHooks.onInteract` now
@@ -97,7 +100,10 @@ Live: https://vodkadav.github.io/minecraft3d/ (desktop Chrome + WebGPU).
   network-smoothed stream target for that one id while riding. TDD: Protocol (mount/dismount
   shapes, tamed flag), HostSession/JoinSession peerId threading. `tools/net-probe.ts` extended
   with a cheap wiring check (a joiner's mount intent on an untamed creature must be rejected by
-  the host, `riddenIds` probe seam) — not yet re-run live. Follow-up: move the snapshot to the
+  the host, `riddenIds` probe seam) — live-verified 2026-07-19 (full probe PASS incl. mount-reject).
+  Known edge (recorded): a joiner's optimistic G-mount isn't rolled back on a silent host
+  rejection (two players racing to mount the same creature) — views diverge until that joiner
+  dismounts; trigger to fix: seen in real play. Follow-up: move the snapshot to the
   unreliable channel (ADR 0002 §3) — investigated 2026-07-19, deferred (see ADR addendum).
 - [~] M8 Hybrid voxel terrain (Fable-led) — Fable [F] core done (2026-07-06): 8.1 SDF chunk store
   (TDD, delta persistence via M2 save), 8.2 Transvoxel regular-cell mesher (TDD; MIT Lengyel tables,
