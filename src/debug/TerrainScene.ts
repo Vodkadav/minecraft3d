@@ -53,6 +53,22 @@ import type { CamPose } from '../core/Hooks';
 export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
   const { engine, params, seed } = ctx;
 
+  // Workstream 1.4/1.6: apply persisted bus volumes as soon as there's an
+  // audio port, and start the ambient wind bed + calm music loop for a real
+  // game boot. The spawn block below reuses this same loaded controller.
+  let settingsController: SettingsController | null = null;
+  if (ctx.audio) {
+    settingsController = new SettingsController(new LocalStorageSettingsStore());
+    await settingsController.load();
+    const s = settingsController.settings;
+    ctx.audio.setBusVolume('master', s.masterVolume);
+    ctx.audio.setBusVolume('music', s.musicVolume);
+    ctx.audio.setBusVolume('sfx', s.sfxVolume);
+    ctx.audio.setBusVolume('ambient', s.ambientVolume);
+    ctx.audio.startAmbient('ambientWind');
+    ctx.audio.startMusicState('calm');
+  }
+
   const hf = await Heightfield.generate(
     engine.renderer,
     params,
@@ -338,7 +354,7 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
     voxelsRef = voxels;
     if (ctx.world) ctx.world.voxels = voxels; // M7 net glue reaches it here
     engine.scene.add(voxels.group);
-    new DigTool(voxels, engine.camera, engine.renderer.domElement);
+    new DigTool(voxels, engine.camera, engine.renderer.domElement, ctx.audio);
     window.addEventListener('pagehide', () => voxels.flushSave());
     // tooling probe handle (tools/voxel-shot.ts) — programmatic digs in CI-less runs
     (
@@ -363,6 +379,7 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
       camera: engine.camera,
       dom: engine.renderer.domElement,
       parent: engine.scene,
+      ...(ctx.audio ? { audio: ctx.audio } : {}),
       save: {
         load: () => voxels.entity('placement.pieces'),
         persist: (data) => voxels.setEntity('placement.pieces', data),
@@ -390,8 +407,8 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
     ctx.world !== undefined ||
     new URLSearchParams(window.location.search).get('spawns') === '1';
   if (spawnsOn && view !== 'split') {
-    const settings = new SettingsController(new LocalStorageSettingsStore());
-    await settings.load();
+    const settings = settingsController ?? new SettingsController(new LocalStorageSettingsStore());
+    if (!settingsController) await settings.load();
     // M6 player health: only wild worlds (spawns on) can hurt you, so the
     // vitals + bar live here. Death respawns full at the start position — a
     // family game loses your spot, never your progress.
@@ -410,6 +427,7 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
       getPlayerXZ: () => [engine.camera.position.x, engine.camera.position.z],
       density: settings.settings.animalDensity,
       dom: engine.renderer.domElement,
+      ...(ctx.audio ? { audio: ctx.audio } : {}),
       onPlayerHit: (amount) => {
         const r = damagePlayer(vitals, amount);
         vitals = r.state;

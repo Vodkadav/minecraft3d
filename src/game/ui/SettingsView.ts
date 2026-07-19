@@ -9,6 +9,7 @@
 
 import type { Localizer } from "../application/i18n/Localizer";
 import type { SettingsController } from "../application/SettingsController";
+import type { AudioPort } from "../application/ports/AudioPort";
 import {
   GRAPHICS_PRESETS,
   TEXT_SCALE_MAX,
@@ -16,6 +17,7 @@ import {
   type GraphicsPreset,
   type SettingsInput,
 } from "../domain/settings/Settings";
+import { wireButtonSound } from "./audioUi";
 import { applyAccessibility, injectStyles } from "./styles";
 
 function field(
@@ -39,6 +41,7 @@ export function SettingsView(
   controller: SettingsController,
   loc: Localizer,
   onBack?: () => void,
+  audio?: AudioPort,
 ): HTMLElement {
   const doc = document;
   injectStyles(doc);
@@ -54,7 +57,13 @@ export function SettingsView(
 
   const apply = (patch: Partial<SettingsInput>) => {
     void controller.apply(patch).then((r) => {
-      if (r.ok) applyAccessibility(root, controller.settings);
+      if (!r.ok) return;
+      applyAccessibility(root, controller.settings);
+      if (!audio) return;
+      if (patch.masterVolume !== undefined) audio.setBusVolume("master", patch.masterVolume);
+      if (patch.musicVolume !== undefined) audio.setBusVolume("music", patch.musicVolume);
+      if (patch.sfxVolume !== undefined) audio.setBusVolume("sfx", patch.sfxVolume);
+      if (patch.ambientVolume !== undefined) audio.setBusVolume("ambient", patch.ambientVolume);
     });
   };
 
@@ -137,12 +146,42 @@ export function SettingsView(
   );
   field(doc, root, "laas-motion", loc.t("settings.reducedMotion"), motion);
 
+  // Audio buses (Workstream 1.4)
+  const volumeField = (
+    id: string,
+    labelKey: string,
+    value: number,
+    onChange: (v: number) => void,
+  ): void => {
+    const slider = doc.createElement("input");
+    slider.type = "range";
+    slider.min = "0";
+    slider.max = "1";
+    slider.step = "0.05";
+    slider.value = String(value);
+    slider.addEventListener("change", () => onChange(Number(slider.value)));
+    field(doc, root, id, loc.t(labelKey), slider);
+  };
+  volumeField("laas-vol-master", "settings.audio.master", s.masterVolume, (v) =>
+    apply({ masterVolume: v }),
+  );
+  volumeField("laas-vol-music", "settings.audio.music", s.musicVolume, (v) =>
+    apply({ musicVolume: v }),
+  );
+  volumeField("laas-vol-sfx", "settings.audio.sfx", s.sfxVolume, (v) =>
+    apply({ sfxVolume: v }),
+  );
+  volumeField("laas-vol-ambient", "settings.audio.ambient", s.ambientVolume, (v) =>
+    apply({ ambientVolume: v }),
+  );
+
   // Back
   const back = doc.createElement("button");
   back.type = "button";
   back.textContent = loc.t("settings.back");
   back.addEventListener("click", () => onBack?.());
   root.appendChild(back);
+  wireButtonSound(back, audio);
 
   applyAccessibility(root, s);
   return root;

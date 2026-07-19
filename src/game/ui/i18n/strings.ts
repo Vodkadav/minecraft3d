@@ -33,6 +33,10 @@ export const UI_STRINGS: Catalog = {
     "settings.highContrast": "High contrast",
     "settings.textScale": "Text size",
     "settings.reducedMotion": "Reduce motion",
+    "settings.audio.master": "Master volume",
+    "settings.audio.music": "Music volume",
+    "settings.audio.sfx": "Sound effects volume",
+    "settings.audio.ambient": "Ambient volume",
     "settings.back": "Back",
 
     "lobby.title": "Online worlds",
@@ -81,6 +85,10 @@ export const UI_STRINGS: Catalog = {
     "settings.highContrast": "Alto contraste",
     "settings.textScale": "Tamaño del texto",
     "settings.reducedMotion": "Reducir movimiento",
+    "settings.audio.master": "Volumen general",
+    "settings.audio.music": "Volumen de música",
+    "settings.audio.sfx": "Volumen de efectos",
+    "settings.audio.ambient": "Volumen ambiental",
     "settings.back": "Atrás",
 
     "lobby.title": "Mundos en línea",
@@ -129,6 +137,10 @@ export const UI_STRINGS: Catalog = {
     "settings.highContrast": "Høj kontrast",
     "settings.textScale": "Tekststørrelse",
     "settings.reducedMotion": "Reducér bevægelse",
+    "settings.audio.master": "Hovedlydstyrke",
+    "settings.audio.music": "Musiklydstyrke",
+    "settings.audio.sfx": "Lydeffekt-lydstyrke",
+    "settings.audio.ambient": "Ambient-lydstyrke",
     "settings.back": "Tilbage",
 
     "lobby.title": "Online-verdener",

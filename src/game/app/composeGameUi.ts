@@ -23,6 +23,7 @@ import { LocalStorageSettingsStore } from "../infrastructure/persistence/LocalSt
 import { NavigatorPersistentStorage } from "../infrastructure/persistence/NavigatorPersistentStorage";
 import type { SettingsStore } from "../application/ports/SettingsStore";
 import type { PersistentStorage } from "../application/ports/PersistentStorage";
+import type { AudioPort } from "../application/ports/AudioPort";
 import { ensurePersistentStorage } from "../application/StoragePersistence";
 import { LobbyController } from "../application/LobbyController";
 import { MainMenuController } from "../application/MainMenuController";
@@ -42,6 +43,9 @@ export interface GameUiOptions {
   readonly worlds?: WorldSaveStore;
   readonly settingsStore?: SettingsStore;
   readonly persistentStorage?: PersistentStorage;
+  /** Workstream 1.6: menu/lobby/settings UI click/hover sounds. Optional —
+   *  absent in tests and any host that doesn't wire audio in. */
+  readonly audio?: AudioPort;
   readonly onLaunch?: (launch: WorldLaunch) => void;
   /** M7 join-by-code: the engine entry owns the net flow (transport + welcome
    *  + boot); resolves true once it takes over, false on failure. When absent
@@ -111,7 +115,13 @@ export function mountGameUi(
   const persistentStorage =
     options.persistentStorage ?? new NavigatorPersistentStorage();
   const loc = createLocalizer(options.locale ?? "en");
-  void settings.load();
+  void settings.load().then((r) => {
+    if (!r.ok || !options.audio) return;
+    options.audio.setBusVolume("master", r.value.masterVolume);
+    options.audio.setBusVolume("music", r.value.musicVolume);
+    options.audio.setBusVolume("sfx", r.value.sfxVolume);
+    options.audio.setBusVolume("ambient", r.value.ambientVolume);
+  });
 
   let mounted: MenuScreen | null = null;
 
@@ -155,15 +165,15 @@ export function mountGameUi(
     const screen = menu.screen;
     if (screen === mounted || screen === "solo") return;
     mounted = screen;
-    if (screen === "settings") show(SettingsView(settings, loc, toMenu));
+    if (screen === "settings") show(SettingsView(settings, loc, toMenu, options.audio));
     else if (screen === "lobby") {
-      show(LobbyView(lobby, loc, launch, toMenu, options.onJoinByCode));
+      show(LobbyView(lobby, loc, launch, toMenu, options.onJoinByCode, options.audio));
     }
-    else show(MainMenuView(menu, loc, launch));
+    else show(MainMenuView(menu, loc, launch, options.audio));
   }
 
   container.addEventListener("click", () => queueMicrotask(reconcile));
-  show(MainMenuView(menu, loc, launch));
+  show(MainMenuView(menu, loc, launch, options.audio));
   mounted = "menu";
 
   return { container };

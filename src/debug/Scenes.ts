@@ -4,6 +4,7 @@ import type { Engine } from '../core/Engine';
 import type { LaasHooks } from '../core/Hooks';
 import type { LaasParams } from '../core/Params';
 import type { WorldSeed } from '../core/Seed';
+import type { AudioPort } from '../game/application/ports/AudioPort';
 import type { WorldSaveStore } from '../game/application/ports/WorldSaveStore';
 import type { PlayerState } from '../game/domain/world/WorldSaveData';
 import type { SpawnFieldHandle } from '../spawn/SpawnFieldView';
@@ -32,6 +33,10 @@ export interface WorldContext {
   /** report build progress 0..1 */
   progress: (p: number, msg: string) => void;
   world?: WorldLaunchBinding;
+  /** Workstream 1: present only on a real menu-launched game boot (never on
+   *  a tooling/dev URL scene) — the WebAudioAdapter behind this port stays
+   *  silent until the browser's first user-gesture resume. */
+  audio?: AudioPort;
 }
 
 export type SceneBuilder = (ctx: WorldContext) => Promise<void>;

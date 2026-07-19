@@ -9,6 +9,7 @@
 
 import type { PerspectiveCamera } from 'three';
 import { Vector3 } from 'three';
+import type { AudioPort } from '../game/application/ports/AudioPort';
 import type { VoxelTerrain } from './VoxelTerrain';
 
 const REACH_M = 9;
@@ -24,6 +25,7 @@ export class DigTool {
     terrain: VoxelTerrain,
     camera: PerspectiveCamera,
     dom: HTMLElement,
+    audio?: AudioPort,
   ) {
     dom.addEventListener('mousedown', (e) => {
       if (document.pointerLockElement !== dom) return;
@@ -43,6 +45,7 @@ export class DigTool {
           hit[2] + DIR.z * BITE_M,
           CARVE_RADIUS_M,
         );
+        audio?.play('dig', { position: hit });
       } else {
         // build back toward the player so the fill doesn't swallow the camera
         terrain.fillAt(
@@ -51,6 +54,7 @@ export class DigTool {
           hit[2] - DIR.z * BITE_M,
           FILL_RADIUS_M,
         );
+        audio?.play('place', { position: hit });
       }
     });
     dom.addEventListener('contextmenu', (e) => {

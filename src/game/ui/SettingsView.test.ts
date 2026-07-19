@@ -45,6 +45,10 @@ describe("SettingsView", () => {
       "laas-contrast",
       "laas-textscale",
       "laas-motion",
+      "laas-vol-master",
+      "laas-vol-music",
+      "laas-vol-sfx",
+      "laas-vol-ambient",
     ]) {
       const label = el.querySelector(`label[for="${id}"]`);
       expect(label, `label for ${id}`).toBeTruthy();
@@ -79,5 +83,16 @@ describe("SettingsView", () => {
     radius.dispatchEvent(new Event("change"));
     await flush();
     expect(controller.settings.boundaryRadius).toBe(1000);
+  });
+
+  it("flows a music-volume change through the controller and store", async () => {
+    const { el, controller, store } = await build();
+    const music = control<HTMLInputElement>(el, "laas-vol-music");
+    music.value = "0.3";
+    music.dispatchEvent(new Event("change"));
+    await flush();
+    expect(controller.settings.musicVolume).toBeCloseTo(0.3);
+    const reloaded = await store.load();
+    if (isOk(reloaded)) expect(reloaded.value.musicVolume).toBeCloseTo(0.3);
   });
 });

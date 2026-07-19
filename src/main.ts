@@ -1,5 +1,6 @@
 /** LAAS entry point — boot sequence with fail-loud diagnostics. */
 
+import { Vector3 } from 'three';
 import { BootUI } from './core/BootUI';
 import { browserGate, detectCapabilityTier } from './core/BrowserGate';
 import {
@@ -29,6 +30,7 @@ import {
   shouldMountMenu,
 } from './game/app/composeGameUi';
 import { InMemoryWorldSaveStore } from './game/infrastructure/persistence/InMemoryWorldSaveStore';
+import { WebAudioAdapter } from './game/infrastructure/audio/WebAudioAdapter';
 import { attachHostNet, createJoinNet, type JoinNetHandle } from './net/NetSync';
 import { IndexedDbKeyValueStore } from './game/infrastructure/persistence/IndexedDbKeyValueStore';
 import { LocalStorageSettingsStore } from './game/infrastructure/persistence/LocalStorageSettingsStore';
@@ -113,7 +115,12 @@ function mountMenu(hooks: LaasHooks): void {
     'justify-content:center;text-align:center;color:#c8d8d0;z-index:5;';
   document.body.appendChild(container);
 
+  // menu-only click/hover sounds; construction alone never plays anything —
+  // the AudioContext stays suspended until the first user gesture resumes it.
+  const menuAudio = new WebAudioAdapter();
+
   mountGameUi(container, {
+    audio: menuAudio,
     worlds,
     onLaunch: (launch) => {
       container.remove();
@@ -197,6 +204,24 @@ async function bootEngine(hooks: LaasHooks, launch: MenuLaunch | null): Promise<
   const fly = new FlyCamera(engine.camera, engine.renderer.domElement);
   engine.onUpdate((dt) => fly.update(dt));
 
+  // Workstream 1 audio: only a real menu-launched game boot gets a bus graph
+  // (never a tooling/dev URL scene) — the AudioContext stays suspended until
+  // the browser's first user gesture, so nothing plays before interaction.
+  const audioAdapter = launch ? new WebAudioAdapter() : null;
+  if (audioAdapter) {
+    const fwd = new Vector3();
+    const up = new Vector3();
+    engine.onUpdate(() => {
+      engine.camera.getWorldDirection(fwd);
+      up.set(0, 1, 0).applyQuaternion(engine.camera.quaternion);
+      audioAdapter.updateListener({
+        position: [engine.camera.position.x, engine.camera.position.y, engine.camera.position.z],
+        forward: [fwd.x, fwd.y, fwd.z],
+        up: [up.x, up.y, up.z],
+      });
+    });
+  }
+
   const seed = new WorldSeed(params.seed);
   registerScene('sanity', buildSanityScene);
   registerScene('terrain', buildTerrainScene);
@@ -213,6 +238,7 @@ async function bootEngine(hooks: LaasHooks, launch: MenuLaunch | null): Promise<
     seed,
     hooks,
     progress: (p, msg) => bootUI.set(0.1 + p * 0.85, msg),
+    ...(audioAdapter ? { audio: audioAdapter } : {}),
     ...(launch
       ? {
           world: {

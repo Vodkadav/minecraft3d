@@ -166,3 +166,19 @@ Live: https://vodkadav.github.io/minecraft3d/ (desktop Chrome + WebGPU).
   the menu on a plain URL (`shouldMountMenu`), boots from `WorldLaunch` (seed + pose restore),
   keys VoxelTerrain to the real worldId, saves pose on pagehide/visibilitychange; verified
   end-to-end (menu → Solo → full-world READY) in Playwright.
+- **AAA polish — Workstream 1 (Audio), Slice S1 — DONE (2026-07-19):** `domain/audio` pure event
+  registry (footstep/dig/place/harvest/craft/hit/hurt/tame/uiClick/uiHover/ambientWind/musicCalm)
+  + TDD'd cooldown/priority logic (`AudioCooldown`); `application/ports/AudioPort` (play/
+  setBusVolume/startMusicState/startAmbient/stopAmbient) with an `InMemoryAudioPort` fake;
+  `infrastructure/audio/WebAudioAdapter` — a real Web Audio bus graph (master → music/sfx/
+  ambient/ui), PannerNode spatialization tied to a per-frame camera listener pose, ALL SFX
+  synthesized procedurally (oscillators + filtered noise + linear-ramp envelopes, zero audio
+  files), resume-on-first-gesture. Settings gained 4 volume sliders (EN/ES/DA), persisted,
+  live-wired to `setBusVolume`. Wired at existing call sites: combat hit + player-hurt + harvest
+  + tame in `SpawnFieldView`, dig/place in `DigTool`/`PlacementTool`, UI click/hover on every
+  menu/lobby/settings button (`ui/audioUi.ts`), ambient wind bed + calm music loop started on a
+  real menu-launched world boot only (never on a tooling/dev `?scene=` URL). Deferred (explicit):
+  footstep SFX wiring — no velocity hook exists outside `FlyCamera` (LAAS core, off-limits per
+  the prime directive) — the footstep event/synth exists, unwired; craft SFX — no crafting UI/
+  call site exists yet (arrives with Workstream 4). `npm run ci` green: 74 files/635 tests
+  (was 69/605), lint/typecheck/arch/build all pass.
