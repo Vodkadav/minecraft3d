@@ -34,6 +34,12 @@ export interface JoinSessionHooks {
 }
 
 export class JoinSession {
+  /** Pinned at the first welcome (2026-07-19 security review): trystero rooms
+   *  are a full mesh, so a hostile fellow-joiner can also broadcast host-kind
+   *  messages — everything host-authoritative is dropped unless it came from
+   *  the peer that welcomed us. */
+  private hostPeerId: string | null = null;
+
   constructor(
     private readonly transport: NetTransport,
     playerName: string,
@@ -46,10 +52,15 @@ export class JoinSession {
         return;
       }
       const msg = parsed.value;
+      if (msg.kind === "welcome") {
+        if (this.hostPeerId !== null && this.hostPeerId !== peerId) return;
+        this.hostPeerId = peerId;
+        hooks.onWelcome?.(msg);
+        return;
+      }
+      // Every other kind below is host-authoritative world truth.
+      if (peerId !== this.hostPeerId) return;
       switch (msg.kind) {
-        case "welcome":
-          hooks.onWelcome?.(msg);
-          return;
         case "peerPose":
           hooks.onPeerPose?.(msg.peerId, msg.state);
           return;

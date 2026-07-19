@@ -83,6 +83,9 @@ export interface TransportNetwork {
   addDetachedPeer(peerId: string): { transport: NetTransport; connect(): void };
   /** Simulate the peer dropping (fires the host's onPeerLeave). */
   removePeer(peerId: string): void;
+  /** Link two joiners directly — real trystero rooms are a full mesh, so
+   *  joiner-to-joiner traffic exists and sessions must distrust it. */
+  linkPeers(peerIdA: string, peerIdB: string): void;
 }
 
 export function makeTransportNetwork(): TransportNetwork {
@@ -113,6 +116,13 @@ export function makeTransportNetwork(): TransportNetwork {
     removePeer(peerId: string): void {
       joiners.get(peerId)?.close();
       joiners.delete(peerId);
+    },
+    linkPeers(peerIdA: string, peerIdB: string): void {
+      const a = joiners.get(peerIdA);
+      const b = joiners.get(peerIdB);
+      if (!a || !b) throw new Error(`linkPeers: unknown peer ${!a ? peerIdA : peerIdB}`);
+      a.link(peerIdB, b, peerIdA);
+      b.link(peerIdA, a, peerIdB);
     },
   };
 }

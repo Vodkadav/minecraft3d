@@ -120,12 +120,11 @@ describe("JoinSession", () => {
     const alice = new JoinSession(net.addPeer("alice"), "Alice", {});
 
     alice.sendPlaceableInteract("toggleDoor", "piece:1");
+    // 2026-07-19 security review: inventory-touching actions are gated off
+    // the wire until host-side inventory authority exists — dropped silently.
     alice.sendPlaceableInteract("depositChest", "piece:2", "wood", 4);
 
-    expect(calls).toEqual([
-      ["toggleDoor", "piece:1", "alice", undefined, undefined],
-      ["depositChest", "piece:2", "alice", "wood", 4],
-    ]);
+    expect(calls).toEqual([["toggleDoor", "piece:1", "alice", undefined, undefined]]);
   });
 
   it("surfaces the host's resolved placeable state via onPlaceableState", () => {
@@ -164,6 +163,37 @@ describe("JoinSession", () => {
     host.close();
 
     expect(onHostClosing).toHaveBeenCalledOnce();
+  });
+
+  it("drops host-authoritative kinds arriving from a non-host peer (mesh hardening)", () => {
+    const net = makeTransportNetwork();
+    new HostSession(net.host, () => SNAPSHOT, {
+      onWorldEdit: () => {},
+      onPlaceableInteract: () => ({ open: true }),
+    });
+    const onWelcome = vi.fn();
+    const onWorldEdit = vi.fn();
+    const onPlaceableState = vi.fn();
+    const onHostClosing = vi.fn();
+    new JoinSession(net.addPeer("alice"), "Alice", {
+      onWelcome,
+      onWorldEdit,
+      onPlaceableState,
+      onHostClosing,
+    });
+    expect(onWelcome).toHaveBeenCalledOnce(); // pinned the real host
+
+    const mallory = net.addPeer("mallory"); // raw transport, no JoinSession
+    net.linkPeers("mallory", "alice");
+    mallory.broadcast({ kind: "welcome", ...SNAPSHOT });
+    mallory.broadcast({ kind: "worldEdit", edit: { op: "dig", x: 0, y: 0, z: 0, radius: 1 } });
+    mallory.broadcast({ kind: "placeableState", placeableId: "piece:1", state: { open: true } });
+    mallory.broadcast({ kind: "hostClosing" });
+
+    expect(onWelcome).toHaveBeenCalledOnce(); // mallory's fake welcome ignored
+    expect(onWorldEdit).not.toHaveBeenCalled();
+    expect(onPlaceableState).not.toHaveBeenCalled();
+    expect(onHostClosing).not.toHaveBeenCalled();
   });
 
   it("ignores malformed traffic with a warning instead of crashing", () => {

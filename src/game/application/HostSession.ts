@@ -9,7 +9,12 @@
  */
 
 import { isErr } from "../domain/Result";
-import { validateDig, validatePlaceableInteract, validatePose } from "../domain/net/IntentRules";
+import {
+  remoteAllowedPlaceableAction,
+  validateDig,
+  validatePlaceableInteract,
+  validatePose,
+} from "../domain/net/IntentRules";
 import {
   parseMessage,
   type DigMsg,
@@ -149,6 +154,7 @@ export class HostSession {
    *  as an oversized dig). */
   private handlePlaceableInteract(peerId: string, msg: PlaceableInteractMsg): void {
     if (!validatePlaceableInteract(msg)) return;
+    if (!remoteAllowedPlaceableAction(msg.action)) return;
     const state = this.hooks.onPlaceableInteract?.(
       msg.action,
       msg.placeableId,

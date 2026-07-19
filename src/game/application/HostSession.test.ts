@@ -267,12 +267,44 @@ describe("HostSession", () => {
     const alice = net.addPeer("alice");
     alice.broadcast({
       kind: "placeableInteract",
-      action: "depositChest",
+      action: "toggleDoor",
       placeableId: "piece:2",
       itemId: "wood",
       count: 4,
     });
     expect(calls).toEqual([{ itemId: "wood", count: 4 }]);
+  });
+
+  it("drops inventory-touching placeable actions from remote peers (no hook call, no broadcast)", () => {
+    const calls: string[] = [];
+    net = makeTransportNetwork();
+    session = new HostSession(net.host, () => SNAPSHOT, {
+      onWorldEdit: () => {},
+      onPlaceableInteract: (action) => {
+        calls.push(action);
+        return { ok: true };
+      },
+    });
+    const alice = net.addPeer("alice");
+    const inbox = collect(alice);
+    for (const action of [
+      "depositChest",
+      "withdrawChest",
+      "startCook",
+      "collectCook",
+      "plantCrop",
+      "harvestCrop",
+    ]) {
+      alice.broadcast({
+        kind: "placeableInteract",
+        action,
+        placeableId: "piece:2",
+        itemId: "wood",
+        count: 4,
+      });
+    }
+    expect(calls).toEqual([]);
+    expect(inbox).toEqual([]);
   });
 
   it("does not broadcast when the hook rejects (undefined/null)", () => {

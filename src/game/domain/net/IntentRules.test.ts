@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { PlaceableInteractMsg } from "./Protocol";
 import type { PlayerState } from "../world/WorldSaveData";
-import { validateDig, validatePlaceableInteract, validatePose } from "./IntentRules";
+import {
+  remoteAllowedPlaceableAction,
+  validateDig,
+  validatePlaceableInteract,
+  validatePose,
+} from "./IntentRules";
 
 function pose(x: number, y: number, z: number): PlayerState {
   return { position: [x, y, z], yaw: 0, pitch: 0 };
@@ -98,5 +103,21 @@ describe("validatePlaceableInteract", () => {
     expect(validatePlaceableInteract(placeableMsg({ count: 1.5 }))).toBe(false);
     expect(validatePlaceableInteract(placeableMsg({ count: 1000 }))).toBe(false);
     expect(validatePlaceableInteract(placeableMsg({ count: 999 }))).toBe(true);
+  });
+});
+
+describe("remoteAllowedPlaceableAction", () => {
+  it("allows only inventory-free actions over the wire", () => {
+    expect(remoteAllowedPlaceableAction("toggleDoor")).toBe(true);
+    for (const action of [
+      "depositChest",
+      "withdrawChest",
+      "startCook",
+      "collectCook",
+      "plantCrop",
+      "harvestCrop",
+    ] as const) {
+      expect(remoteAllowedPlaceableAction(action)).toBe(false);
+    }
   });
 });

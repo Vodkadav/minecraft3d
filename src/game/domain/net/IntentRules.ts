@@ -6,7 +6,7 @@
  * trivially testable.
  */
 
-import type { PlaceableInteractMsg } from "./Protocol";
+import type { PlaceableAction, PlaceableInteractMsg } from "./Protocol";
 import type { PlayerState } from "../world/WorldSaveData";
 
 /** Generous sprint+knockback ceiling; anything faster is a teleport. */
@@ -77,4 +77,19 @@ export function validatePlaceableInteract(msg: PlaceableInteractMsg): boolean {
     if (!Number.isInteger(msg.count) || msg.count <= 0 || msg.count > MAX_STACK_COUNT) return false;
   }
   return true;
+}
+
+/**
+ * Which placeable actions a REMOTE peer may perform (2026-07-19 security
+ * review): the host holds no copy of a joiner's inventory, so any
+ * input-consuming or item-granting action resolved from a network intent
+ * either conjures items from nothing (deposit/plant/cook debit the sender
+ * nothing) or routes the grant into the host's own inventory
+ * (withdraw/harvest/collect). Until a host-side inventory-authority protocol
+ * exists, only inventory-free actions are resolvable over the wire; the rest
+ * are silently dropped like any invalid intent. Solo/host-local interaction
+ * is unaffected — it never passes through this gate.
+ */
+export function remoteAllowedPlaceableAction(action: PlaceableAction): boolean {
+  return action === "toggleDoor";
 }
