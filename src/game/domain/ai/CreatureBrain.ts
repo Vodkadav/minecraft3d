@@ -7,6 +7,7 @@
  */
 
 import { hashUnitFloat } from "../rng/hash";
+import { CREATURE_REGISTRY } from "../creatures/CreatureRegistry";
 
 export type Behavior = "idle" | "roam" | "flee" | "aggro" | "follow";
 
@@ -19,16 +20,11 @@ export interface Temperament {
   readonly fleeBelowHealth: number;
 }
 
-export const TEMPERAMENT: Readonly<Record<string, Temperament>> = {
-  deer: { reactRange: 18, aggressive: false, fleeBelowHealth: 1 },
-  wolf: { reactRange: 14, aggressive: true, fleeBelowHealth: 0.3 },
-
-  // ---- Workstream 7.2 creature variety ----
-  elk: { reactRange: 16, aggressive: false, fleeBelowHealth: 1 },
-  fox: { reactRange: 20, aggressive: false, fleeBelowHealth: 1 },
-  boar: { reactRange: 10, aggressive: true, fleeBelowHealth: 0.2 },
-  rabbit: { reactRange: 22, aggressive: false, fleeBelowHealth: 1 },
-};
+/** Derived from CreatureRegistry (E0.2) — see its doc comment for why this
+ *  stays a thin projection instead of a hand-maintained table. */
+export const TEMPERAMENT: Readonly<Record<string, Temperament>> = Object.fromEntries(
+  CREATURE_REGISTRY.all().map((c) => [c.id, c.temperament]),
+);
 
 const ROAM_SPEED = 1.2;
 const FLEE_SPEED = 5.5;

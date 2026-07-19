@@ -14,6 +14,7 @@
  */
 
 import { hashUnitFloat } from "../rng/hash";
+import { CREATURE_REGISTRY } from "../creatures/CreatureRegistry";
 
 export type SpawnKind = "node" | "creature";
 
@@ -26,20 +27,23 @@ export interface SpawnSpecies {
   readonly weight: number;
 }
 
-/** MVP registry — placeholder visuals in the adapter; models arrive in M6. */
-export const SPAWN_SPECIES: readonly SpawnSpecies[] = [
+const EARLY_NODE_SPECIES: readonly SpawnSpecies[] = [
   { id: "stone-node", kind: "node", maxPerCell: 2, weight: 0.5 },
   { id: "berry-bush", kind: "node", maxPerCell: 2, weight: 0.4 },
-  { id: "deer", kind: "creature", maxPerCell: 1, weight: 0.35 },
-  { id: "wolf", kind: "creature", maxPerCell: 1, weight: 0.2 },
+];
 
-  // ---- Workstream 7.2/7.4 content-depth expansion ----
-  { id: "elk", kind: "creature", maxPerCell: 1, weight: 0.15 },
-  { id: "fox", kind: "creature", maxPerCell: 1, weight: 0.25 },
-  { id: "boar", kind: "creature", maxPerCell: 1, weight: 0.15 },
-  { id: "rabbit", kind: "creature", maxPerCell: 2, weight: 0.3 },
+/** Creature entries — derived from CreatureRegistry (E0.2), not hand-maintained
+ *  here. Registry insertion order is preserved to keep this array's ordering
+ *  (and thus the per-species hash salt index below) unchanged. */
+const CREATURE_SPECIES: readonly SpawnSpecies[] = CREATURE_REGISTRY.all().map((c) => ({
+  id: c.id,
+  kind: c.kind,
+  maxPerCell: c.maxPerCell,
+  weight: c.spawnWeight,
+}));
 
-  // resource nodes (7.4 — one per new gatherable so every item is obtainable)
+// resource nodes (7.4 — one per new gatherable so every item is obtainable)
+const LATE_NODE_SPECIES: readonly SpawnSpecies[] = [
   { id: "clay-deposit", kind: "node", maxPerCell: 1, weight: 0.3 },
   { id: "sand-dune", kind: "node", maxPerCell: 1, weight: 0.3 },
   { id: "flint-node", kind: "node", maxPerCell: 1, weight: 0.3 },
@@ -51,6 +55,13 @@ export const SPAWN_SPECIES: readonly SpawnSpecies[] = [
   { id: "carrot-patch", kind: "node", maxPerCell: 1, weight: 0.2 },
   { id: "potato-patch", kind: "node", maxPerCell: 1, weight: 0.2 },
   { id: "fishing-spot", kind: "node", maxPerCell: 1, weight: 0.2 },
+];
+
+/** MVP registry — placeholder visuals in the adapter; models arrive in M6. */
+export const SPAWN_SPECIES: readonly SpawnSpecies[] = [
+  ...EARLY_NODE_SPECIES,
+  ...CREATURE_SPECIES,
+  ...LATE_NODE_SPECIES,
 ];
 
 /**

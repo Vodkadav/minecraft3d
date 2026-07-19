@@ -8,21 +8,22 @@
  * exactly testable.
  */
 
+import { CREATURE_REGISTRY } from "../creatures/CreatureRegistry";
+
 export interface TamingRules {
   readonly foodItemId: string;
   readonly feedsRequired: number;
   readonly cooldownMs: number;
 }
 
-/** Species without an entry are untameable. */
-export const TAMING_RULES: Readonly<Record<string, TamingRules>> = {
-  deer: { foodItemId: "berries", feedsRequired: 3, cooldownMs: 5000 },
-  wolf: { foodItemId: "meat", feedsRequired: 4, cooldownMs: 8000 },
-  // Workstream 7.2: elk is a tameable ride like deer; fox/boar/rabbit are
-  // left untameable (no entry) — a small, timid, or aggressive wild animal,
-  // not every creature needs to be a mount.
-  elk: { foodItemId: "carrot", feedsRequired: 4, cooldownMs: 6000 },
-};
+/** Species without an entry are untameable. Derived from CreatureRegistry
+ *  (E0.2) — see its doc comment for why this stays a thin projection instead
+ *  of a hand-maintained table. */
+export const TAMING_RULES: Readonly<Record<string, TamingRules>> = Object.fromEntries(
+  CREATURE_REGISTRY.all()
+    .filter((c): c is typeof c & { taming: NonNullable<typeof c.taming> } => c.taming !== undefined)
+    .map((c) => [c.id, c.taming]),
+);
 
 export type TamingPhase = "wild" | "tamed";
 
