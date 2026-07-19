@@ -17,6 +17,7 @@ import {
   type GraphicsPreset,
   type SettingsInput,
 } from "../domain/settings/Settings";
+import { NAMEPLATE_MODES, type NameplateMode } from "../domain/hud/Nameplate";
 import { DAY_LENGTH_MAX_SECONDS, DAY_LENGTH_MIN_SECONDS } from "../domain/time/WorldClock";
 import { DIFFICULTIES, type Difficulty } from "../domain/settings/Difficulty";
 import { wireButtonSound } from "./audioUi";
@@ -201,6 +202,61 @@ export function SettingsView(
   );
   volumeField("laas-vol-ambient", "settings.audio.ambient", s.ambientVolume, (v) =>
     apply({ ambientVolume: v }),
+  );
+
+  // Nameplate show/hide policy (E2.2) — a self-contained block: one mode
+  // select + five faction checkboxes, each its own field/patch.
+  const nameplateMode = doc.createElement("select");
+  for (const mode of NAMEPLATE_MODES) {
+    const opt = doc.createElement("option");
+    opt.value = mode;
+    opt.textContent = loc.t(`settings.nameplate.mode.${mode}`);
+    if (mode === s.nameplateMode) opt.selected = true;
+    nameplateMode.appendChild(opt);
+  }
+  nameplateMode.addEventListener("change", () =>
+    apply({ nameplateMode: nameplateMode.value as NameplateMode }),
+  );
+  field(doc, root, "laas-nameplate-mode", loc.t("settings.nameplate.mode"), nameplateMode);
+
+  const nameplateToggle = (
+    id: string,
+    labelKey: string,
+    checked: boolean,
+    onChange: (v: boolean) => void,
+  ): void => {
+    const box = doc.createElement("input");
+    box.type = "checkbox";
+    box.checked = checked;
+    box.addEventListener("change", () => onChange(box.checked));
+    field(doc, root, id, loc.t(labelKey), box);
+  };
+  nameplateToggle(
+    "laas-nameplate-friendly",
+    "settings.nameplate.friendly",
+    s.nameplateFriendly,
+    (v) => apply({ nameplateFriendly: v }),
+  );
+  nameplateToggle(
+    "laas-nameplate-neutral",
+    "settings.nameplate.neutral",
+    s.nameplateNeutral,
+    (v) => apply({ nameplateNeutral: v }),
+  );
+  nameplateToggle(
+    "laas-nameplate-hostile",
+    "settings.nameplate.hostile",
+    s.nameplateHostile,
+    (v) => apply({ nameplateHostile: v }),
+  );
+  nameplateToggle("laas-nameplate-tamed", "settings.nameplate.tamed", s.nameplateTamed, (v) =>
+    apply({ nameplateTamed: v }),
+  );
+  nameplateToggle(
+    "laas-nameplate-players",
+    "settings.nameplate.players",
+    s.nameplatePlayers,
+    (v) => apply({ nameplatePlayers: v }),
   );
 
   // Back
