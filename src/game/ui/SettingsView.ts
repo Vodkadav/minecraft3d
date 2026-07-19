@@ -12,9 +12,11 @@ import type { SettingsController } from "../application/SettingsController";
 import type { AudioPort } from "../application/ports/AudioPort";
 import {
   GRAPHICS_PRESETS,
+  HUD_STYLES,
   TEXT_SCALE_MAX,
   TEXT_SCALE_MIN,
   type GraphicsPreset,
+  type HudStyle,
   type SettingsInput,
 } from "../domain/settings/Settings";
 import { NAMEPLATE_MODES, type NameplateMode } from "../domain/hud/Nameplate";
@@ -165,6 +167,20 @@ export function SettingsView(
     apply({ dayLengthSeconds: Number(dayLength.value) * 60 }),
   );
   field(doc, root, "laas-daylength", loc.t("settings.dayLength"), dayLength);
+
+  // HUD style (E2.1) — classic bars or Diablo-style corner orbs
+  const hudStyle = doc.createElement("select");
+  for (const style of HUD_STYLES) {
+    const opt = doc.createElement("option");
+    opt.value = style;
+    opt.textContent = loc.t(`settings.hudStyle.${style}`);
+    if (style === s.hudStyle) opt.selected = true;
+    hudStyle.appendChild(opt);
+  }
+  hudStyle.addEventListener("change", () =>
+    apply({ hudStyle: hudStyle.value as HudStyle }),
+  );
+  field(doc, root, "laas-hudstyle", loc.t("settings.hudStyle"), hudStyle);
 
   // Reduced motion
   const motion = doc.createElement("input");

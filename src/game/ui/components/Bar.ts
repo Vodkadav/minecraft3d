@@ -16,6 +16,10 @@ export interface BarOptions {
   readonly max: number;
   readonly initial: number;
   readonly reducedMotion?: boolean;
+  /** E2.1: "orb" renders a circular gauge (vertical fill from the bottom,
+   *  Diablo-style) instead of the default horizontal bar. Purely a CSS/DOM
+   *  presentation switch — the fill math is identical. */
+  readonly shape?: "bar" | "orb";
 }
 
 export interface BarHandle {
@@ -33,9 +37,12 @@ export function Bar(opts: BarOptions): BarHandle {
   const doc = document;
   injectStyles(doc);
 
+  const shape = opts.shape ?? "bar";
+
   const el = doc.createElement("div");
   el.id = opts.id;
   el.className = "lw-bar";
+  el.dataset.shape = shape;
   el.setAttribute("role", "progressbar");
   el.setAttribute("aria-label", opts.ariaLabel);
   el.setAttribute("aria-valuemin", "0");
@@ -62,7 +69,7 @@ export function Bar(opts: BarOptions): BarHandle {
   const VITAL_MID_CUTOFF = 0.25;
 
   function render(): void {
-    fill.style.transform = `scaleX(${current})`;
+    fill.style.transform = shape === "orb" ? `scaleY(${current})` : `scaleX(${current})`;
     const tone = toneFor(current);
     fill.dataset.tone = tone;
     const critical = isVitalCritical(current) && !opts.reducedMotion;

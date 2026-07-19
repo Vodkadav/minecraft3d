@@ -18,14 +18,30 @@ export interface PlayerSurvivalBarHandle {
   setStamina(value: number): void;
   setHunger(value: number): void;
   flashDamage(): void;
+  /** E2.1: updates the orb layout's level-portrait badge; a no-op in bars
+   *  layout (no portrait mounted) or when `hudStyle` wasn't "orbs" at mount. */
+  setLevel(level: number): void;
   dispose(): void;
 }
 
+/** `maxHealthMult`/`maxEnergyMult` (E1.4b — a character's
+ *  `effectiveMaxHealthMultiplier`/`effectiveMaxEnergyMultiplier`) scale the
+ *  health/stamina bars' max/initial; both default to 1, identical to today.
+ *  `hudStyle` (E2.1, Settings) switches bars/orbs presentation — hunger stays
+ *  a bar even in orbs layout (only health/stamina become orbs, per the E2.1
+ *  brief); defaults to "bars", a no-flags boot stays pixel-identical.
+ *  `level` seeds the orb layout's portrait badge (E1's character level). */
 export function createPlayerSurvivalBar(
   loc: Localizer,
   doc: Document = document,
+  maxHealthMult = 1,
+  maxEnergyMult = 1,
+  hudStyle: "bars" | "orbs" = "bars",
+  level = 1,
 ): PlayerSurvivalBarHandle {
   const reduceMotion = doc.defaultView?.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
+  const maxHealth = PLAYER_MAX_HEALTH * maxHealthMult;
+  const maxEnergy = STAMINA_MAX * maxEnergyMult;
 
   const cluster = VitalsCluster(
     [
@@ -33,15 +49,15 @@ export function createPlayerSurvivalBar(
         id: "health",
         ariaLabel: loc.t("hud.vitals.health"),
         labelText: loc.t("hud.vitals.health.label"),
-        max: PLAYER_MAX_HEALTH,
-        initial: PLAYER_MAX_HEALTH,
+        max: maxHealth,
+        initial: maxHealth,
       },
       {
         id: "stamina",
         ariaLabel: loc.t("hud.vitals.stamina"),
         labelText: loc.t("hud.vitals.stamina.label"),
-        max: STAMINA_MAX,
-        initial: STAMINA_MAX,
+        max: maxEnergy,
+        initial: maxEnergy,
       },
       {
         id: "hunger",
@@ -49,9 +65,14 @@ export function createPlayerSurvivalBar(
         labelText: loc.t("hud.vitals.hunger.label"),
         max: HUNGER_MAX,
         initial: HUNGER_MAX,
+        shape: "bar",
       },
     ],
-    { reducedMotion: reduceMotion },
+    {
+      reducedMotion: reduceMotion,
+      layout: hudStyle,
+      portrait: { level, ariaLabel: loc.t("character.level.label", { n: level }) },
+    },
   );
   doc.body.appendChild(cluster.el);
 
@@ -68,10 +89,10 @@ export function createPlayerSurvivalBar(
 
   return {
     setHealth(fraction: number): void {
-      cluster.setTarget("health", Math.max(0, Math.min(1, fraction)) * PLAYER_MAX_HEALTH);
+      cluster.setTarget("health", Math.max(0, Math.min(1, fraction)) * maxHealth);
     },
     setStamina(value: number): void {
-      cluster.setTarget("stamina", Math.max(0, Math.min(STAMINA_MAX, value)));
+      cluster.setTarget("stamina", Math.max(0, Math.min(maxEnergy, value)));
     },
     setHunger(value: number): void {
       cluster.setTarget("hunger", Math.max(0, Math.min(HUNGER_MAX, value)));
@@ -83,6 +104,9 @@ export function createPlayerSurvivalBar(
         [{ boxShadow: "0 0 0 3px rgba(255,80,80,0.95)" }, { boxShadow: "0 0 0 0 rgba(255,80,80,0)" }],
         { duration: 260, easing: "ease-out" },
       );
+    },
+    setLevel(level: number): void {
+      cluster.setLevel(level);
     },
     dispose(): void {
       if (raf !== null) win?.cancelAnimationFrame?.(raf);

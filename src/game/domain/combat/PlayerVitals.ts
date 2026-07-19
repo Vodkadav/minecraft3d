@@ -19,8 +19,11 @@ export interface PlayerVitals {
   readonly sinceHitS: number;
 }
 
-export function spawnPlayerVitals(): PlayerVitals {
-  return { health: PLAYER_MAX_HEALTH, dead: false, sinceHitS: REGEN_DELAY_S };
+/** `maxHealth` defaults to `PLAYER_MAX_HEALTH` — a stats-less caller (or the
+ *  multiplier defaulting to 1, see `character/Character.ts`) behaves exactly
+ *  as before E1.4b. */
+export function spawnPlayerVitals(maxHealth: number = PLAYER_MAX_HEALTH): PlayerVitals {
+  return { health: maxHealth, dead: false, sinceHitS: REGEN_DELAY_S };
 }
 
 export interface PlayerDamageResult {
@@ -36,16 +39,23 @@ export function damagePlayer(state: PlayerVitals, amount: number): PlayerDamageR
   return { state: { health, dead, sinceHitS: 0 }, died: dead };
 }
 
-export function tickVitals(state: PlayerVitals, dt: number): PlayerVitals {
-  if (state.dead || state.health >= PLAYER_MAX_HEALTH) return state;
+export function tickVitals(
+  state: PlayerVitals,
+  dt: number,
+  maxHealth: number = PLAYER_MAX_HEALTH,
+): PlayerVitals {
+  if (state.dead || state.health >= maxHealth) return state;
   const sinceHitS = state.sinceHitS + dt;
   if (sinceHitS < REGEN_DELAY_S) return { ...state, sinceHitS };
   // only the time past the grace threshold heals
   const healingS = Math.min(dt, sinceHitS - REGEN_DELAY_S);
-  const health = Math.min(PLAYER_MAX_HEALTH, state.health + healingS * REGEN_PER_S);
+  const health = Math.min(maxHealth, state.health + healingS * REGEN_PER_S);
   return { ...state, health, sinceHitS };
 }
 
-export function respawnPlayer(_state: PlayerVitals): PlayerVitals {
-  return spawnPlayerVitals();
+export function respawnPlayer(
+  _state: PlayerVitals,
+  maxHealth: number = PLAYER_MAX_HEALTH,
+): PlayerVitals {
+  return spawnPlayerVitals(maxHealth);
 }

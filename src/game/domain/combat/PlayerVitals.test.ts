@@ -73,4 +73,24 @@ describe("PlayerVitals", () => {
     expect(back.health).toBe(PLAYER_MAX_HEALTH);
     expect(back.dead).toBe(false);
   });
+
+  // E1.4b: an explicit maxHealth (from a character's effectiveMaxHealthMultiplier)
+  // scales spawn/regen-cap/respawn; omitting it is identical to today.
+  describe("maxHealth multiplier plumbing", () => {
+    it("spawns at the given maxHealth instead of the default", () => {
+      const v = spawnPlayerVitals(150);
+      expect(v.health).toBe(150);
+    });
+
+    it("regen caps at the given maxHealth, not the base constant", () => {
+      const hurt = { health: 140, dead: false, sinceHitS: 999 };
+      const healed = tickVitals(hurt, 999, 150);
+      expect(healed.health).toBe(150);
+    });
+
+    it("respawns at the given maxHealth", () => {
+      const dead = { health: 0, dead: true, sinceHitS: 0 };
+      expect(respawnPlayer(dead, 150).health).toBe(150);
+    });
+  });
 });

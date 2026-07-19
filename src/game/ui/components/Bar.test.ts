@@ -44,4 +44,26 @@ describe("Bar", () => {
     const fill = bar.el.querySelector<HTMLElement>(".lw-bar-fill")!;
     expect(fill.dataset.critical).toBe("true");
   });
+
+  // E2.1
+  it("defaults to shape 'bar' and fills horizontally", () => {
+    const bar = Bar({ id: "hp6", ariaLabel: "Health", labelText: "HP {n}/{max}", max: 100, initial: 50 });
+    expect(bar.el.dataset.shape).toBe("bar");
+    const fill = bar.el.querySelector<HTMLElement>(".lw-bar-fill")!;
+    expect(fill.style.transform).toBe("scaleX(0.5)");
+  });
+
+  it("shape 'orb' fills vertically instead of horizontally", () => {
+    const bar = Bar({
+      id: "hp7",
+      ariaLabel: "Health",
+      labelText: "HP {n}/{max}",
+      max: 100,
+      initial: 50,
+      shape: "orb",
+    });
+    expect(bar.el.dataset.shape).toBe("orb");
+    const fill = bar.el.querySelector<HTMLElement>(".lw-bar-fill")!;
+    expect(fill.style.transform).toBe("scaleY(0.5)");
+  });
 });

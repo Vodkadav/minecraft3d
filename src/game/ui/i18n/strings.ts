@@ -59,6 +59,9 @@ export const UI_STRINGS: Catalog = {
     "settings.nameplate.hostile": "Show hostile nameplates",
     "settings.nameplate.tamed": "Show tamed-pet nameplates",
     "settings.nameplate.players": "Show player nameplates",
+    "settings.hudStyle": "Vitals HUD style",
+    "settings.hudStyle.bars": "Bars",
+    "settings.hudStyle.orbs": "Orbs",
     "settings.back": "Back",
 
     "lobby.title": "Online worlds",
@@ -292,6 +295,7 @@ export const UI_STRINGS: Catalog = {
     "character.talent.allocate.aria": "Learn {name}",
     "character.respec.talents": "Respec talents",
     "character.respec.talents.aria": "Refund every talent point for free",
+    "character.toast.levelUp": "Level up! You're now level {n}",
 
     "talent.strongArms.name": "Strong Arms",
     "talent.strongArms.desc": "A little extra punch in every hit.",
@@ -361,6 +365,9 @@ export const UI_STRINGS: Catalog = {
     "settings.nameplate.hostile": "Mostrar etiquetas hostiles",
     "settings.nameplate.tamed": "Mostrar etiquetas de mascotas domadas",
     "settings.nameplate.players": "Mostrar etiquetas de jugadores",
+    "settings.hudStyle": "Estilo de barras vitales",
+    "settings.hudStyle.bars": "Barras",
+    "settings.hudStyle.orbs": "Orbes",
     "settings.back": "Atrás",
 
     "lobby.title": "Mundos en línea",
@@ -594,6 +601,7 @@ export const UI_STRINGS: Catalog = {
     "character.talent.allocate.aria": "Aprender {name}",
     "character.respec.talents": "Reasignar talentos",
     "character.respec.talents.aria": "Reembolsa todos los puntos de talento gratis",
+    "character.toast.levelUp": "¡Subiste de nivel! Ahora eres nivel {n}",
 
     "talent.strongArms.name": "Brazos Fuertes",
     "talent.strongArms.desc": "Un poco más de fuerza en cada golpe.",
@@ -663,6 +671,9 @@ export const UI_STRINGS: Catalog = {
     "settings.nameplate.hostile": "Vis fjendtlige navneskilte",
     "settings.nameplate.tamed": "Vis navneskilte for tæmmede kæledyr",
     "settings.nameplate.players": "Vis spillernavneskilte",
+    "settings.hudStyle": "Vitalitets-HUD-stil",
+    "settings.hudStyle.bars": "Bjælker",
+    "settings.hudStyle.orbs": "Kugler",
     "settings.back": "Tilbage",
 
     "lobby.title": "Online-verdener",
@@ -896,6 +907,7 @@ export const UI_STRINGS: Catalog = {
     "character.talent.allocate.aria": "Lær {name}",
     "character.respec.talents": "Nulstil talenter",
     "character.respec.talents.aria": "Refunder alle talentpoint gratis",
+    "character.toast.levelUp": "Niveau op! Du er nu niveau {n}",
 
     "talent.strongArms.name": "Stærke Arme",
     "talent.strongArms.desc": "Lidt ekstra kraft i hvert slag.",

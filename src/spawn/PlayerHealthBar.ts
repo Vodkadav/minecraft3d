@@ -18,11 +18,25 @@ export interface PlayerHealthBar {
   /** fraction ∈ [0,1]. */
   set(fraction: number): void;
   flashDamage(): void;
+  /** E2.1: updates the orb layout's level-portrait badge; a no-op in bars
+   *  layout (no portrait mounted) or when `hudStyle` wasn't "orbs" at mount. */
+  setLevel(level: number): void;
   dispose(): void;
 }
 
-export function createPlayerHealthBar(doc: Document = document): PlayerHealthBar {
+/** `maxHealthMult` (E1.4b — a character's `effectiveMaxHealthMultiplier`)
+ *  scales the bar's max/initial; defaults to 1, identical to today.
+ *  `hudStyle` (E2.1, Settings) switches bars/orbs presentation; defaults to
+ *  "bars" — a no-flags boot stays pixel-identical. `level` seeds the orb
+ *  layout's portrait badge (E1's character level); ignored in bars layout. */
+export function createPlayerHealthBar(
+  doc: Document = document,
+  maxHealthMult = 1,
+  hudStyle: "bars" | "orbs" = "bars",
+  level = 1,
+): PlayerHealthBar {
   const reduceMotion = doc.defaultView?.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
+  const maxHealth = PLAYER_MAX_HEALTH * maxHealthMult;
 
   const cluster = VitalsCluster(
     [
@@ -30,11 +44,15 @@ export function createPlayerHealthBar(doc: Document = document): PlayerHealthBar
         id: "health",
         ariaLabel: "Health",
         labelText: "HP {n}/{max}",
-        max: PLAYER_MAX_HEALTH,
-        initial: PLAYER_MAX_HEALTH,
+        max: maxHealth,
+        initial: maxHealth,
       },
     ],
-    { reducedMotion: reduceMotion },
+    {
+      reducedMotion: reduceMotion,
+      layout: hudStyle,
+      portrait: { level, ariaLabel: `Level ${level}` },
+    },
   );
   doc.body.appendChild(cluster.el);
 
@@ -54,7 +72,7 @@ export function createPlayerHealthBar(doc: Document = document): PlayerHealthBar
 
   return {
     set(fraction: number): void {
-      cluster.setTarget("health", Math.max(0, Math.min(1, fraction)) * PLAYER_MAX_HEALTH);
+      cluster.setTarget("health", Math.max(0, Math.min(1, fraction)) * maxHealth);
     },
     flashDamage(): void {
       if (reduceMotion) return;
@@ -63,6 +81,9 @@ export function createPlayerHealthBar(doc: Document = document): PlayerHealthBar
         [{ boxShadow: "0 0 0 3px rgba(255,80,80,0.95)" }, { boxShadow: "0 0 0 0 rgba(255,80,80,0)" }],
         { duration: 260, easing: "ease-out" },
       );
+    },
+    setLevel(level: number): void {
+      cluster.setLevel(level);
     },
     dispose(): void {
       if (raf !== null) win?.cancelAnimationFrame?.(raf);

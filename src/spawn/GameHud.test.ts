@@ -1,6 +1,8 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, vi } from "vitest";
 import { isOk } from "../game/domain/Result";
+import { newCharacter } from "../game/domain/character/Character";
+import { XP_PER_EVENT, xpForLevel } from "../game/domain/character/Leveling";
 import { Inventory } from "../game/domain/inventory/Inventory";
 import { ItemRegistry } from "../game/domain/items/ItemRegistry";
 import { STARTER_ITEMS } from "../game/domain/items/starterItems";
@@ -232,6 +234,62 @@ describe("mountGameHud", () => {
     expect(document.querySelector('[data-achievement-id="first-dig"]')?.getAttribute("data-unlocked")).toBe(
       "true",
     );
+    hud.dispose();
+  });
+
+  // E1.5b: CharacterScreen is mounted the same way InventoryScreen is.
+  it("mounts a character-sheet open button and the C key toggles the overlay", () => {
+    const hud = mountGameHud({ loc: createLocalizer("en"), registry: registry() });
+    const openButton = document.querySelector<HTMLButtonElement>(".lw-character-open-button");
+    expect(openButton).toBeTruthy();
+    openButton?.click();
+    expect(document.querySelector('[aria-label="Character"]')?.hasAttribute("hidden")).toBe(false);
+    openButton?.click();
+
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "c", bubbles: true }));
+    expect(document.querySelector('[aria-label="Character"]')?.hasAttribute("hidden")).toBe(false);
+    hud.dispose();
+  });
+
+  it("dispose also removes the character-sheet button and overlay", () => {
+    const hud = mountGameHud({ loc: createLocalizer("en"), registry: registry() });
+    hud.dispose();
+    expect(document.querySelector(".lw-character-open-button")).toBeNull();
+    expect(document.querySelector('[aria-label="Character"]')).toBeNull();
+  });
+
+  it("seeds the character from initialCharacter (S7b-style persistence seam)", () => {
+    const seeded = { ...newCharacter(), level: { level: 3, xp: 10 } };
+    const hud = mountGameHud({ loc: createLocalizer("en"), registry: registry(), initialCharacter: seeded });
+    expect(hud.character.level.level).toBe(3);
+    hud.dispose();
+  });
+
+  // E1.4b: recordProgress (already the single entry point every dig/craft/
+  // kill/harvest/tame call site threads through) actually grants XP into the
+  // character's leveling at runtime — not just at the domain-test level.
+  it("recordProgress grants XP into the character's leveling at runtime", () => {
+    const hud = mountGameHud({ loc: createLocalizer("en"), registry: registry() });
+    expect(hud.character.level.xp).toBe(0);
+    hud.recordProgress("dig");
+    expect(hud.character.level.xp).toBe(XP_PER_EVENT.dig);
+    hud.dispose();
+  });
+
+  it("recordProgress toasts on level-up and onCharacterChange fires", () => {
+    const onCharacterChange = vi.fn();
+    const hud = mountGameHud({
+      loc: createLocalizer("en"),
+      registry: registry(),
+      onCharacterChange,
+    });
+    // "tame" grants the most XP per event; force enough events to cross the
+    // level-1 threshold deterministically regardless of the curve's shape.
+    const needed = Math.ceil(xpForLevel(1) / XP_PER_EVENT.tame);
+    for (let i = 0; i < needed; i++) hud.recordProgress("tame");
+    expect(hud.character.level.level).toBeGreaterThan(1);
+    expect(document.querySelector(".lw-toast-region")?.textContent).toContain("Level up!");
+    expect(onCharacterChange).toHaveBeenCalledWith(hud.character);
     hud.dispose();
   });
 });

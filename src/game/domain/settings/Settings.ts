@@ -29,6 +29,13 @@ export const GRAPHICS_PRESETS: readonly GraphicsPreset[] = [
   "ultra",
 ];
 
+/** E2.1: the vitals HUD style — classic bars, or Diablo-style corner orbs
+ *  with a level portrait. Defaults to "bars" so a no-flags boot stays
+ *  pixel-identical (the ARPG-cozy invariant). */
+export type HudStyle = "bars" | "orbs";
+
+export const HUD_STYLES: readonly HudStyle[] = ["bars", "orbs"];
+
 export const TEXT_SCALE_MIN = 0.8;
 export const TEXT_SCALE_MAX = 2.0;
 
@@ -59,6 +66,8 @@ export interface Settings {
   readonly nameplateHostile: boolean;
   readonly nameplateTamed: boolean;
   readonly nameplatePlayers: boolean;
+  /** Vitals HUD presentation (E2.1); defaults to "bars". */
+  readonly hudStyle: HudStyle;
 }
 
 /** Mutable/plain shape accepted by the factory before validation. */
@@ -82,6 +91,7 @@ export type SettingsInput = {
   readonly nameplateHostile: boolean;
   readonly nameplateTamed: boolean;
   readonly nameplatePlayers: boolean;
+  readonly hudStyle: HudStyle;
 };
 
 export type SettingsError =
@@ -92,7 +102,8 @@ export type SettingsError =
   | { readonly kind: "VolumeOutOfRange"; readonly bus: string; readonly value: number }
   | { readonly kind: "UnknownDifficulty"; readonly value: string }
   | { readonly kind: "DayLengthOutOfRange"; readonly value: number }
-  | { readonly kind: "UnknownNameplateMode"; readonly value: string };
+  | { readonly kind: "UnknownNameplateMode"; readonly value: string }
+  | { readonly kind: "UnknownHudStyle"; readonly value: string };
 
 function isGraphicsPreset(value: string): value is GraphicsPreset {
   return (GRAPHICS_PRESETS as readonly string[]).includes(value);
@@ -104,6 +115,10 @@ function isDifficulty(value: string): value is Difficulty {
 
 function isNameplateMode(value: string): value is NameplateMode {
   return (NAMEPLATE_MODES as readonly string[]).includes(value);
+}
+
+function isHudStyle(value: string): value is HudStyle {
+  return (HUD_STYLES as readonly string[]).includes(value);
 }
 
 export function makeSettings(input: SettingsInput): Result<Settings, SettingsError> {
@@ -151,6 +166,9 @@ export function makeSettings(input: SettingsInput): Result<Settings, SettingsErr
   if (!isNameplateMode(input.nameplateMode)) {
     return err({ kind: "UnknownNameplateMode", value: String(input.nameplateMode) });
   }
+  if (!isHudStyle(input.hudStyle)) {
+    return err({ kind: "UnknownHudStyle", value: String(input.hudStyle) });
+  }
   return ok({
     graphicsPreset: input.graphicsPreset,
     animalDensity: input.animalDensity,
@@ -171,6 +189,7 @@ export function makeSettings(input: SettingsInput): Result<Settings, SettingsErr
     nameplateHostile: input.nameplateHostile,
     nameplateTamed: input.nameplateTamed,
     nameplatePlayers: input.nameplatePlayers,
+    hudStyle: input.hudStyle,
   });
 }
 
@@ -199,6 +218,7 @@ export function defaultSettings(): Settings {
     nameplateHostile: true,
     nameplateTamed: true,
     nameplatePlayers: true,
+    hudStyle: "bars",
   };
 }
 

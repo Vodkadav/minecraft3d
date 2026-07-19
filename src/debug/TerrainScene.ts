@@ -61,12 +61,23 @@ import { resolveCrosshairState } from '../game/domain/ui/CrosshairState';
 import { difficultyRules } from '../game/domain/settings/Difficulty';
 import { setSpawnPoint, type SpawnPoint } from '../game/domain/survival/Respawn';
 import {
+  STAMINA_MAX,
   canAttack as canAttackSurvival,
   drainStaminaForAttack,
   spawnSurvival,
   starvationDamagePerTick,
   tickSurvival,
 } from '../game/domain/survival/Survival';
+import {
+  type CharacterState,
+  effectiveAttackPowerMultiplier,
+  effectiveGatherPowerMultiplier,
+  effectiveLootMultiplier,
+  effectiveMaxEnergyMultiplier,
+  effectiveMaxHealthMultiplier,
+  newCharacter,
+} from '../game/domain/character/Character';
+import { CharacterPersistence } from '../game/application/CharacterPersistence';
 import { eat } from '../game/domain/survival/Eating';
 import type { ProgressionEventId } from '../game/domain/progression/ProgressionEvents';
 import { STARTER_RECIPES } from '../game/domain/crafting/starterRecipes';
@@ -578,9 +589,25 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
     // family game loses your spot, never your progress (Workstream 5.3:
     // the death-penalty rule below can now override "never your progress"
     // on harder difficulties, but stays keep-inventory by default).
-    let vitals = spawnPlayerVitals();
+    // E1.4b: the character's additive multipliers feed vitals/survival maxima
+    // and the spawn-field power/loot call sites — loaded before vitals spawn
+    // so a returning character starts at their real maxima. Persisted with
+    // the rest of the game state on pagehide/hidden below.
+    const worldIdForSave = ctx.world?.worldId ?? `voxel-demo-${params.seed}`;
+    const characterPersistence = saveStoreForPersistence
+      ? new CharacterPersistence(saveStoreForPersistence)
+      : null;
+    let character: CharacterState = newCharacter();
+    if (characterPersistence) {
+      const loadedCharacter = await characterPersistence.load(worldIdForSave, 'local');
+      if (isOk(loadedCharacter)) character = loadedCharacter.value;
+    }
+    let maxHealthEff = PLAYER_MAX_HEALTH * effectiveMaxHealthMultiplier(character);
+    let maxEnergyEff = STAMINA_MAX * effectiveMaxEnergyMultiplier(character);
+
+    let vitals = spawnPlayerVitals(maxHealthEff);
     // Workstream 5.1: hunger + stamina, ticked alongside vitals below.
-    let survival = spawnSurvival();
+    let survival = spawnSurvival(maxEnergyEff);
     // reposition through the fly camera's own seam (setPose owns basePos too —
     // a raw camera.position.set is stomped by fly.update the same frame)
     let respawnPose: CamPose | null = null;
@@ -588,7 +615,14 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
     // respawnPose whenever it's (re)captured — a placed bed (Workstream 7)
     // will call `setSpawnPoint` from the same seam instead of "on sleep".
     let spawnPoint: SpawnPoint | null = null;
-    const survivalBar = createPlayerSurvivalBar(createLocalizer(settings.settings.locale));
+    const survivalBar = createPlayerSurvivalBar(
+      createLocalizer(settings.settings.locale),
+      document,
+      effectiveMaxHealthMultiplier(character),
+      effectiveMaxEnergyMultiplier(character),
+      settings.settings.hudStyle,
+      character.level.level,
+    );
 
     function captureSpawn(pose: CamPose): void {
       respawnPose = pose;
@@ -625,7 +659,6 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
     // into the boot/save flow (closes the S4/S6 deferral). Only when there's a
     // real save store — dev/tooling boots with no OPFS support skip persistence
     // exactly like the voxel subsystem already does above.
-    const worldIdForSave = ctx.world?.worldId ?? `voxel-demo-${params.seed}`;
     const gameStatePersistence = saveStoreForPersistence
       ? new GameStatePersistence({
           inventoryPersistence: new InventoryPersistence(saveStoreForPersistence, itemsReg.value),
@@ -647,6 +680,15 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
       ...(loadedGameState?.inventory ? { initialInventory: loadedGameState.inventory } : {}),
       ...(loadedGameState?.progression ? { initialProgression: loadedGameState.progression } : {}),
       ...(loadedGameState?.keyhints ? { initialKeyhints: loadedGameState.keyhints } : {}),
+      initialCharacter: character,
+      onCharacterChange: (next) => {
+        // E1.4b: multipliers apply live — a stat spend mid-session changes
+        // maxima/power immediately; persistence rides the pagehide save below.
+        character = next;
+        maxHealthEff = PLAYER_MAX_HEALTH * effectiveMaxHealthMultiplier(next);
+        maxEnergyEff = STAMINA_MAX * effectiveMaxEnergyMultiplier(next);
+        survivalBar.setLevel(next.level.level);
+      },
       setInputEnabled: (on) => ctx.hooks.flyCamEnabled?.(on),
       onEat: (food) => {
         const healedBefore = vitals.health;
@@ -654,7 +696,7 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
         vitals = r.vitals;
         survival = r.survival;
         const healedAmount = vitals.health - healedBefore;
-        const frac = vitals.health / PLAYER_MAX_HEALTH;
+        const frac = vitals.health / maxHealthEff;
         survivalBar.setHealth(frac);
         survivalBar.setHunger(survival.hunger);
         feel?.setLowHealth(frac > 0 && frac <= LOW_HEALTH_FRACTION);
@@ -682,6 +724,7 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
     if (gameStatePersistence) {
       const saveGameState = (): void => {
         void gameStatePersistence.save(worldIdForSave, 'local', hud.inventory, hud.progression, hud.keyhints);
+        void characterPersistence?.save(worldIdForSave, 'local', hud.character);
       };
       window.addEventListener('pagehide', saveGameState);
       document.addEventListener('visibilitychange', () => {
@@ -737,13 +780,13 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
     function applyPlayerDamage(amount: number): void {
       const r = damagePlayer(vitals, amount);
       vitals = r.state;
-      const frac = vitals.health / PLAYER_MAX_HEALTH;
+      const frac = vitals.health / maxHealthEff;
       survivalBar.setHealth(frac);
       survivalBar.flashDamage();
       feel?.setLowHealth(frac > 0 && frac <= LOW_HEALTH_FRACTION);
       if (r.died) {
-        vitals = respawnPlayer(vitals);
-        survival = spawnSurvival();
+        vitals = respawnPlayer(vitals, maxHealthEff);
+        survival = spawnSurvival(maxEnergyEff);
         if (respawnPose) ctx.hooks.setPose?.(respawnPose);
         survivalBar.setHealth(1);
         survivalBar.setStamina(survival.stamina);
@@ -771,8 +814,11 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
       onProgress: (event) => hud.recordProgress(event),
       onCombatEvent: (kind, amount) => recordCombatEvent(kind, amount),
       canAttack: () => canAttackSurvival(survival),
+      attackPowerMult: () => effectiveAttackPowerMultiplier(character),
+      gatherPowerMult: () => effectiveGatherPowerMultiplier(character),
+      lootMult: () => effectiveLootMultiplier(character),
       onAttack: () => {
-        survival = drainStaminaForAttack(survival);
+        survival = drainStaminaForAttack(survival, maxEnergyEff);
         survivalBar.setStamina(survival.stamina);
         survivalBar.setHunger(survival.hunger);
       },
@@ -849,9 +895,9 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
         if (p) captureSpawn(p); // spawn = respawn
       }
       const before = vitals.health;
-      vitals = tickVitals(vitals, dt);
+      vitals = tickVitals(vitals, dt, maxHealthEff);
       if (vitals.health !== before) {
-        const frac = vitals.health / PLAYER_MAX_HEALTH;
+        const frac = vitals.health / maxHealthEff;
         survivalBar.setHealth(frac);
         feel?.setLowHealth(frac > 0 && frac <= LOW_HEALTH_FRACTION);
       }
@@ -865,6 +911,7 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
       survival = tickSurvival(survival, dt, {
         sprinting: horizSpeed > SPRINT_SPEED_THRESHOLD_MPS,
         hungerRateMult: rules.hungerRate,
+        maxEnergy: maxEnergyEff,
       });
       survivalBar.setStamina(survival.stamina);
       survivalBar.setHunger(survival.hunger);
