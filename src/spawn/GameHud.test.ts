@@ -123,4 +123,76 @@ describe("mountGameHud", () => {
     expect(hud.inventory.count("wood")).toBe(0);
     hud.dispose();
   });
+
+  it("mounts the objective tracker showing the first tutorial step", () => {
+    const hud = mountGameHud({ loc: createLocalizer("en"), registry: registry() });
+    expect(document.querySelector(".lw-objective-tracker")?.textContent).toContain(
+      "Harvest a resource",
+    );
+    hud.dispose();
+  });
+
+  it("recordProgress advances the tutorial chain, toasts completion, and unlocks tier 1 on craft", () => {
+    const hud = mountGameHud({ loc: createLocalizer("en"), registry: registry() });
+    hud.recordProgress("harvest");
+    expect(hud.progression.completedObjectives).toContain("tut-harvest");
+    expect(document.querySelector(".lw-objective-tracker")?.textContent).toContain("Craft something");
+
+    hud.recordProgress("craft");
+    expect(hud.progression.completedObjectives).toContain("tut-craft");
+    expect(document.querySelector(".lw-toast-region")?.textContent).toContain("Objective complete");
+    expect(document.querySelector(".lw-toast-region")?.textContent).toContain("Achievement unlocked");
+
+    // tier-1 recipes (e.g. ingot) are now unlocked in the live crafting screen
+    const openButton = document.querySelector<HTMLButtonElement>(".lw-inv-open-button");
+    openButton?.click();
+    const craftingTab = [...document.querySelectorAll("button")].find((b) => b.textContent === "Crafting");
+    craftingTab?.click();
+    expect(document.querySelector('[data-recipe-id="ingot"]')?.getAttribute("data-locked")).toBe("false");
+    hud.dispose();
+  });
+
+  it("eatSelected feeds the eat progression event", () => {
+    const hud = mountGameHud({ loc: createLocalizer("en"), registry: registry() });
+    hud.addLoot([{ itemId: "meat", count: 1 }]);
+    hud.eatSelected();
+    expect(hud.progression.completedObjectives).not.toContain("tut-eat"); // prereq chain not yet reached
+    expect(hud.progression.unlockedAchievements).toContain("first-eat");
+    hud.dispose();
+  });
+
+  it("shows the eat keyhint once, the first time food enters the inventory", () => {
+    const hud = mountGameHud({ loc: createLocalizer("en"), registry: registry() });
+    hud.addLoot([{ itemId: "meat", count: 1 }]);
+    expect(document.querySelectorAll(".lw-keyhint-prompt")).toHaveLength(1);
+    hud.addLoot([{ itemId: "berries", count: 1 }]);
+    expect(document.querySelectorAll(".lw-keyhint-prompt")).toHaveLength(1); // shown only once
+    hud.dispose();
+  });
+
+  it("maybeShowTameHint shows the tame keyhint once", () => {
+    const hud = mountGameHud({ loc: createLocalizer("en"), registry: registry() });
+    hud.maybeShowTameHint();
+    hud.maybeShowTameHint();
+    const prompts = [...document.querySelectorAll(".lw-keyhint-prompt")];
+    expect(prompts).toHaveLength(1);
+    expect(prompts[0]?.textContent).toContain("Feed");
+    hud.dispose();
+  });
+
+  it("achievements tab is available and reflects unlocked achievements", () => {
+    const hud = mountGameHud({ loc: createLocalizer("en"), registry: registry() });
+    hud.recordProgress("dig");
+    const openButton = document.querySelector<HTMLButtonElement>(".lw-inv-open-button");
+    openButton?.click();
+    const achievementsTab = [...document.querySelectorAll("button")].find(
+      (b) => b.textContent === "Achievements",
+    );
+    expect(achievementsTab).toBeTruthy();
+    achievementsTab?.click();
+    expect(document.querySelector('[data-achievement-id="first-dig"]')?.getAttribute("data-unlocked")).toBe(
+      "true",
+    );
+    hud.dispose();
+  });
 });

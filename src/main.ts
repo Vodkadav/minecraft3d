@@ -154,6 +154,7 @@ function mountMenu(hooks: LaasHooks): void {
         modifiedChunks: welcome.modifiedChunks,
         entities: welcome.entities,
         inventories: {},
+        progression: {},
         playerState: defaultPose,
       });
       container.remove();

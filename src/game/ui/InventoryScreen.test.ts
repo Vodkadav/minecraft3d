@@ -5,6 +5,7 @@ import { Inventory } from "../domain/inventory/Inventory";
 import { ItemRegistry } from "../domain/items/ItemRegistry";
 import { STARTER_ITEMS } from "../domain/items/starterItems";
 import { STARTER_RECIPES } from "../domain/crafting/starterRecipes";
+import { ACHIEVEMENTS } from "../domain/progression/Achievements";
 import { createLocalizer } from "./i18n/strings";
 import { mountInventoryScreen } from "./InventoryScreen";
 
@@ -133,6 +134,82 @@ describe("mountInventoryScreen", () => {
     craftBtn?.click();
 
     expect(screen.inventory.count("plank")).toBe(4);
+    screen.dispose();
+  });
+
+  it("hides the achievements tab when no achievements are provided", () => {
+    const screen = mountInventoryScreen({
+      loc: createLocalizer("en"),
+      registry: registry(),
+      recipes: STARTER_RECIPES,
+      unlockedTier: 1,
+    });
+    screen.open();
+    const tab = [...document.querySelectorAll("button")].find((b) => b.textContent === "Achievements");
+    expect(tab).toBeUndefined();
+    screen.dispose();
+  });
+
+  it("shows and switches to the achievements tab when provided", () => {
+    const screen = mountInventoryScreen({
+      loc: createLocalizer("en"),
+      registry: registry(),
+      recipes: STARTER_RECIPES,
+      unlockedTier: 1,
+      achievements: ACHIEVEMENTS,
+    });
+    screen.open();
+    const tab = [...document.querySelectorAll("button")].find((b) => b.textContent === "Achievements");
+    expect(tab).toBeTruthy();
+    tab?.click();
+    expect(document.querySelector(".lw-achievements-grid")).toBeTruthy();
+    screen.dispose();
+  });
+
+  it("setUnlockedTier and setUnlockedAchievements delegate to the child screens", () => {
+    const screen = mountInventoryScreen({
+      loc: createLocalizer("en"),
+      registry: registry(),
+      recipes: STARTER_RECIPES,
+      unlockedTier: 0,
+      achievements: ACHIEVEMENTS,
+    });
+    screen.open();
+    const craftingTab = [...document.querySelectorAll("button")].find((b) => b.textContent === "Crafting");
+    craftingTab?.click();
+    expect(document.querySelector('[data-recipe-id="ingot"]')?.getAttribute("data-locked")).toBe("true");
+    screen.setUnlockedTier(1);
+    expect(document.querySelector('[data-recipe-id="ingot"]')?.getAttribute("data-locked")).toBe("false");
+
+    const achievementsTab = [...document.querySelectorAll("button")].find(
+      (b) => b.textContent === "Achievements",
+    );
+    achievementsTab?.click();
+    screen.setUnlockedAchievements(["first-dig"]);
+    expect(document.querySelector('[data-achievement-id="first-dig"]')?.getAttribute("data-unlocked")).toBe(
+      "true",
+    );
+    screen.dispose();
+  });
+
+  it("fires onCraft when crafting inside the overlay", () => {
+    const onCraft = vi.fn();
+    const screen = mountInventoryScreen({
+      loc: createLocalizer("en"),
+      registry: registry(),
+      recipes: STARTER_RECIPES,
+      unlockedTier: 1,
+      onCraft,
+    });
+    const seeded = registry();
+    const inv = Inventory.empty(seeded, 27).add("wood", 2);
+    if (!isOk(inv)) throw new Error("setup");
+    screen.setInventory(inv.value);
+    screen.open();
+    const craftingTab = [...document.querySelectorAll("button")].find((b) => b.textContent === "Crafting");
+    craftingTab?.click();
+    document.querySelector('[data-recipe-id="planks"] button')?.dispatchEvent(new MouseEvent("click"));
+    expect(onCraft).toHaveBeenCalledTimes(1);
     screen.dispose();
   });
 

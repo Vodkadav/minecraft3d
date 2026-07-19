@@ -45,6 +45,9 @@ export interface WorldSaveData {
   readonly modifiedChunks: readonly ChunkDelta[];
   readonly entities: Readonly<Record<string, unknown>>;
   readonly inventories: Readonly<Record<string, unknown>>;
+  /** Per-owner progression blobs (Workstream 6) — same open-record shape as
+   *  `inventories`, serialized by `ProgressionPersistence`. */
+  readonly progression: Readonly<Record<string, unknown>>;
   readonly playerState: PlayerState;
 }
 

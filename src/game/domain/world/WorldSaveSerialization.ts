@@ -33,6 +33,7 @@ export interface WorldSaveMetadata {
   readonly chunkIndex: readonly ChunkIndexEntry[];
   readonly entities: Readonly<Record<string, unknown>>;
   readonly inventories: Readonly<Record<string, unknown>>;
+  readonly progression: Readonly<Record<string, unknown>>;
   readonly playerState: PlayerState;
 }
 
@@ -63,6 +64,7 @@ export function encodeWorldSave(save: WorldSaveData): EncodedWorldSave {
       chunkIndex: save.modifiedChunks.map((c) => ({ key: c.key, rev: c.rev })),
       entities: save.entities,
       inventories: save.inventories,
+      progression: save.progression,
       playerState: save.playerState,
     },
     blobs: save.modifiedChunks.map((c) => ({
@@ -107,6 +109,7 @@ export function decodeWorldSave(
     modifiedChunks,
     entities: metadata.entities,
     inventories: metadata.inventories,
+    progression: metadata.progression,
     playerState: metadata.playerState,
   });
 }

@@ -20,6 +20,7 @@ function aWorld(overrides: Partial<WorldSaveData> = {}): WorldSaveData {
     ],
     entities: { e1: { hp: 5 } },
     inventories: { p1: { slots: [] } },
+    progression: { p1: { completed: ["tut-harvest"] } },
     playerState: { position: [1, 64, -3], yaw: 0.5, pitch: -0.2 },
     ...overrides,
   };
