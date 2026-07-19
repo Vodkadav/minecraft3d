@@ -17,7 +17,15 @@ export type FeelEventId =
   | "place"
   | "tame"
   | "eat"
-  | "starve";
+  | "starve"
+  | "heal"
+  | "levelUp";
+
+/** Which floating-number theme (E2.4) a triggered event spawns, or `null` for
+ *  none — a sibling kind to the pre-existing damage-only number so the same
+ *  pooled renderer can theme heal (green) and XP (gold) numbers distinctly
+ *  from damage (red/amber-on-crit) without a second number system. */
+export type FeelNumberKind = "damage" | "heal" | "xp";
 
 export interface VignetteSpec {
   readonly kind: "hurt" | "heal";
@@ -37,8 +45,9 @@ export interface FeedbackBundle {
   /** Presentation-only time dip on impact, ms; caps rather than stacks. */
   readonly hitStopMs: number;
   readonly vignette: VignetteSpec | null;
-  /** Spawns a floating number at the event's world position (value from combat). */
-  readonly damageNumber: boolean;
+  /** Spawns a themed floating number at the event's world position (value
+   *  from the caller), or `null` for no number. */
+  readonly numberKind: FeelNumberKind | null;
   /** Impact-particle burst id, or null for no burst. */
   readonly particleBurst: string | null;
   readonly rumble: RumbleSpec | null;
@@ -52,7 +61,7 @@ export const FEEL_EVENTS = {
     shakeTrauma: 0.18,
     hitStopMs: 40,
     vignette: null,
-    damageNumber: true,
+    numberKind: "damage",
     particleBurst: "hit",
     rumble: { intensity: 0.35, durationMs: 80 },
   },
@@ -60,7 +69,7 @@ export const FEEL_EVENTS = {
     shakeTrauma: 0.35,
     hitStopMs: 90,
     vignette: null,
-    damageNumber: true,
+    numberKind: "damage",
     particleBurst: "hit",
     rumble: { intensity: 0.6, durationMs: 140 },
   },
@@ -68,7 +77,7 @@ export const FEEL_EVENTS = {
     shakeTrauma: 0.3,
     hitStopMs: 60,
     vignette: { kind: "hurt", intensity: 0.6 },
-    damageNumber: false,
+    numberKind: null,
     particleBurst: null,
     rumble: { intensity: 0.7, durationMs: 160 },
   },
@@ -76,7 +85,7 @@ export const FEEL_EVENTS = {
     shakeTrauma: 0.05,
     hitStopMs: 0,
     vignette: null,
-    damageNumber: false,
+    numberKind: null,
     particleBurst: "harvest",
     rumble: { intensity: 0.15, durationMs: 40 },
   },
@@ -84,7 +93,7 @@ export const FEEL_EVENTS = {
     shakeTrauma: 0.06,
     hitStopMs: 0,
     vignette: null,
-    damageNumber: false,
+    numberKind: null,
     particleBurst: "dig",
     rumble: { intensity: 0.2, durationMs: 40 },
   },
@@ -92,7 +101,7 @@ export const FEEL_EVENTS = {
     shakeTrauma: 0.04,
     hitStopMs: 0,
     vignette: null,
-    damageNumber: false,
+    numberKind: null,
     particleBurst: "place",
     rumble: { intensity: 0.15, durationMs: 30 },
   },
@@ -100,7 +109,7 @@ export const FEEL_EVENTS = {
     shakeTrauma: 0,
     hitStopMs: 0,
     vignette: { kind: "heal", intensity: 0.4 },
-    damageNumber: false,
+    numberKind: null,
     particleBurst: "tame",
     rumble: { intensity: 0.25, durationMs: 60 },
   },
@@ -108,7 +117,7 @@ export const FEEL_EVENTS = {
     shakeTrauma: 0,
     hitStopMs: 0,
     vignette: { kind: "heal", intensity: 0.25 },
-    damageNumber: false,
+    numberKind: null,
     particleBurst: null,
     rumble: null,
   },
@@ -116,9 +125,29 @@ export const FEEL_EVENTS = {
     shakeTrauma: 0.05,
     hitStopMs: 0,
     vignette: { kind: "hurt", intensity: 0.35 },
-    damageNumber: false,
+    numberKind: null,
     particleBurst: null,
     rumble: { intensity: 0.15, durationMs: 60 },
+  },
+  // E2.4: heal/XP floating numbers reuse the same trigger/pooled-renderer
+  // seam as damage — no vignette/shake here since "eat"/regen already own
+  // the screen-level heal feedback; this event exists purely to carry a
+  // themed floating number at a caller-supplied world position + value.
+  heal: {
+    shakeTrauma: 0,
+    hitStopMs: 0,
+    vignette: null,
+    numberKind: "heal",
+    particleBurst: null,
+    rumble: null,
+  },
+  levelUp: {
+    shakeTrauma: 0.1,
+    hitStopMs: 0,
+    vignette: null,
+    numberKind: "xp",
+    particleBurst: null,
+    rumble: { intensity: 0.3, durationMs: 100 },
   },
 } as const satisfies Record<FeelEventId, FeedbackBundle>;
 

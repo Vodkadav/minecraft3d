@@ -730,6 +730,42 @@ ${THEME_CSS_VARS}
   border: 1px solid var(--lw-border);
   border-radius: var(--lw-radius-md);
   user-select: text;
+/* Combat meter panel (E2.5) — opt-in, L-toggled, OFF by default */
+.lw-combat-meter {
+  position: fixed;
+  bottom: var(--lw-space-4);
+  right: var(--lw-space-4);
+  z-index: 55;
+  min-width: 220px;
+  max-width: 300px;
+}
+.lw-combat-meter-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--lw-space-2);
+  margin-bottom: var(--lw-space-2);
+}
+.lw-combat-meter-title {
+  font-size: var(--lw-font-xs);
+  font-weight: 700;
+  color: var(--lw-fg-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.lw-combat-meter-empty {
+  color: var(--lw-fg-muted);
+  font-size: var(--lw-font-sm);
+}
+.lw-combat-meter-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--lw-space-2);
+  margin-top: var(--lw-space-2);
+  font-size: var(--lw-font-xs);
+  color: var(--lw-fg-muted);
+}
+
 /* Perf HUD (Workstream 9.2) — opt-in, F4-toggled, OFF by default */
 .lw-perf-hud {
   position: fixed;

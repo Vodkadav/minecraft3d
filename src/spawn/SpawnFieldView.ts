@@ -115,6 +115,11 @@ export interface SpawnFieldDeps {
   /** Workstream 6: kill/tame/harvest each also fan out here — feeds
    *  objectives/achievements/the tier curve (same threading as audio/feel). */
   onProgress?(event: ProgressionEventId): void;
+  /** E2.5: the local player's attack/hit/kill events also fan out here —
+   *  feeds the solo self damage meter's `CombatLog` fold (same threading as
+   *  audio/feel/progress; never routed through the intent path, this is
+   *  local presentation state only). */
+  onCombatEvent?(kind: "hitDealt" | "hitTaken" | "kill", amount: number): void;
   /** Called with the stacks gained from a kill/harvest (HUD hook). */
   onLoot?(stacks: readonly ItemStack[]): void;
   /** An aggressive creature bit the player (M6 player health). */
@@ -528,9 +533,9 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
     // deterministic crit roll (same shape as the loot roll below) — a
     // presentation flourish only, never affects the damage actually dealt
     const crit = hashUnitFloat(deps.seed, clockMs | 0, 0x6f10) < CRIT_CHANCE;
-    deps.feel?.trigger("attackHit", { worldPos: pos, damageValue: ATTACK_DAMAGE, crit });
+    deps.feel?.trigger("attackHit", { worldPos: pos, numberValue: ATTACK_DAMAGE, crit });
     if (!r.died) return false;
-    deps.feel?.trigger("kill", { worldPos: pos, damageValue: ATTACK_DAMAGE, crit });
+    deps.feel?.trigger("kill", { worldPos: pos, numberValue: ATTACK_DAMAGE, crit });
     const roll = hashUnitFloat(deps.seed, clockMs | 0, 0x6f00);
     grantLoot(lootFor(target.entity.species, roll));
     persistRemoved(target.entity.id);
@@ -606,8 +611,16 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
       const target = pickTarget(creatures);
       if (!target || target.dying !== null) return;
       deps.onAttack?.();
-      if (remote) onInteractIntent?.("attack", target.entity.id);
-      else if (resolveAttack(target)) deps.onProgress?.("kill");
+      if (remote) {
+        onInteractIntent?.("attack", target.entity.id);
+      } else {
+        const died = resolveAttack(target);
+        deps.onCombatEvent?.("hitDealt", ATTACK_DAMAGE);
+        if (died) {
+          deps.onCombatEvent?.("kill", ATTACK_DAMAGE);
+          deps.onProgress?.("kill");
+        }
+      }
     } else if (ev.code === "KeyG") {
       // G = mount/dismount (R belongs to the placement tool's rotate)
       if (ridingId !== null) {
@@ -718,7 +731,8 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
         if (damage > 0) {
           deps.onPlayerHit?.(damage);
           deps.audio?.play("hurt");
-          deps.feel?.trigger("takeDamage", { damageValue: damage });
+          deps.feel?.trigger("takeDamage", { numberValue: damage });
+          deps.onCombatEvent?.("hitTaken", damage);
         }
       }
       const behavior = decideBehavior(

@@ -1,13 +1,17 @@
 /**
- * Floating damage numbers (Workstream 2.4) — pooled DOM elements, projected
- * world-space -> screen-space once at spawn time (Vector3.project), then a
- * pure CSS/WAAPI rise-and-fade animation carries them (no per-frame
+ * Floating combat-text numbers (Workstream 2.4) — pooled DOM elements,
+ * projected world-space -> screen-space once at spawn time (Vector3.project),
+ * then a pure CSS/WAAPI rise-and-fade animation carries them (no per-frame
  * projection update, no per-frame allocation: the pool is pre-created and
- * reused). Crits render larger and in the theme's warning tone.
+ * reused). Crits render larger and in the theme's warning tone. E2.4 extends
+ * the original damage-only pool with heal (green) and XP (gold) themes,
+ * driven by `FeedbackBundle.numberKind` — one pooled renderer, additive
+ * per-kind styling, no second number system.
  */
 
 import { PerspectiveCamera, Vector3 } from "three";
 import { THEME } from "../game/ui/theme/tokens";
+import type { FeelNumberKind } from "../game/domain/feel/FeelEvents";
 
 const POOL_SIZE = 16;
 const RISE_PX = 60;
@@ -20,8 +24,14 @@ interface PoolSlot {
 
 export interface DamageNumbersHandle {
   /** Spawn a number at a world position; a no-op if the pool is fully busy
-   *  (budget-capped by design — a wall of numbers would be unreadable anyway). */
-  spawn(worldPos: readonly [number, number, number], value: number, crit: boolean): void;
+   *  (budget-capped by design — a wall of numbers would be unreadable anyway).
+   *  `kind` selects the theme (defaults to "damage" for pre-E2.4 call sites). */
+  spawn(
+    worldPos: readonly [number, number, number],
+    value: number,
+    crit: boolean,
+    kind?: FeelNumberKind,
+  ): void;
   dispose(): void;
 }
 
@@ -47,7 +57,7 @@ export function mountDamageNumbers(
   });
 
   return {
-    spawn(worldPos, value, crit): void {
+    spawn(worldPos, value, crit, kind = "damage"): void {
       const slot = pool.find((s) => !s.busy);
       if (!slot) return; // pool exhausted — budget cap, skip silently
       const rect = canvas.getBoundingClientRect();
@@ -58,11 +68,14 @@ export function mountDamageNumbers(
 
       slot.busy = true;
       const el = slot.el;
-      el.textContent = String(Math.round(value));
+      const rounded = Math.round(value);
+      // heal/xp read as gains ("+N"); damage stays bare (the pre-existing look)
+      el.textContent = kind === "damage" ? String(rounded) : `+${rounded}`;
       el.style.left = `${x}px`;
       el.style.top = `${y}px`;
       el.style.fontSize = crit ? "1.5rem" : "1rem";
-      el.style.color = crit ? THEME.color.warning : THEME.color.danger;
+      el.style.color =
+        kind === "heal" ? THEME.color.success : kind === "xp" ? THEME.color.accent : crit ? THEME.color.warning : THEME.color.danger;
       el.style.opacity = "1";
       el.style.transform = "translate(-50%, -50%)";
 
