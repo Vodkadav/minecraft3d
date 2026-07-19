@@ -36,6 +36,11 @@ export interface Settings {
   /** Multiplier for UI text; TEXT_SCALE_MIN..TEXT_SCALE_MAX. */
   readonly textScale: number;
   readonly reducedMotion: boolean;
+  /** Mixer bus volumes, each 0..1 (Workstream 1.4). */
+  readonly masterVolume: number;
+  readonly musicVolume: number;
+  readonly sfxVolume: number;
+  readonly ambientVolume: number;
 }
 
 /** Mutable/plain shape accepted by the factory before validation. */
@@ -47,13 +52,18 @@ export type SettingsInput = {
   readonly highContrast: boolean;
   readonly textScale: number;
   readonly reducedMotion: boolean;
+  readonly masterVolume: number;
+  readonly musicVolume: number;
+  readonly sfxVolume: number;
+  readonly ambientVolume: number;
 };
 
 export type SettingsError =
   | { readonly kind: "UnknownPreset"; readonly preset: string }
   | { readonly kind: "DensityOutOfRange"; readonly value: number }
   | { readonly kind: "TextScaleOutOfRange"; readonly value: number }
-  | { readonly kind: "BoundaryRadiusOutOfRange"; readonly value: number };
+  | { readonly kind: "BoundaryRadiusOutOfRange"; readonly value: number }
+  | { readonly kind: "VolumeOutOfRange"; readonly bus: string; readonly value: number };
 
 function isGraphicsPreset(value: string): value is GraphicsPreset {
   return (GRAPHICS_PRESETS as readonly string[]).includes(value);
@@ -80,6 +90,17 @@ export function makeSettings(input: SettingsInput): Result<Settings, SettingsErr
   if (!Number.isFinite(input.boundaryRadius) || input.boundaryRadius <= 0) {
     return err({ kind: "BoundaryRadiusOutOfRange", value: input.boundaryRadius });
   }
+  const volumes: readonly [string, number][] = [
+    ["master", input.masterVolume],
+    ["music", input.musicVolume],
+    ["sfx", input.sfxVolume],
+    ["ambient", input.ambientVolume],
+  ];
+  for (const [bus, value] of volumes) {
+    if (!Number.isFinite(value) || value < 0 || value > 1) {
+      return err({ kind: "VolumeOutOfRange", bus, value });
+    }
+  }
   return ok({
     graphicsPreset: input.graphicsPreset,
     animalDensity: input.animalDensity,
@@ -88,6 +109,10 @@ export function makeSettings(input: SettingsInput): Result<Settings, SettingsErr
     highContrast: input.highContrast,
     textScale: input.textScale,
     reducedMotion: input.reducedMotion,
+    masterVolume: input.masterVolume,
+    musicVolume: input.musicVolume,
+    sfxVolume: input.sfxVolume,
+    ambientVolume: input.ambientVolume,
   });
 }
 
@@ -100,6 +125,10 @@ export function defaultSettings(): Settings {
     highContrast: false,
     textScale: 1,
     reducedMotion: false,
+    masterVolume: 0.8,
+    musicVolume: 0.6,
+    sfxVolume: 0.8,
+    ambientVolume: 0.6,
   };
 }
 

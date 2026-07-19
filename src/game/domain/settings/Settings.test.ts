@@ -17,6 +17,10 @@ function validInput(overrides: Partial<SettingsInput> = {}): SettingsInput {
     highContrast: false,
     textScale: 1,
     reducedMotion: false,
+    masterVolume: 0.8,
+    musicVolume: 0.6,
+    sfxVolume: 0.8,
+    ambientVolume: 0.6,
     ...overrides,
   };
 }
@@ -96,5 +100,29 @@ describe("Settings", () => {
     const r = updateSettings(defaultSettings(), { animalDensity: 2 });
     expect(isErr(r)).toBe(true);
     if (isErr(r)) expect(r.error.kind).toBe("DensityOutOfRange");
+  });
+
+  it("rejects a bus volume below 0", () => {
+    const r = makeSettings(validInput({ musicVolume: -0.1 }));
+    expect(isErr(r)).toBe(true);
+    if (isErr(r)) {
+      expect(r.error.kind).toBe("VolumeOutOfRange");
+      if (r.error.kind === "VolumeOutOfRange") expect(r.error.bus).toBe("music");
+    }
+  });
+
+  it("rejects a bus volume above 1", () => {
+    const r = makeSettings(validInput({ sfxVolume: 1.5 }));
+    expect(isErr(r)).toBe(true);
+    if (isErr(r)) expect(r.error.kind).toBe("VolumeOutOfRange");
+  });
+
+  it("updates a single bus volume while keeping the rest", () => {
+    const r = updateSettings(defaultSettings(), { masterVolume: 0.2 });
+    expect(isOk(r)).toBe(true);
+    if (isOk(r)) {
+      expect(r.value.masterVolume).toBe(0.2);
+      expect(r.value.musicVolume).toBe(defaultSettings().musicVolume);
+    }
   });
 });

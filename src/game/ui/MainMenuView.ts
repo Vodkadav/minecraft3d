@@ -8,6 +8,8 @@
 import type { Localizer } from "../application/i18n/Localizer";
 import type { MainMenuController } from "../application/MainMenuController";
 import type { LoopbackSession } from "../application/LoopbackSession";
+import type { AudioPort } from "../application/ports/AudioPort";
+import { wireButtonSound } from "./audioUi";
 import { injectStyles } from "./styles";
 
 const SEED_MAX = 2 ** 31;
@@ -16,6 +18,7 @@ export function MainMenuView(
   controller: MainMenuController,
   loc: Localizer,
   onSession?: (session: LoopbackSession) => void,
+  audio?: AudioPort,
 ): HTMLElement {
   const doc = document;
   injectStyles(doc);
@@ -54,5 +57,6 @@ export function MainMenuView(
 
   nav.append(solo, online, settings);
   root.appendChild(nav);
+  for (const btn of [solo, online, settings]) wireButtonSound(btn, audio);
   return root;
 }

@@ -62,6 +62,7 @@ import {
 import { feed, startTaming, TAMING_RULES, type TamingState } from "../game/domain/taming/Taming";
 import { hashUnitFloat } from "../game/domain/rng/hash";
 import type { ItemStack } from "../game/domain/inventory/Inventory";
+import type { AudioPort } from "../game/application/ports/AudioPort";
 import { nearestWithin, SPECIES_VISUAL, validGround, type SpawnGround } from "./SpawnPlacement";
 
 /** Seconds between proximity re-steps when no cell is crossed. */
@@ -97,6 +98,9 @@ export interface SpawnFieldDeps {
   readonly dom?: HTMLElement;
   /** World-save entities seam (removed ids + loot persistence). */
   readonly save?: SpawnSave;
+  /** Workstream 1.6: hit/harvest/tame play here; a bite on the player plays
+   *  the 2D "hurt" sound (no position — it's about the player, not a place). */
+  readonly audio?: AudioPort;
   /** Called with the stacks gained from a kill/harvest (HUD hook). */
   onLoot?(stacks: readonly ItemStack[]): void;
   /** An aggressive creature bit the player (M6 player health). */
@@ -394,6 +398,9 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
     if (target.dying !== null) return;
     const r = applyDamage(target.combat, ATTACK_DAMAGE);
     target.combat = r.state;
+    deps.audio?.play("hit", {
+      position: [target.obj.position.x, target.obj.position.y, target.obj.position.z],
+    });
     if (!r.died) return;
     const roll = hashUnitFloat(deps.seed, clockMs | 0, 0x6f00);
     grantLoot(lootFor(target.entity.species, roll));
@@ -416,11 +423,17 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
     if (r.becameTamed) {
       tamed.add(target.entity.id);
       deps.save?.setEntity("taming.tamed", [...tamed]);
+      deps.audio?.play("tame", {
+        position: [target.obj.position.x, target.obj.position.y, target.obj.position.z],
+      });
     }
   }
 
   function resolveHarvest(target: { entity: SpawnEntity; obj: Object3D }): void {
     grantLoot(NODE_YIELD[target.entity.species] ?? []);
+    deps.audio?.play("harvest", {
+      position: [target.obj.position.x, target.obj.position.y, target.obj.position.z],
+    });
     remove(target.entity.id);
     persistRemoved(target.entity.id);
   }
@@ -550,6 +563,7 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
       ) {
         c.lastBiteMs = clockMs;
         deps.onPlayerHit?.(stats.damage);
+        deps.audio?.play("hurt");
       }
       const behavior = decideBehavior(
         c.entity.species,

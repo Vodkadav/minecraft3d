@@ -12,9 +12,11 @@
 import type { Localizer } from "../application/i18n/Localizer";
 import type { LobbyController } from "../application/LobbyController";
 import type { LoopbackSession } from "../application/LoopbackSession";
+import type { AudioPort } from "../application/ports/AudioPort";
 import { isValidRoomCode } from "../domain/net/RoomCode";
 import type { WorldSummary } from "../domain/world/WorldSaveData";
 import type { SeedEntry } from "../domain/seedvault/SeedVault";
+import { wireButtonSound } from "./audioUi";
 import { injectStyles } from "./styles";
 
 export function LobbyView(
@@ -23,6 +25,7 @@ export function LobbyView(
   onSession?: (session: LoopbackSession) => void,
   onBack?: () => void,
   onJoinByCode?: (code: string) => Promise<boolean>,
+  audio?: AudioPort,
 ): HTMLElement {
   const doc = document;
   injectStyles(doc);
@@ -78,6 +81,7 @@ export function LobbyView(
       });
     });
 
+    wireButtonSound(joinByCode, audio);
     row.append(label, input, joinByCode);
     root.append(row, codeStatus);
   }
@@ -113,6 +117,8 @@ export function LobbyView(
 
   footer.append(back, host);
   root.appendChild(footer);
+  wireButtonSound(back, audio);
+  wireButtonSound(host, audio);
 
   function renderWorlds(worlds: readonly WorldSummary[]): void {
     list.replaceChildren();
@@ -139,6 +145,7 @@ export function LobbyView(
         });
       });
       row.append(name, join);
+      wireButtonSound(join, audio);
       list.appendChild(row);
     }
   }
@@ -160,6 +167,7 @@ export function LobbyView(
       use.className = "laas-seed-option";
       use.textContent = loc.t("lobby.seed.use", { name: seed.name });
       use.addEventListener("click", () => void hostWith(seed.id));
+      wireButtonSound(use, audio);
       picker.appendChild(use);
     }
   }
