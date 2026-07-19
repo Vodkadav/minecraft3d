@@ -21,6 +21,7 @@ import type { Object3D, PerspectiveCamera } from 'three';
 import { BoxGeometry, Color, Group, Mesh, Raycaster, Vector2, Vector3 } from 'three';
 import { MeshBasicNodeMaterial, MeshStandardNodeMaterial } from 'three/webgpu';
 import type { AudioPort } from '../../game/application/ports/AudioPort';
+import type { FeelPort } from '../../game/application/ports/FeelPort';
 import {
   commit,
   resolvePlacement,
@@ -65,6 +66,7 @@ export interface PlacementToolDeps {
   parent: Object3D;
   save?: PlacementSave;
   audio?: AudioPort;
+  feel?: FeelPort;
 }
 
 export interface PlacementToolHandle {
@@ -75,7 +77,7 @@ export interface PlacementToolHandle {
 }
 
 export function attachPlacementTool(deps: PlacementToolDeps): PlacementToolHandle {
-  const { terrain, camera, dom, parent, save, audio } = deps;
+  const { terrain, camera, dom, parent, save, audio, feel } = deps;
   const sdf = (x: number, y: number, z: number): number => terrain.sdfAtWorld(x, y, z);
 
   const registry = PlacedPieceRegistry.deserialize(save?.load());
@@ -130,6 +132,7 @@ export function attachPlacementTool(deps: PlacementToolDeps): PlacementToolHandl
     addSolidMesh(registry.add(cmd));
     persist();
     audio?.play('place', { position: cmd.center });
+    feel?.trigger('place', { worldPos: cmd.center });
   };
 
   const raycaster = new Raycaster(undefined, undefined, 0, REACH_M);
