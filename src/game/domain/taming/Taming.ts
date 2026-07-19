@@ -18,6 +18,10 @@ export interface TamingRules {
 export const TAMING_RULES: Readonly<Record<string, TamingRules>> = {
   deer: { foodItemId: "berries", feedsRequired: 3, cooldownMs: 5000 },
   wolf: { foodItemId: "meat", feedsRequired: 4, cooldownMs: 8000 },
+  // Workstream 7.2: elk is a tameable ride like deer; fox/boar/rabbit are
+  // left untameable (no entry) — a small, timid, or aggressive wild animal,
+  // not every creature needs to be a mount.
+  elk: { foodItemId: "carrot", feedsRequired: 4, cooldownMs: 6000 },
 };
 
 export type TamingPhase = "wild" | "tamed";

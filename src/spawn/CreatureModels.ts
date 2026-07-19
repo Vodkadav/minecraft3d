@@ -25,6 +25,13 @@ interface SpeciesModel {
 const MODEL_SPECS: Readonly<Record<string, { file: string; heightM: number }>> = {
   deer: { file: "assets/models/animals/Deer.gltf", heightM: 1.6 },
   wolf: { file: "assets/models/animals/Wolf.gltf", heightM: 0.9 },
+  // Workstream 7.2: reuse the two CC0 Quaternius rigs as scale variants
+  // (provenance unchanged — see CREDITS.md) rather than bundling new binary
+  // assets. "elk" is a bigger deer, "fox" a smaller wolf; boar/rabbit have no
+  // rig and fall back to SPECIES_VISUAL primitives (CreatureModelLibrary.has()
+  // gates it automatically).
+  elk: { file: "assets/models/animals/Deer.gltf", heightM: 2.0 },
+  fox: { file: "assets/models/animals/Wolf.gltf", heightM: 0.5 },
 };
 
 const BEHAVIOR_CLIP: Readonly<Record<Behavior, string>> = {

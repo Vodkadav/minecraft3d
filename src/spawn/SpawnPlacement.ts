@@ -65,4 +65,24 @@ export const SPECIES_VISUAL: Readonly<Record<string, SpeciesVisual>> = {
   "berry-bush": { shape: "sphere", color: 0x7a2b3c, size: 0.7, lift: 0.45 },
   deer: { shape: "cone", color: 0xb98a5a, size: 1.4, lift: 0.7 },
   wolf: { shape: "cone", color: 0x5d4633, size: 1.0, lift: 0.5 },
+
+  // ---- Workstream 7.2/7.4 fallback primitives (used until/unless a rigged
+  // model is loaded for the species — CreatureModelLibrary.has() gates it) ----
+  elk: { shape: "cone", color: 0x8a6a45, size: 1.7, lift: 0.85 },
+  fox: { shape: "cone", color: 0xc5622a, size: 0.7, lift: 0.35 },
+  boar: { shape: "cone", color: 0x4a3728, size: 1.1, lift: 0.5 },
+  rabbit: { shape: "sphere", color: 0xcfc6b8, size: 0.4, lift: 0.2 },
+
+  // resource nodes (7.4)
+  "clay-deposit": { shape: "box", color: 0x9a5a3c, size: 0.8, lift: 0.3 },
+  "sand-dune": { shape: "box", color: 0xdccb8a, size: 0.9, lift: 0.3 },
+  "flint-node": { shape: "box", color: 0x555555, size: 0.6, lift: 0.25 },
+  "coal-node": { shape: "box", color: 0x222222, size: 0.8, lift: 0.3 },
+  "gold-vein": { shape: "box", color: 0xd4af37, size: 0.7, lift: 0.3 },
+  "copper-vein": { shape: "box", color: 0xb87333, size: 0.7, lift: 0.3 },
+  "reed-patch": { shape: "cone", color: 0x6a9c4a, size: 0.6, lift: 0.3 },
+  "wheat-patch": { shape: "sphere", color: 0xe0c14a, size: 0.5, lift: 0.25 },
+  "carrot-patch": { shape: "sphere", color: 0xe07a2a, size: 0.45, lift: 0.22 },
+  "potato-patch": { shape: "sphere", color: 0xc9a86a, size: 0.5, lift: 0.25 },
+  "fishing-spot": { shape: "sphere", color: 0x3a7ca5, size: 0.6, lift: 0.1 },
 };

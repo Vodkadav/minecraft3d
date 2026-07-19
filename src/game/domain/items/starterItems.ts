@@ -34,4 +34,118 @@ export const STARTER_ITEMS: readonly ItemDefinition[] = [
     food: { hungerRestore: 15, healthRestore: 0 },
   },
   { id: "hide", displayName: "Hide", maxStackSize: 64, tags: ["natural", "material"], tier: 0 },
+
+  // ---- Workstream 7.1 content-depth expansion (wood -> stone -> metal -> refined) ----
+  // Natural/gatherable roots (tier reflects the progression band they unlock in, not
+  // rarity) — every crafted item below is reachable from one of these via a recipe
+  // chain (asserted by RecipeGraph.test.ts).
+  { id: "fiber", displayName: "Plant Fiber", maxStackSize: 64, tags: ["natural"], tier: 0 },
+  { id: "wool", displayName: "Wool", maxStackSize: 64, tags: ["natural", "material"], tier: 0 },
+  {
+    id: "fish",
+    displayName: "Raw Fish",
+    maxStackSize: 64,
+    tags: ["natural", "food"],
+    tier: 0,
+    food: { hungerRestore: 10, healthRestore: 0 },
+  },
+  { id: "wheat-seed", displayName: "Wheat Seeds", maxStackSize: 64, tags: ["natural", "seed"], tier: 0 },
+  { id: "carrot-seed", displayName: "Carrot Seeds", maxStackSize: 64, tags: ["natural", "seed"], tier: 0 },
+  { id: "potato-seed", displayName: "Potato Seeds", maxStackSize: 64, tags: ["natural", "seed"], tier: 0 },
+  {
+    id: "wheat",
+    displayName: "Wheat",
+    maxStackSize: 64,
+    tags: ["natural", "crop", "food"],
+    tier: 0,
+    food: { hungerRestore: 5, healthRestore: 0 },
+  },
+  {
+    id: "carrot",
+    displayName: "Carrot",
+    maxStackSize: 64,
+    tags: ["natural", "crop", "food"],
+    tier: 0,
+    food: { hungerRestore: 8, healthRestore: 0 },
+  },
+  {
+    id: "potato",
+    displayName: "Potato",
+    maxStackSize: 64,
+    tags: ["natural", "crop", "food"],
+    tier: 0,
+    food: { hungerRestore: 6, healthRestore: 0 },
+  },
+  { id: "clay", displayName: "Clay", maxStackSize: 64, tags: ["natural"], tier: 1 },
+  { id: "sand", displayName: "Sand", maxStackSize: 64, tags: ["natural"], tier: 1 },
+  { id: "flint", displayName: "Flint", maxStackSize: 64, tags: ["natural"], tier: 1 },
+  { id: "feather", displayName: "Feather", maxStackSize: 64, tags: ["natural", "material"], tier: 0 },
+  { id: "coal", displayName: "Coal", maxStackSize: 64, tags: ["natural", "smeltable"], tier: 1 },
+  { id: "gold-ore", displayName: "Gold Ore", maxStackSize: 64, tags: ["natural", "smeltable"], tier: 2 },
+  { id: "copper-ore", displayName: "Copper Ore", maxStackSize: 64, tags: ["natural", "smeltable"], tier: 2 },
+
+  // Crafted — wood/tier0
+  { id: "rope", displayName: "Rope", maxStackSize: 64, tags: ["crafted"], tier: 0 },
+  { id: "cloth", displayName: "Cloth", maxStackSize: 64, tags: ["crafted"], tier: 0 },
+  { id: "charcoal", displayName: "Charcoal", maxStackSize: 64, tags: ["crafted", "smeltable"], tier: 0 },
+  { id: "torch", displayName: "Torch", maxStackSize: 64, tags: ["crafted", "placeable", "light"], tier: 0 },
+  {
+    id: "cooked-meat",
+    displayName: "Cooked Meat",
+    maxStackSize: 64,
+    tags: ["crafted", "food"],
+    tier: 0,
+    food: { hungerRestore: 35, healthRestore: 8 },
+  },
+  {
+    id: "cooked-fish",
+    displayName: "Cooked Fish",
+    maxStackSize: 64,
+    tags: ["crafted", "food"],
+    tier: 0,
+    food: { hungerRestore: 30, healthRestore: 4 },
+  },
+  {
+    id: "bread",
+    displayName: "Bread",
+    maxStackSize: 64,
+    tags: ["crafted", "food"],
+    tier: 0,
+    food: { hungerRestore: 25, healthRestore: 0 },
+  },
+  {
+    id: "baked-potato",
+    displayName: "Baked Potato",
+    maxStackSize: 64,
+    tags: ["crafted", "food"],
+    tier: 0,
+    food: { hungerRestore: 22, healthRestore: 0 },
+  },
+
+  // Crafted — stone/tier1
+  { id: "stone-brick", displayName: "Stone Brick", maxStackSize: 64, tags: ["crafted"], tier: 1 },
+  { id: "stone-axe", displayName: "Stone Axe", maxStackSize: 1, tags: ["tool"], tier: 1 },
+  { id: "stone-pickaxe", displayName: "Stone Pickaxe", maxStackSize: 1, tags: ["tool"], tier: 1 },
+
+  // Crafted — metal/tier2
+  { id: "gold-ingot", displayName: "Gold Ingot", maxStackSize: 64, tags: ["crafted", "metal"], tier: 2 },
+  { id: "copper-ingot", displayName: "Copper Ingot", maxStackSize: 64, tags: ["crafted", "metal"], tier: 2 },
+  { id: "nails", displayName: "Nails", maxStackSize: 64, tags: ["crafted", "metal"], tier: 2 },
+  { id: "iron-sword", displayName: "Iron Sword", maxStackSize: 1, tags: ["tool", "weapon"], tier: 2 },
+  { id: "iron-axe", displayName: "Iron Axe", maxStackSize: 1, tags: ["tool"], tier: 2 },
+  { id: "iron-hoe", displayName: "Iron Hoe", maxStackSize: 1, tags: ["tool"], tier: 2 },
+  { id: "brick", displayName: "Brick", maxStackSize: 64, tags: ["crafted"], tier: 2 },
+  {
+    id: "lantern",
+    displayName: "Lantern",
+    maxStackSize: 64,
+    tags: ["crafted", "placeable", "light"],
+    tier: 2,
+  },
+
+  // Crafted — refined/tier3
+  { id: "steel-ingot", displayName: "Steel Ingot", maxStackSize: 64, tags: ["crafted", "metal"], tier: 3 },
+  { id: "steel-sword", displayName: "Steel Sword", maxStackSize: 1, tags: ["tool", "weapon"], tier: 3 },
+  { id: "steel-pickaxe", displayName: "Steel Pickaxe", maxStackSize: 1, tags: ["tool"], tier: 3 },
+  { id: "glass", displayName: "Glass", maxStackSize: 64, tags: ["crafted"], tier: 3 },
 ];

@@ -32,6 +32,25 @@ export const SPAWN_SPECIES: readonly SpawnSpecies[] = [
   { id: "berry-bush", kind: "node", maxPerCell: 2, weight: 0.4 },
   { id: "deer", kind: "creature", maxPerCell: 1, weight: 0.35 },
   { id: "wolf", kind: "creature", maxPerCell: 1, weight: 0.2 },
+
+  // ---- Workstream 7.2/7.4 content-depth expansion ----
+  { id: "elk", kind: "creature", maxPerCell: 1, weight: 0.15 },
+  { id: "fox", kind: "creature", maxPerCell: 1, weight: 0.25 },
+  { id: "boar", kind: "creature", maxPerCell: 1, weight: 0.15 },
+  { id: "rabbit", kind: "creature", maxPerCell: 2, weight: 0.3 },
+
+  // resource nodes (7.4 — one per new gatherable so every item is obtainable)
+  { id: "clay-deposit", kind: "node", maxPerCell: 1, weight: 0.3 },
+  { id: "sand-dune", kind: "node", maxPerCell: 1, weight: 0.3 },
+  { id: "flint-node", kind: "node", maxPerCell: 1, weight: 0.3 },
+  { id: "coal-node", kind: "node", maxPerCell: 1, weight: 0.25 },
+  { id: "gold-vein", kind: "node", maxPerCell: 1, weight: 0.1 },
+  { id: "copper-vein", kind: "node", maxPerCell: 1, weight: 0.15 },
+  { id: "reed-patch", kind: "node", maxPerCell: 2, weight: 0.3 },
+  { id: "wheat-patch", kind: "node", maxPerCell: 1, weight: 0.25 },
+  { id: "carrot-patch", kind: "node", maxPerCell: 1, weight: 0.2 },
+  { id: "potato-patch", kind: "node", maxPerCell: 1, weight: 0.2 },
+  { id: "fishing-spot", kind: "node", maxPerCell: 1, weight: 0.2 },
 ];
 
 /**
@@ -42,6 +61,17 @@ export const SPAWN_SPECIES: readonly SpawnSpecies[] = [
 export const NODE_YIELD: Readonly<Record<string, readonly { itemId: string; count: number }[]>> = {
   "stone-node": [{ itemId: "stone", count: 2 }],
   "berry-bush": [{ itemId: "berries", count: 2 }],
+  "clay-deposit": [{ itemId: "clay", count: 2 }],
+  "sand-dune": [{ itemId: "sand", count: 3 }],
+  "flint-node": [{ itemId: "flint", count: 1 }],
+  "coal-node": [{ itemId: "coal", count: 2 }],
+  "gold-vein": [{ itemId: "gold-ore", count: 1 }],
+  "copper-vein": [{ itemId: "copper-ore", count: 2 }],
+  "reed-patch": [{ itemId: "fiber", count: 2 }],
+  "wheat-patch": [{ itemId: "wheat-seed", count: 2 }],
+  "carrot-patch": [{ itemId: "carrot-seed", count: 2 }],
+  "potato-patch": [{ itemId: "potato-seed", count: 2 }],
+  "fishing-spot": [{ itemId: "fish", count: 2 }],
 };
 
 export interface SpawnEntity {
