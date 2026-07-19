@@ -6,6 +6,7 @@ import type { LaasParams } from '../core/Params';
 import type { WorldSeed } from '../core/Seed';
 import type { AudioPort } from '../game/application/ports/AudioPort';
 import type { WorldSaveStore } from '../game/application/ports/WorldSaveStore';
+import type { ItemRegistry } from '../game/domain/items/ItemRegistry';
 import type { PlayerState } from '../game/domain/world/WorldSaveData';
 import type { SpawnFieldHandle } from '../spawn/SpawnFieldView';
 import type { PlaceableInteractionHandle } from '../voxel/placement/PlaceableInteractionTool';
@@ -28,6 +29,9 @@ export interface WorldLaunchBinding {
    *  S7b) — the net glue resolves joiner intents through it (host) or
    *  reconciles broadcast state through it (joiner). */
   placeables?: PlaceableInteractionHandle;
+  /** Set by the scene once the item catalogue loads — the M7 net glue's
+   *  HostSession needs it to be inventory-authoritative (E0.4). */
+  registry?: ItemRegistry;
 }
 
 export interface WorldContext {

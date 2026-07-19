@@ -10,7 +10,9 @@ import { isErr } from "../domain/Result";
 import type {
   CreatureEntity,
   InteractAction,
+  InventoryOp,
   PlaceableAction,
+  SerializedInventoryWire,
   WelcomeMsg,
   WorldEdit,
 } from "../domain/net/Protocol";
@@ -31,6 +33,11 @@ export interface JoinSessionHooks {
    *  — a joiner NEVER mutates placeable state locally; this is the only path
    *  a joiner's UI updates from. */
   onPlaceableState?(placeableId: string, state: unknown): void;
+  /** The host's resolved AUTHORITATIVE copy of THIS joiner's own inventory
+   *  (E0.4) — sent after join and after any inventoryOp/inventory-touching
+   *  placeableInteract. A joiner NEVER mutates its inventory locally; this
+   *  is the only path its inventory UI updates from. */
+  onInventoryState?(wire: SerializedInventoryWire): void;
 }
 
 export class JoinSession {
@@ -44,6 +51,10 @@ export class JoinSession {
     private readonly transport: NetTransport,
     playerName: string,
     hooks: JoinSessionHooks,
+    /** The joiner's own saved inventory (E0.4), sent once at join to seed the
+     *  host's authoritative copy. Omitted ⇒ the host seeds a fresh empty one
+     *  (matches a brand-new player's default boot state). */
+    initialInventory?: SerializedInventoryWire,
   ) {
     transport.onMessage((peerId, raw) => {
       const parsed = parseMessage(raw);
@@ -85,12 +96,15 @@ export class JoinSession {
         case "placeableState":
           hooks.onPlaceableState?.(msg.placeableId, msg.state);
           return;
+        case "inventoryState":
+          hooks.onInventoryState?.({ capacity: msg.capacity, slots: msg.slots });
+          return;
         default:
           // Joiner-intent kinds arriving at a joiner: not ours to handle.
           return;
       }
     });
-    transport.broadcast({ kind: "join", playerName });
+    transport.broadcast({ kind: "join", playerName, ...(initialInventory ? { inventory: initialInventory } : {}) });
   }
 
   sendPose(state: PlayerState): void {
@@ -116,5 +130,13 @@ export class JoinSession {
     count?: number,
   ): void {
     this.transport.broadcast({ kind: "placeableInteract", action, placeableId, itemId, count });
+  }
+
+  /** Direct manipulation of the SENDER's own authoritative inventory (E0.4)
+   *  — move/split/use reorg the sender's own slots; deposit/withdraw target
+   *  a placeable container. The host resolves it and echoes the real result
+   *  via `onInventoryState`; this session never mutates anything locally. */
+  sendInventoryOp(op: InventoryOp): void {
+    this.transport.broadcast({ kind: "inventoryOp", inventoryOp: op });
   }
 }

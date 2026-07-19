@@ -83,8 +83,14 @@ describe("attachHostNet", () => {
     const messages = inbox(joiner);
     joiner.broadcast({ kind: "join", playerName: "Alice" });
 
-    expect(messages).toHaveLength(1);
-    const welcome = messages[0] as { kind: string; seed: number; modifiedChunks: unknown[] };
+    // E0.4: join also draws a private inventoryState (the fresh authoritative
+    // copy) alongside the welcome snapshot.
+    expect(messages).toHaveLength(2);
+    const welcome = messages.find((m) => (m as { kind: string }).kind === "welcome") as {
+      kind: string;
+      seed: number;
+      modifiedChunks: unknown[];
+    };
     expect(welcome.kind).toBe("welcome");
     expect(welcome.seed).toBe(42);
     expect(welcome.modifiedChunks).toHaveLength(1);

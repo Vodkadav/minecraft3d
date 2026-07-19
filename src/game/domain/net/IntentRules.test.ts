@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
-import type { PlaceableInteractMsg } from "./Protocol";
+import type { InventoryOp, PlaceableInteractMsg } from "./Protocol";
 import type { PlayerState } from "../world/WorldSaveData";
 import {
   remoteAllowedPlaceableAction,
   validateDig,
+  validateInventoryOp,
   validatePlaceableInteract,
   validatePose,
 } from "./IntentRules";
@@ -107,9 +108,9 @@ describe("validatePlaceableInteract", () => {
 });
 
 describe("remoteAllowedPlaceableAction", () => {
-  it("allows only inventory-free actions over the wire", () => {
-    expect(remoteAllowedPlaceableAction("toggleDoor")).toBe(true);
+  it("allows every known placeable action over the wire (E0.4: host is inventory-authoritative)", () => {
     for (const action of [
+      "toggleDoor",
       "depositChest",
       "withdrawChest",
       "startCook",
@@ -117,7 +118,64 @@ describe("remoteAllowedPlaceableAction", () => {
       "plantCrop",
       "harvestCrop",
     ] as const) {
-      expect(remoteAllowedPlaceableAction(action)).toBe(false);
+      expect(remoteAllowedPlaceableAction(action)).toBe(true);
     }
+  });
+});
+
+describe("validateInventoryOp", () => {
+  const CAPACITY = 27;
+
+  it("accepts a move within capacity, distinct slots", () => {
+    expect(validateInventoryOp({ op: "move", from: 0, to: 1 }, CAPACITY)).toBe(true);
+  });
+
+  it("rejects a move to the same slot or out of range", () => {
+    expect(validateInventoryOp({ op: "move", from: 0, to: 0 }, CAPACITY)).toBe(false);
+    expect(validateInventoryOp({ op: "move", from: 0, to: CAPACITY }, CAPACITY)).toBe(false);
+    expect(validateInventoryOp({ op: "move", from: -1, to: 1 }, CAPACITY)).toBe(false);
+    expect(validateInventoryOp({ op: "move", from: CAPACITY, to: 1 }, CAPACITY)).toBe(false);
+  });
+
+  it("accepts a split with a positive count under the cap", () => {
+    expect(validateInventoryOp({ op: "split", from: 0, count: 5 }, CAPACITY)).toBe(true);
+    expect(validateInventoryOp({ op: "split", from: 0, count: 999 }, CAPACITY)).toBe(true);
+  });
+
+  it("rejects a split out of range or with a non-positive/oversized count", () => {
+    expect(validateInventoryOp({ op: "split", from: CAPACITY, count: 1 }, CAPACITY)).toBe(false);
+    expect(validateInventoryOp({ op: "split", from: 0, count: 0 }, CAPACITY)).toBe(false);
+    expect(validateInventoryOp({ op: "split", from: 0, count: 1000 }, CAPACITY)).toBe(false);
+  });
+
+  it("accepts use within capacity, rejects out of range", () => {
+    expect(validateInventoryOp({ op: "use", index: 0 }, CAPACITY)).toBe(true);
+    expect(validateInventoryOp({ op: "use", index: CAPACITY }, CAPACITY)).toBe(false);
+    expect(validateInventoryOp({ op: "use", index: -1 }, CAPACITY)).toBe(false);
+  });
+
+  it("accepts a well-formed deposit/withdraw", () => {
+    const deposit: InventoryOp = { op: "deposit", placeableId: "p:1", itemId: "wood", count: 4 };
+    const withdraw: InventoryOp = { op: "withdraw", placeableId: "p:1", itemId: "wood", count: 4 };
+    expect(validateInventoryOp(deposit, CAPACITY)).toBe(true);
+    expect(validateInventoryOp(withdraw, CAPACITY)).toBe(true);
+  });
+
+  it("rejects deposit/withdraw with an empty id or a non-positive/oversized count", () => {
+    expect(
+      validateInventoryOp({ op: "deposit", placeableId: "", itemId: "wood", count: 1 }, CAPACITY),
+    ).toBe(false);
+    expect(
+      validateInventoryOp({ op: "deposit", placeableId: "p:1", itemId: "", count: 1 }, CAPACITY),
+    ).toBe(false);
+    expect(
+      validateInventoryOp({ op: "withdraw", placeableId: "p:1", itemId: "wood", count: 0 }, CAPACITY),
+    ).toBe(false);
+    expect(
+      validateInventoryOp(
+        { op: "withdraw", placeableId: "p:1", itemId: "wood", count: 1000 },
+        CAPACITY,
+      ),
+    ).toBe(false);
   });
 });

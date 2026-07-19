@@ -92,14 +92,17 @@ export interface PlaceableInteractionHandle {
   onInteractIntent:
     | ((action: PlaceableAction, placeableId: string, itemId?: string, count?: number) => void)
     | null;
-  /** Host-side resolution — wired as `HostSessionHooks.onPlaceableInteract`. */
+  /** Host-side resolution — wired as `HostSessionHooks.onPlaceableInteract`.
+   *  Never grants into the host's own inventory (2026-07-19 SR finding 1.2
+   *  fix): the `grant`, if any, is returned so `HostSession` can credit the
+   *  SENDING peer's authoritative copy instead. */
   resolveHostIntent(
     action: PlaceableAction,
     placeableId: string,
     peerId: string,
     itemId?: string,
     count?: number,
-  ): unknown;
+  ): { state: unknown; grant?: { itemId: string; count: number } } | undefined;
   /** Joiner-side reconciliation — wired as `JoinSessionHooks.onPlaceableState`. */
   applyRemoteState(placeableId: string, state: unknown): void;
 }
@@ -171,15 +174,26 @@ export function attachPlaceableInteraction(deps: PlaceableInteractionDeps): Plac
 
   const roll = deps.roll ?? Math.random;
 
-  function applyOutcome(
-    piece: PlacedPiece,
-    outcome: { store: PlaceableStore; grant?: { itemId: string; count: number } },
-  ): void {
+  /** Applies the store/visual side of an outcome — shared by local (solo)
+   *  resolution and host-side remote resolution. Never grants an item to any
+   *  inventory itself (2026-07-19 SR finding 1.2 fix): a REMOTE outcome's
+   *  grant must reach the SENDING peer's authoritative inventory, which only
+   *  `HostSession` holds — see `resolveHostIntent` below. */
+  function applyOutcomeState(piece: PlacedPiece, outcome: { store: PlaceableStore }): void {
     store = outcome.store;
     persist();
     const record = getPlaceable(store, String(piece.id));
     if (record?.pieceId === 'door') applyDoorVisual(piece, record.state as DoorState);
     if (record?.pieceId === 'plot') syncPlotMarker(String(piece.id), piece, record.state as PlotState);
+  }
+
+  /** LOCAL (solo/host-local) resolution only — grants straight into the
+   *  acting player's own inventory via `deps.addLoot`. */
+  function applyOutcome(
+    piece: PlacedPiece,
+    outcome: { store: PlaceableStore; grant?: { itemId: string; count: number } },
+  ): void {
+    applyOutcomeState(piece, outcome);
     if (outcome.grant) deps.addLoot([outcome.grant]);
   }
 
@@ -336,7 +350,7 @@ export function attachPlaceableInteraction(deps: PlaceableInteractionDeps): Plac
     set onInteractIntent(fn) {
       onInteractIntent = fn;
     },
-    resolveHostIntent(action, placeableId, _peerId, itemId, count): unknown {
+    resolveHostIntent(action, placeableId, _peerId, itemId, count) {
       const piece = placement.listPieces().find((p) => String(p.id) === placeableId);
       if (!piece) return undefined;
       const outcome = resolvePlaceableInteract(store, action, placeableId, {
@@ -349,9 +363,12 @@ export function attachPlaceableInteraction(deps: PlaceableInteractionDeps): Plac
         ...(count !== undefined ? { count } : {}),
       });
       if (!outcome) return undefined;
-      applyOutcome(piece, outcome);
+      // remote-resolved outcomes never auto-grant into THIS (the host's own)
+      // inventory — HostSession credits the correct peer from `grant` below.
+      applyOutcomeState(piece, outcome);
       refreshOpenCampfire();
-      return outcome.store[placeableId]?.state;
+      const record = getPlaceable(store, placeableId);
+      return { state: record?.state, ...(outcome.grant ? { grant: outcome.grant } : {}) };
     },
     applyRemoteState(placeableId: string, state: unknown): void {
       const existing = getPlaceable(store, placeableId);

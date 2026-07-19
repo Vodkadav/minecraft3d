@@ -114,14 +114,15 @@ describe("JoinSession", () => {
       onWorldEdit: () => {},
       onPlaceableInteract: (action, placeableId, peerId, itemId, count) => {
         calls.push([action, placeableId, peerId, itemId, count]);
-        return { resolved: true };
+        return { state: { resolved: true } };
       },
     });
     const alice = new JoinSession(net.addPeer("alice"), "Alice", {});
 
     alice.sendPlaceableInteract("toggleDoor", "piece:1");
-    // 2026-07-19 security review: inventory-touching actions are gated off
-    // the wire until host-side inventory authority exists — dropped silently.
+    // this HostSession has no registry (E0.4 default: empty), so the debit
+    // step for depositChest fails closed — the hook is never reached, same
+    // observable outcome as the old wire-level gate, different reason now.
     alice.sendPlaceableInteract("depositChest", "piece:2", "wood", 4);
 
     expect(calls).toEqual([["toggleDoor", "piece:1", "alice", undefined, undefined]]);
@@ -131,7 +132,7 @@ describe("JoinSession", () => {
     const net = makeTransportNetwork();
     new HostSession(net.host, () => SNAPSHOT, {
       onWorldEdit: () => {},
-      onPlaceableInteract: () => ({ open: true }),
+      onPlaceableInteract: () => ({ state: { open: true } }),
     });
     const onPlaceableState = vi.fn();
     const alice = new JoinSession(net.addPeer("alice"), "Alice", { onPlaceableState });
@@ -169,7 +170,7 @@ describe("JoinSession", () => {
     const net = makeTransportNetwork();
     new HostSession(net.host, () => SNAPSHOT, {
       onWorldEdit: () => {},
-      onPlaceableInteract: () => ({ open: true }),
+      onPlaceableInteract: () => ({ state: { open: true } }),
     });
     const onWelcome = vi.fn();
     const onWorldEdit = vi.fn();
