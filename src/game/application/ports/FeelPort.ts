@@ -12,8 +12,9 @@ export interface FeelTriggerOptions {
   readonly worldPos?: readonly [number, number, number];
   /** Whether this hit was a critical — scales shake/hit-stop/rumble and the number's size. */
   readonly crit?: boolean;
-  /** The numeric value to show for a damage-number event. */
-  readonly damageValue?: number;
+  /** The numeric value to show for a floating-number event (damage/heal/xp —
+   *  themed per the event's `FeedbackBundle.numberKind`, E2.4). */
+  readonly numberValue?: number;
 }
 
 export interface FeelPort {

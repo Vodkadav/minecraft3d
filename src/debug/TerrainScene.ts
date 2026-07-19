@@ -72,6 +72,14 @@ import { STARTER_RECIPES } from '../game/domain/crafting/starterRecipes';
 import { isNight, MORNING_HOUR } from '../game/domain/time/DayNight';
 import { Crosshair } from '../game/ui/components/Crosshair';
 import { mountPerfHud } from '../game/ui/components/PerfHud';
+import { mountCombatMeterPanel } from '../game/ui/components/CombatMeterPanel';
+import {
+  LOCAL_PLAYER_SOURCE_ID,
+  emptyCombatLog,
+  foldCombatEvent,
+  type CombatLogEventKind,
+  type CombatLogState,
+} from '../game/domain/combat/CombatLog';
 import { createLocalizer } from '../game/ui/i18n/strings';
 import { LocalStorageSettingsStore } from '../game/infrastructure/persistence/LocalStorageSettingsStore';
 import { SettingsController } from '../game/application/SettingsController';
@@ -596,6 +604,21 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
     const itemsReg = ItemRegistry.create(STARTER_ITEMS);
     if (!isOk(itemsReg)) throw new Error(`bad starter item table: ${itemsReg.error.kind}`);
 
+    // E2.5: the solo self damage meter — hidden by default, "L"-toggled
+    // (CombatMeterPanel). `combatLog` folds the local player's own
+    // hit/heal/kill stream (never routed through the intent path — purely
+    // local presentation state, same posture as the perf HUD).
+    const meterPanel = mountCombatMeterPanel(loc);
+    let combatLog: CombatLogState = emptyCombatLog();
+    function recordCombatEvent(kind: CombatLogEventKind, amount: number): void {
+      combatLog = foldCombatEvent(combatLog, {
+        sourceId: LOCAL_PLAYER_SOURCE_ID,
+        kind,
+        amount,
+        atMs: performance.now(),
+      });
+    }
+
     // S7b: wire the tested-but-unwired InventoryPersistence/ProgressionPersistence
     // into the boot/save flow (closes the S4/S6 deferral). Only when there's a
     // real save store — dev/tooling boots with no OPFS support skip persistence
@@ -624,13 +647,30 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
       ...(loadedGameState?.keyhints ? { initialKeyhints: loadedGameState.keyhints } : {}),
       setInputEnabled: (on) => ctx.hooks.flyCamEnabled?.(on),
       onEat: (food) => {
+        const healedBefore = vitals.health;
         const r = eat(vitals, survival, food);
         vitals = r.vitals;
         survival = r.survival;
+        const healedAmount = vitals.health - healedBefore;
         const frac = vitals.health / PLAYER_MAX_HEALTH;
         survivalBar.setHealth(frac);
         survivalBar.setHunger(survival.hunger);
         feel?.setLowHealth(frac > 0 && frac <= LOW_HEALTH_FRACTION);
+        if (healedAmount > 0) {
+          // E2.4: a themed "+N" floating number above the player, offset in
+          // front of the camera (worldPos AT the camera would project to
+          // the screen center with an undefined/degenerate direction).
+          const dir = new Vector3();
+          engine.camera.getWorldDirection(dir);
+          const p = engine.camera.position;
+          const worldPos: [number, number, number] = [
+            p.x + dir.x * 0.6,
+            p.y + dir.y * 0.6 - 0.3,
+            p.z + dir.z * 0.6,
+          ];
+          feel?.trigger('heal', { worldPos, numberValue: healedAmount });
+          recordCombatEvent('heal', healedAmount);
+        }
       },
     });
     // Workstream 6: DigTool/PlacementTool were built before this HUD existed
@@ -727,6 +767,7 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
       setMoveSpeedScale: (s) => ctx.hooks.setMoveSpeedScale?.(s),
       onLoot: (stacks) => hud.addLoot(stacks),
       onProgress: (event) => hud.recordProgress(event),
+      onCombatEvent: (kind, amount) => recordCombatEvent(kind, amount),
       canAttack: () => canAttackSurvival(survival),
       onAttack: () => {
         survival = drainStaminaForAttack(survival);
@@ -758,8 +799,19 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
     const SPRINT_SPEED_THRESHOLD_MPS = 6;
     let lastPlayerX = engine.camera.position.x;
     let lastPlayerZ = engine.camera.position.z;
+    // E2.5: only redraw the meter while the player has it open, throttled
+    // like the perf HUD — no per-frame DOM work when hidden (the default).
+    const METER_RENDER_INTERVAL_S = 0.25;
+    let meterRenderAcc = 0;
     engine.onUpdate((dt) => {
       spawns.update(dt);
+      if (meterPanel.visible) {
+        meterRenderAcc += dt;
+        if (meterRenderAcc >= METER_RENDER_INTERVAL_S) {
+          meterRenderAcc = 0;
+          meterPanel.render(combatLog, performance.now());
+        }
+      }
       if (!respawnPose) {
         const p = ctx.hooks.getPose?.() ?? null;
         if (p) captureSpawn(p); // spawn = respawn

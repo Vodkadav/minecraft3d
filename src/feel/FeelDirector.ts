@@ -43,8 +43,8 @@ export class FeelDirector implements FeelPort {
   trigger(event: FeelEventId, opts?: FeelTriggerOptions): void {
     const bundle = resolveFeedback(event, { crit: opts?.crit });
     this.state = applyFeedback(this.state, bundle);
-    if (bundle.damageNumber && opts?.worldPos && opts.damageValue !== undefined) {
-      this.deps.damageNumbers?.spawn(opts.worldPos, opts.damageValue, opts.crit ?? false);
+    if (bundle.numberKind && opts?.worldPos && opts.numberValue !== undefined) {
+      this.deps.damageNumbers?.spawn(opts.worldPos, opts.numberValue, opts.crit ?? false, bundle.numberKind);
     }
     if (bundle.particleBurst && opts?.worldPos) {
       this.deps.particles?.burst(bundle.particleBurst, opts.worldPos);

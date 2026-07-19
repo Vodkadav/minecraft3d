@@ -47,4 +47,29 @@ describe("FeelEvents registry", () => {
     const dig = resolveFeedback("dig", { crit: true });
     expect(dig.vignette).toBeNull();
   });
+
+  it("attack/kill carry a 'damage' number, everything else declares its own kind or none", () => {
+    expect(FEEL_EVENTS.attackHit.numberKind).toBe("damage");
+    expect(FEEL_EVENTS.kill.numberKind).toBe("damage");
+    expect(FEEL_EVENTS.takeDamage.numberKind).toBeNull();
+    expect(FEEL_EVENTS.harvest.numberKind).toBeNull();
+  });
+
+  it("heal declares a 'heal' floating number (E2.4)", () => {
+    expect(FEEL_EVENT_IDS).toContain("heal");
+    expect(FEEL_EVENTS.heal.numberKind).toBe("heal");
+    expect(FEEL_EVENTS.heal.vignette).toBeNull(); // "eat" already owns the screen vignette
+  });
+
+  it("levelUp declares an 'xp' floating number (E2.4)", () => {
+    expect(FEEL_EVENT_IDS).toContain("levelUp");
+    expect(FEEL_EVENTS.levelUp.numberKind).toBe("xp");
+  });
+
+  it("heal/levelUp are unaffected by crit scaling on numberKind (only shake/hit-stop/rumble scale)", () => {
+    const critHeal = resolveFeedback("heal", { crit: true });
+    expect(critHeal.numberKind).toBe("heal");
+    const critLevelUp = resolveFeedback("levelUp", { crit: true });
+    expect(critLevelUp.numberKind).toBe("xp");
+  });
 });

@@ -219,6 +219,16 @@ export const UI_STRINGS: Catalog = {
     "achievement.wellFed10.desc": "Eat 10 meals.",
     "achievement.toast.unlocked": "Achievement unlocked: {title}",
 
+    "combatLog.title": "Combat Log",
+    "combatLog.you": "You",
+    "combatLog.close": "Close",
+    "combatLog.close.aria": "Close the combat log",
+    "combatLog.empty": "No fights yet — go get 'em!",
+    "combatLog.stat.dealt": "Dealt: {n}",
+    "combatLog.stat.dps": "DPS: {n}",
+    "combatLog.stat.healed": "Healed: {n}",
+    "combatLog.stat.kills": "Kills: {n}",
+
     "inventory.tab.achievements": "Achievements",
 
     "keyhint.eat": "Eat",
@@ -494,6 +504,16 @@ export const UI_STRINGS: Catalog = {
     "achievement.wellFed10.desc": "Come 10 comidas.",
     "achievement.toast.unlocked": "Logro desbloqueado: {title}",
 
+    "combatLog.title": "Registro de combate",
+    "combatLog.you": "Tú",
+    "combatLog.close": "Cerrar",
+    "combatLog.close.aria": "Cerrar el registro de combate",
+    "combatLog.empty": "Aún no hay combates — ¡a por ellos!",
+    "combatLog.stat.dealt": "Infligido: {n}",
+    "combatLog.stat.dps": "DPS: {n}",
+    "combatLog.stat.healed": "Curado: {n}",
+    "combatLog.stat.kills": "Derrotas: {n}",
+
     "inventory.tab.achievements": "Logros",
 
     "keyhint.eat": "Comer",
@@ -768,6 +788,16 @@ export const UI_STRINGS: Catalog = {
     "achievement.wellFed10.title": "Mæt",
     "achievement.wellFed10.desc": "Spis 10 måltider.",
     "achievement.toast.unlocked": "Præstation låst op: {title}",
+
+    "combatLog.title": "Kamplog",
+    "combatLog.you": "Dig",
+    "combatLog.close": "Luk",
+    "combatLog.close.aria": "Luk kamploggen",
+    "combatLog.empty": "Ingen kampe endnu — gå efter dem!",
+    "combatLog.stat.dealt": "Givet: {n}",
+    "combatLog.stat.dps": "DPS: {n}",
+    "combatLog.stat.healed": "Helbredt: {n}",
+    "combatLog.stat.kills": "Nedkæmpet: {n}",
 
     "inventory.tab.achievements": "Præstationer",
 
