@@ -9,3 +9,8 @@ shots/*
 *.log
 .claude/
 worktrees/
+
+# Playwright MCP debug artifacts / scratch screenshots
+.playwright-mcp/
+/live-menu*.png
+/menu-fixed.png
