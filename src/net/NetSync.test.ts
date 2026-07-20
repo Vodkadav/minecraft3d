@@ -246,6 +246,7 @@ describe("createJoinNet", () => {
       onPeerJoin: (fn) => (cb = fn),
       onPeerLeave: () => {},
       close: () => {},
+      selfId: () => "test-peer",
     };
     const join = createJoinNet("ABCDEFGH", { transportFactory: () => silent });
     const spy = vi.spyOn(silent, "broadcast");
@@ -267,6 +268,7 @@ describe("createJoinNet", () => {
         onPeerJoin: (fn) => (cb = fn),
         onPeerLeave: () => {},
         close: () => {},
+        selfId: () => "test-peer",
       };
       const join = createJoinNet("ABCDEFGH", {
         transportFactory: () => silent,
@@ -483,6 +485,7 @@ describe("createJoinNet", () => {
       onPeerJoin: (cb) => cbs.join.push(cb),
       onPeerLeave: (cb) => cbs.leave.push(cb),
       close: () => {},
+      selfId: () => "test-peer",
     };
     const welcome = {
       kind: "welcome",

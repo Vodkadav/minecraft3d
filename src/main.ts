@@ -46,6 +46,7 @@ import {
 import { InMemoryWorldSaveStore } from './game/infrastructure/persistence/InMemoryWorldSaveStore';
 import { WebAudioAdapter } from './game/infrastructure/audio/WebAudioAdapter';
 import { attachHostNet, createJoinNet, type JoinNetHandle } from './net/NetSync';
+import { HOST_PEER_ID } from './game/application/HostSession';
 import { IndexedDbKeyValueStore } from './game/infrastructure/persistence/IndexedDbKeyValueStore';
 import { LocalStorageSettingsStore } from './game/infrastructure/persistence/LocalStorageSettingsStore';
 import { OpfsBlobStore } from './game/infrastructure/persistence/OpfsBlobStore';
@@ -416,6 +417,18 @@ async function bootEngine(hooks: LaasHooks, launch: MenuLaunch | null): Promise<
     // ADR 0002 §5: when the host drops, freeze the joiner and wait a grace
     // window for a transient reconnect; if it doesn't return, go to the menu.
     const hostWatch = installHostOfflineWatch(hooks);
+    // E5.1/E5.2/E5.4: the scene builds BEFORE this session exists, so it
+    // can only render party UI (see `Scenes.ts`'s `applyParty`/etc — set by
+    // TerrainScene above) — wire the OUTGOING sends here, now that the real
+    // `JoinNetHandle` exists.
+    if (ctx.world) {
+      ctx.world.selfPeerId = launch.join.selfId();
+      ctx.world.sendPartyAction = (action) => launch.join?.sendPartyAction(action);
+      ctx.world.sendPartyVitals = (report) => launch.join?.sendPartyVitals(report);
+      ctx.world.sendPartyInventoryLookup = (targetPeerId) =>
+        launch.join?.sendPartyInventoryLookup(targetPeerId);
+      ctx.world.partyPeerNames = () => launch.join?.peerNames() ?? new Map();
+    }
     const world = launch.join.attachWorld({
       voxels: ctx.world?.voxels ?? null,
       spawns: ctx.world?.spawns ?? null,
@@ -434,6 +447,9 @@ async function bootEngine(hooks: LaasHooks, launch: MenuLaunch | null): Promise<
       // E5.5: the joiner's chat UI — receives relayed host chatMessages, and
       // its outward `onSubmit` becomes a `chat` intent.
       ...(ctx.world?.chat ? { chat: ctx.world.chat } : {}),
+      onParty: (msg) => ctx.world?.applyParty?.(msg),
+      onPartyInvite: (msg) => ctx.world?.applyPartyInvite?.(msg),
+      onPartyInventoryState: (msg) => ctx.world?.applyPartyInventoryState?.(msg),
     });
     engine.onUpdate((dt) => world.update(dt));
   } else if (launch) {
@@ -452,10 +468,23 @@ async function bootEngine(hooks: LaasHooks, launch: MenuLaunch | null): Promise<
       ...(ctx.world?.chat ? { chat: ctx.world.chat } : {}),
       ...(ctx.world?.hostPlayerName ? { hostPlayerName: ctx.world.hostPlayerName } : {}),
       parent: engine.scene,
+      onParty: (msg) => ctx.world?.applyParty?.(msg),
+      onPartyInvite: (msg) => ctx.world?.applyPartyInvite?.(msg),
+      onPartyInventoryState: (msg) => ctx.world?.applyPartyInventoryState?.(msg),
     });
     engine.onUpdate((dt) => net.update(dt));
     console.log(`[laas] room code: ${net.code}`);
     showRoomCodeBadge(net.code);
+    // E5.1/E5.6: the host plays as `HostSession.HOST_PEER_ID` — see
+    // `Scenes.ts`'s `sendPartyAction`/etc, set here now that `net` exists.
+    if (ctx.world) {
+      ctx.world.selfPeerId = HOST_PEER_ID;
+      ctx.world.sendPartyAction = (action) => net.applyPartyAction(action);
+      ctx.world.sendPartyVitals = (report) =>
+        net.reportVitals(createLocalizer(browserLocale()).t('party.hostName'), report);
+      ctx.world.sendPartyInventoryLookup = (targetPeerId) => net.requestPartyInventoryLookup(targetPeerId);
+      ctx.world.partyPeerNames = () => net.peerNames();
+    }
   }
 
   // menu-launched worlds persist the player's pose on exit so the next

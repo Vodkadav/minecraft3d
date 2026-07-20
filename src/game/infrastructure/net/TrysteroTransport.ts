@@ -11,7 +11,7 @@
  * unreliable action if profiling ever says otherwise (ADR 0002 §3).
  */
 
-import { joinRoom } from "trystero";
+import { joinRoom, selfId } from "trystero";
 import type { NetTransport } from "../../application/ports/NetTransport";
 import { decodeWire, encodeWire } from "./WireCodec";
 
@@ -58,6 +58,9 @@ export function makeTrysteroTransport(roomCode: string): NetTransport {
     },
     close() {
       void room.leave();
+    },
+    selfId() {
+      return selfId;
     },
   };
 }

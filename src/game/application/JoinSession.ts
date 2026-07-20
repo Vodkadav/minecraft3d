@@ -12,6 +12,10 @@ import type {
   GroundItemEntity,
   InteractAction,
   InventoryOp,
+  PartyActionOp,
+  PartyInventoryStateMsg,
+  PartyInviteMsg,
+  PartyMsg,
   PlaceableAction,
   SerializedInventoryWire,
   TradeStackWire,
@@ -23,6 +27,7 @@ import { parseMessage } from "../domain/net/Protocol";
 import type { ChatChannel, ChatMessage } from "../domain/social/Chat";
 import type { PlayerState } from "../domain/world/WorldSaveData";
 import type { NetTransport } from "./ports/NetTransport";
+import type { PartyVitalsReport } from "./HostSession";
 
 export interface JoinSessionHooks {
   onWelcome?(snapshot: WelcomeMsg): void;
@@ -54,6 +59,13 @@ export interface JoinSessionHooks {
    *  (offer/confirm/cancel are intents); this is the only path its trade UI
    *  updates from. */
   onTradeState?(state: TradeStateMsg): void;
+  /** The host's resolved party roster (E5.1) — private, "you are not in a
+   *  party" is `{ partyId: null, leaderId: null, members: [] }`. */
+  onParty?(msg: PartyMsg): void;
+  /** Someone invited this joiner to their party (E5.2) — prompt accept/decline. */
+  onPartyInvite?(msg: PartyInviteMsg): void;
+  /** The host's resolved answer to a `sendPartyInventoryLookup` (E5.4). */
+  onPartyInventoryState?(msg: PartyInventoryStateMsg): void;
 }
 
 export class JoinSession {
@@ -130,6 +142,15 @@ export class JoinSession {
         case "tradeState":
           hooks.onTradeState?.(msg);
           return;
+        case "party":
+          hooks.onParty?.(msg);
+          return;
+        case "partyInvite":
+          hooks.onPartyInvite?.(msg);
+          return;
+        case "partyInventoryState":
+          hooks.onPartyInventoryState?.(msg);
+          return;
         default:
           // Joiner-intent kinds arriving at a joiner: not ours to handle.
           return;
@@ -195,5 +216,21 @@ export class JoinSession {
 
   sendTradeCancel(tradeId: string): void {
     this.transport.broadcast({ kind: "tradeCancelIntent", tradeId });
+  }
+
+  /** A party mutation (E5.1/E5.2) — invite/accept/decline/leave/kick/share-toggle. */
+  sendPartyAction(action: PartyActionOp): void {
+    this.transport.broadcast({ kind: "partyAction", action });
+  }
+
+  /** This joiner's own vitals + this-encounter combat tally (E5.1/E5.6) — a
+   *  low-cadence report, distinct from `sendPose`. */
+  sendPartyVitals(report: PartyVitalsReport): void {
+    this.transport.broadcast({ kind: "partyVitals", ...report });
+  }
+
+  /** A read-only lookup of a fellow party member's inventory (E5.4). */
+  sendPartyInventoryLookup(targetPeerId: string): void {
+    this.transport.broadcast({ kind: "partyInventoryLookup", targetPeerId });
   }
 }

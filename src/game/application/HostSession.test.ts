@@ -2,8 +2,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { isOk } from "../domain/Result";
 import { ItemRegistry } from "../domain/items/ItemRegistry";
 import type { PlayerState } from "../domain/world/WorldSaveData";
-import type { WorldEdit } from "../domain/net/Protocol";
-import { HostSession, type HostSessionHooks, type WorldSnapshot } from "./HostSession";
+import type { PartyInventoryStateMsg, PartyInviteMsg, PartyMsg, WorldEdit } from "../domain/net/Protocol";
+import { HOST_PEER_ID, HostSession, type HostSessionHooks, type WorldSnapshot } from "./HostSession";
 import { makeTransportNetwork } from "./testing/InMemoryTransportPair";
 import type { NetTransport } from "./ports/NetTransport";
 
@@ -1242,6 +1242,315 @@ describe("HostSession", () => {
       carol.broadcast({ kind: "tradeConfirmIntent", tradeId: "trade:1" });
 
       expect(bobInbox.filter((m) => (m as { kind: string }).kind === "tradeState")).toEqual([]);
+    });
+  });
+  // ---- E5.1/E5.2/E5.4/E5.6: party ----
+
+  describe("party", () => {
+    function partiesOf(inbox: unknown[]): PartyMsg[] {
+      return inbox.filter((m) => (m as { kind: string }).kind === "party") as PartyMsg[];
+    }
+    function invitesOf(inbox: unknown[]): PartyInviteMsg[] {
+      return inbox.filter((m) => (m as { kind: string }).kind === "partyInvite") as PartyInviteMsg[];
+    }
+    function lookupsOf(inbox: unknown[]): PartyInventoryStateMsg[] {
+      return inbox.filter(
+        (m) => (m as { kind: string }).kind === "partyInventoryState",
+      ) as PartyInventoryStateMsg[];
+    }
+
+    function hostedSession(): { net: ReturnType<typeof makeTransportNetwork>; session: HostSession } {
+      const net2 = makeTransportNetwork();
+      const session2 = new HostSession(net2.host, () => SNAPSHOT, { onWorldEdit: () => {} }, {
+        registry: REGISTRY,
+      });
+      return { net: net2, session: session2 };
+    }
+
+    it("invite -> accept forms a party and rosters both members", () => {
+      const { net: net2 } = hostedSession();
+      const alice = net2.addPeer("alice");
+      const bob = net2.addPeer("bob");
+      alice.broadcast({ kind: "join", playerName: "Alice" });
+      bob.broadcast({ kind: "join", playerName: "Bob" });
+      const aliceInbox = collect(alice);
+      const bobInbox = collect(bob);
+
+      alice.broadcast({ kind: "partyAction", action: { op: "invite", targetPeerId: "bob" } });
+      expect(invitesOf(bobInbox)).toEqual([
+        { kind: "partyInvite", fromPeerId: "alice", fromPlayerName: "Alice" },
+      ]);
+
+      bob.broadcast({ kind: "partyAction", action: { op: "acceptInvite" } });
+
+      const aliceRoster = partiesOf(aliceInbox).at(-1);
+      const bobRoster = partiesOf(bobInbox).at(-1);
+      expect(aliceRoster?.leaderId).toBe("alice");
+      expect(aliceRoster?.members.map((m) => m.peerId)).toEqual(["alice", "bob"]);
+      expect(bobRoster).toEqual(aliceRoster);
+    });
+
+    it("rejects an invite from a non-leader member", () => {
+      const { net: net2 } = hostedSession();
+      const alice = net2.addPeer("alice");
+      const bob = net2.addPeer("bob");
+      const carol = net2.addPeer("carol");
+      alice.broadcast({ kind: "join", playerName: "Alice" });
+      bob.broadcast({ kind: "join", playerName: "Bob" });
+      carol.broadcast({ kind: "join", playerName: "Carol" });
+      alice.broadcast({ kind: "partyAction", action: { op: "invite", targetPeerId: "bob" } });
+      bob.broadcast({ kind: "partyAction", action: { op: "acceptInvite" } });
+      const carolInbox = collect(carol);
+
+      bob.broadcast({ kind: "partyAction", action: { op: "invite", targetPeerId: "carol" } });
+
+      expect(invitesOf(carolInbox)).toEqual([]);
+    });
+
+    it("rejects an invite once the party is full", () => {
+      const { net: net2 } = hostedSession();
+      const alice = net2.addPeer("alice");
+      alice.broadcast({ kind: "join", playerName: "Alice" });
+      for (const name of ["bob", "carol", "dave"]) {
+        const p = net2.addPeer(name);
+        p.broadcast({ kind: "join", playerName: name });
+        alice.broadcast({ kind: "partyAction", action: { op: "invite", targetPeerId: name } });
+        p.broadcast({ kind: "partyAction", action: { op: "acceptInvite" } });
+      }
+      const eve = net2.addPeer("eve");
+      eve.broadcast({ kind: "join", playerName: "Eve" });
+      const eveInbox = collect(eve);
+
+      alice.broadcast({ kind: "partyAction", action: { op: "invite", targetPeerId: "eve" } });
+
+      expect(invitesOf(eveInbox)).toEqual([]);
+    });
+
+    it("rejects self-kick", () => {
+      const { net: net2 } = hostedSession();
+      const alice = net2.addPeer("alice");
+      alice.broadcast({ kind: "join", playerName: "Alice" });
+      const inbox = collect(alice);
+
+      alice.broadcast({ kind: "partyAction", action: { op: "kick", targetPeerId: "alice" } });
+
+      expect(partiesOf(inbox)).toEqual([]);
+    });
+
+    it("rejects a kick from a non-leader", () => {
+      const { net: net2 } = hostedSession();
+      const alice = net2.addPeer("alice");
+      const bob = net2.addPeer("bob");
+      const carol = net2.addPeer("carol");
+      alice.broadcast({ kind: "join", playerName: "Alice" });
+      bob.broadcast({ kind: "join", playerName: "Bob" });
+      carol.broadcast({ kind: "join", playerName: "Carol" });
+      alice.broadcast({ kind: "partyAction", action: { op: "invite", targetPeerId: "bob" } });
+      bob.broadcast({ kind: "partyAction", action: { op: "acceptInvite" } });
+      alice.broadcast({ kind: "partyAction", action: { op: "invite", targetPeerId: "carol" } });
+      carol.broadcast({ kind: "partyAction", action: { op: "acceptInvite" } });
+      const carolInbox = collect(carol);
+
+      bob.broadcast({ kind: "partyAction", action: { op: "kick", targetPeerId: "carol" } });
+
+      expect(partiesOf(carolInbox)).toEqual([]);
+    });
+
+    it("leader kick removes the target and notifies them they have no party", () => {
+      const { net: net2 } = hostedSession();
+      const alice = net2.addPeer("alice");
+      const bob = net2.addPeer("bob");
+      alice.broadcast({ kind: "join", playerName: "Alice" });
+      bob.broadcast({ kind: "join", playerName: "Bob" });
+      alice.broadcast({ kind: "partyAction", action: { op: "invite", targetPeerId: "bob" } });
+      bob.broadcast({ kind: "partyAction", action: { op: "acceptInvite" } });
+      const bobInbox = collect(bob);
+
+      alice.broadcast({ kind: "partyAction", action: { op: "kick", targetPeerId: "bob" } });
+
+      expect(partiesOf(bobInbox).at(-1)).toEqual({
+        kind: "party",
+        partyId: null,
+        leaderId: null,
+        members: [],
+      });
+    });
+
+    it("leader leaving hands leadership to the next member (succession)", () => {
+      const { net: net2 } = hostedSession();
+      const alice = net2.addPeer("alice");
+      const bob = net2.addPeer("bob");
+      alice.broadcast({ kind: "join", playerName: "Alice" });
+      bob.broadcast({ kind: "join", playerName: "Bob" });
+      alice.broadcast({ kind: "partyAction", action: { op: "invite", targetPeerId: "bob" } });
+      bob.broadcast({ kind: "partyAction", action: { op: "acceptInvite" } });
+      const bobInbox = collect(bob);
+
+      alice.broadcast({ kind: "partyAction", action: { op: "leave" } });
+
+      expect(partiesOf(bobInbox).at(-1)?.leaderId).toBe("bob");
+    });
+
+    it("a partyVitals report rosters health/energy/level/combat tally to party members", () => {
+      const { net: net2 } = hostedSession();
+      const alice = net2.addPeer("alice");
+      const bob = net2.addPeer("bob");
+      alice.broadcast({ kind: "join", playerName: "Alice" });
+      bob.broadcast({ kind: "join", playerName: "Bob" });
+      alice.broadcast({ kind: "partyAction", action: { op: "invite", targetPeerId: "bob" } });
+      bob.broadcast({ kind: "partyAction", action: { op: "acceptInvite" } });
+      const aliceInbox = collect(alice);
+
+      bob.broadcast({
+        kind: "partyVitals",
+        health: 7,
+        maxHealth: 10,
+        energy: 4,
+        maxEnergy: 10,
+        level: 2,
+        damageDealt: 30,
+        dps: 6,
+        healing: 0,
+        kills: 1,
+      });
+
+      const bobRow = partiesOf(aliceInbox).at(-1)?.members.find((m) => m.peerId === "bob");
+      expect(bobRow).toEqual({
+        peerId: "bob",
+        playerName: "Bob",
+        health: 7,
+        maxHealth: 10,
+        energy: 4,
+        maxEnergy: 10,
+        level: 2,
+        damageDealt: 30,
+        dps: 6,
+        healing: 0,
+        kills: 1,
+      });
+    });
+
+    it("inventory lookup: denied when the target hasn't opted in", () => {
+      const { net: net2 } = hostedSession();
+      const alice = net2.addPeer("alice");
+      const bob = net2.addPeer("bob");
+      alice.broadcast({ kind: "join", playerName: "Alice" });
+      bob.broadcast({ kind: "join", playerName: "Bob" });
+      alice.broadcast({ kind: "partyAction", action: { op: "invite", targetPeerId: "bob" } });
+      bob.broadcast({ kind: "partyAction", action: { op: "acceptInvite" } });
+      const aliceInbox = collect(alice);
+
+      alice.broadcast({ kind: "partyInventoryLookup", targetPeerId: "bob" });
+
+      expect(lookupsOf(aliceInbox)).toEqual([]);
+    });
+
+    it("inventory lookup: denied for a non-party member even if they opted in", () => {
+      const { net: net2 } = hostedSession();
+      const alice = net2.addPeer("alice");
+      const bob = net2.addPeer("bob");
+      alice.broadcast({ kind: "join", playerName: "Alice" });
+      bob.broadcast({ kind: "join", playerName: "Bob" });
+      bob.broadcast({ kind: "partyAction", action: { op: "setInventoryShare", shared: true } });
+      const aliceInbox = collect(alice);
+
+      alice.broadcast({ kind: "partyInventoryLookup", targetPeerId: "bob" });
+
+      expect(lookupsOf(aliceInbox)).toEqual([]);
+    });
+
+    it("inventory lookup: served read-only when in the same party and opted in", () => {
+      const { net: net2 } = hostedSession();
+      const alice = net2.addPeer("alice");
+      const bob = net2.addPeer("bob");
+      const slots = Array(27).fill(null);
+      slots[0] = { itemId: "wood", count: 5 };
+      alice.broadcast({ kind: "join", playerName: "Alice" });
+      bob.broadcast({ kind: "join", playerName: "Bob", inventory: { capacity: 27, slots } });
+      alice.broadcast({ kind: "partyAction", action: { op: "invite", targetPeerId: "bob" } });
+      bob.broadcast({ kind: "partyAction", action: { op: "acceptInvite" } });
+      bob.broadcast({ kind: "partyAction", action: { op: "setInventoryShare", shared: true } });
+      const aliceInbox = collect(alice);
+
+      alice.broadcast({ kind: "partyInventoryLookup", targetPeerId: "bob" });
+
+      expect(lookupsOf(aliceInbox)).toEqual([
+        { kind: "partyInventoryState", targetPeerId: "bob", capacity: 27, slots },
+      ]);
+    });
+
+    it("inventory lookup: denied for the host (its own inventory isn't tracked here)", () => {
+      const events: unknown[] = [];
+      const net2 = makeTransportNetwork();
+      const session2 = new HostSession(
+        net2.host,
+        () => SNAPSHOT,
+        { onWorldEdit: () => {}, onHostPartyMessage: (m) => events.push(m) },
+        { registry: REGISTRY },
+      );
+      const alice = net2.addPeer("alice");
+      alice.broadcast({ kind: "join", playerName: "Alice" });
+      session2.applyHostPartyAction({ op: "invite", targetPeerId: "alice" });
+      alice.broadcast({ kind: "partyAction", action: { op: "acceptInvite" } });
+      events.length = 0;
+
+      alice.broadcast({ kind: "partyInventoryLookup", targetPeerId: HOST_PEER_ID });
+
+      expect(events.filter((m) => (m as { kind: string }).kind === "partyInventoryState")).toEqual([]);
+    });
+
+    it("the host can form a party with a joiner via the local API", () => {
+      const events: PartyMsg[] = [];
+      const net2 = makeTransportNetwork();
+      const session2 = new HostSession(
+        net2.host,
+        () => SNAPSHOT,
+        {
+          onWorldEdit: () => {},
+          onHostPartyMessage: (m) => {
+            if (m.kind === "party") events.push(m);
+          },
+        },
+        { registry: REGISTRY },
+      );
+      const alice = net2.addPeer("alice");
+      alice.broadcast({ kind: "join", playerName: "Alice" });
+      const aliceInbox = collect(alice);
+
+      session2.reportHostVitals("Host", {
+        health: 10,
+        maxHealth: 10,
+        energy: 10,
+        maxEnergy: 10,
+        level: 1,
+        damageDealt: 0,
+        dps: 0,
+        healing: 0,
+        kills: 0,
+      });
+      session2.applyHostPartyAction({ op: "invite", targetPeerId: "alice" });
+      alice.broadcast({ kind: "partyAction", action: { op: "acceptInvite" } });
+
+      const roster = partiesOf(aliceInbox).at(-1);
+      expect(roster?.leaderId).toBe(HOST_PEER_ID);
+      expect(roster?.members.map((m) => m.peerId)).toEqual([HOST_PEER_ID, "alice"]);
+      expect(roster?.members[0]).toMatchObject({ playerName: "Host", health: 10 });
+      expect(events.length).toBeGreaterThan(0);
+    });
+
+    it("a peer leaving the transport (drop) also leaves its party (succession)", () => {
+      const { net: net2 } = hostedSession();
+      const alice = net2.addPeer("alice");
+      const bob = net2.addPeer("bob");
+      alice.broadcast({ kind: "join", playerName: "Alice" });
+      bob.broadcast({ kind: "join", playerName: "Bob" });
+      alice.broadcast({ kind: "partyAction", action: { op: "invite", targetPeerId: "bob" } });
+      bob.broadcast({ kind: "partyAction", action: { op: "acceptInvite" } });
+      const bobInbox = collect(bob);
+
+      net2.removePeer("alice");
+
+      expect(partiesOf(bobInbox).at(-1)?.leaderId).toBe("bob");
     });
   });
 });

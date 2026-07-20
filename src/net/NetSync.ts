@@ -19,7 +19,7 @@
  */
 
 import type { Object3D } from "three";
-import { HostSession, type WorldSnapshot } from "../game/application/HostSession";
+import { HOST_PEER_ID, HostSession, type PartyVitalsReport, type WorldSnapshot } from "../game/application/HostSession";
 import { JoinSession } from "../game/application/JoinSession";
 import type { NetTransport } from "../game/application/ports/NetTransport";
 import type { WorldSaveStore } from "../game/application/ports/WorldSaveStore";
@@ -28,6 +28,10 @@ import type {
   CreatureEntity,
   GroundItemEntity,
   InventoryOp,
+  PartyActionOp,
+  PartyInventoryStateMsg,
+  PartyInviteMsg,
+  PartyMsg,
   SerializedInventoryWire,
   TradeStackWire,
   TradeStateMsg,
@@ -95,12 +99,23 @@ export interface HostNetDeps {
   readonly parent: Object3D;
   /** Test seam; defaults to the live trystero adapter. */
   readonly transportFactory?: (code: string) => NetTransport;
+  /** The host's own resolved party roster (E5.1) — private, addressed to
+   *  the host itself (`HostSession.HOST_PEER_ID` isn't a wire peer). */
+  onParty?(msg: PartyMsg): void;
+  onPartyInvite?(msg: PartyInviteMsg): void;
+  onPartyInventoryState?(msg: PartyInventoryStateMsg): void;
 }
 
 export interface HostNetHandle {
   readonly code: string;
   update(dt: number): void;
   dispose(): void;
+  // ---- E5.1/E5.2/E5.4/E5.6: party (the host plays as HostSession.HOST_PEER_ID) ----
+  applyPartyAction(action: PartyActionOp): void;
+  reportVitals(playerName: string, report: PartyVitalsReport): void;
+  requestPartyInventoryLookup(targetPeerId: string): void;
+  /** Every currently-connected joiner's display name — an invite-target list. */
+  peerNames(): ReadonlyMap<string, string>;
 }
 
 export async function attachHostNet(deps: HostNetDeps): Promise<HostNetHandle> {
@@ -164,6 +179,11 @@ export async function attachHostNet(deps: HostNetDeps): Promise<HostNetHandle> {
       // (and any `party` message the host is part of, once E5.1 wires
       // `partyMembersOf`) reaches the host's OWN chat UI through here.
       onChat: (msg) => deps.chat?.receiveMessage(msg),
+      onHostPartyMessage: (msg) => {
+        if (msg.kind === "party") deps.onParty?.(msg);
+        else if (msg.kind === "partyInvite") deps.onPartyInvite?.(msg);
+        else deps.onPartyInventoryState?.(msg);
+      },
     },
     {
       ...(deps.registry ? { registry: deps.registry } : {}),
@@ -201,7 +221,7 @@ export async function attachHostNet(deps: HostNetDeps): Promise<HostNetHandle> {
       poseAcc += dt;
       if (poseAcc >= POSE_INTERVAL_S) {
         poseAcc = 0;
-        transport.broadcast({ kind: "peerPose", peerId: "host", state: deps.getPose() });
+        transport.broadcast({ kind: "peerPose", peerId: HOST_PEER_ID, state: deps.getPose() });
       }
       // the voxel save debounces (~2.5 s) — a periodic re-read keeps the next
       // joiner's welcome snapshot at most a few seconds behind the live world
@@ -219,6 +239,18 @@ export async function attachHostNet(deps: HostNetDeps): Promise<HostNetHandle> {
       if (deps.chat) deps.chat.onSubmit = null;
       remote.dispose();
       session.close();
+    },
+    applyPartyAction(action): void {
+      session.applyHostPartyAction(action);
+    },
+    reportVitals(playerName, report): void {
+      session.reportHostVitals(playerName, report);
+    },
+    requestPartyInventoryLookup(targetPeerId): void {
+      session.requestHostPartyInventoryLookup(targetPeerId);
+    },
+    peerNames(): ReadonlyMap<string, string> {
+      return session.connectedPeerNames();
     },
   };
 }
@@ -253,6 +285,10 @@ export interface JoinWorldDeps {
    *  never holds a `HostSession` peer record for its own inventory, so
    *  host<->joiner trading isn't wired — a follow-up, not this slice). */
   onTradeState?(state: TradeStateMsg): void;
+  /** The host's resolved party roster (E5.1). */
+  onParty?(msg: PartyMsg): void;
+  onPartyInvite?(msg: PartyInviteMsg): void;
+  onPartyInventoryState?(msg: PartyInventoryStateMsg): void;
 }
 
 export interface JoinWorldHandle {
@@ -275,6 +311,17 @@ export interface JoinNetHandle {
   sendTradeOffer(tradeId: string, offer: readonly TradeStackWire[]): void;
   sendTradeConfirm(tradeId: string): void;
   sendTradeCancel(tradeId: string): void;
+  // ---- E5.1/E5.2/E5.4/E5.6: party ----
+  sendPartyAction(action: PartyActionOp): void;
+  sendPartyVitals(report: PartyVitalsReport): void;
+  sendPartyInventoryLookup(targetPeerId: string): void;
+  /** Every OTHER currently-known peer's display name (relayed `peerJoined`s)
+   *  — an invite-target list; the host itself is always a valid target too
+   *  (`HostSession.HOST_PEER_ID`), just not listed here by name. */
+  peerNames(): ReadonlyMap<string, string>;
+  /** This joiner's own peer id, as it appears in a `party` roster (E5.1) —
+   *  lets the UI recognize its own row. */
+  selfId(): string;
   dispose(): void;
 }
 
@@ -317,12 +364,17 @@ export function createJoinNet(code: string, opts: JoinNetOptions = {}): JoinNetH
     readonly onInventoryState?: (wire: SerializedInventoryWire) => void;
     readonly chat?: ChatUiPort | null;
     readonly onTradeState?: (state: TradeStateMsg) => void;
+    readonly onParty?: (msg: PartyMsg) => void;
+    readonly onPartyInvite?: (msg: PartyInviteMsg) => void;
+    readonly onPartyInventoryState?: (msg: PartyInventoryStateMsg) => void;
   } | null = null;
   let applyingRemote = false;
-  // an inventoryState can arrive before attachWorld (right after join, while
-  // the engine is still booting) — only the latest matters (full state, not
-  // a delta), so buffer just one and flush it once the world attaches.
+  // an inventoryState/party can arrive before attachWorld (right after join,
+  // while the engine is still booting) — only the latest matters (full
+  // state, not a delta), so buffer just one and flush it once the world
+  // attaches.
   let pendingInventoryState: SerializedInventoryWire | null = null;
+  let pendingParty: PartyMsg | null = null;
 
   const applyRemoteEdit = (edit: WorldEdit): void => {
     if (!world) {
@@ -349,6 +401,11 @@ export function createJoinNet(code: string, opts: JoinNetOptions = {}): JoinNetH
   // the joiner's only peer is the host; its departure — whether a clean
   // hostClosing or a dropped WebRTC connection — means the host is gone
   // (ADR 0002 §5). Idempotent: the two signals can both fire on a clean exit.
+  // relayed `peerJoined`s from the host (E5.1/E5.2's invite-target list) —
+  // the host itself isn't tracked here (it's addressed by HOST_PEER_ID, not
+  // discovered by name).
+  const peerNames = new Map<string, string>();
+
   let hostGone = false;
   const onHostLost = (): void => {
     if (hostGone) return;
@@ -366,7 +423,13 @@ export function createJoinNet(code: string, opts: JoinNetOptions = {}): JoinNetH
       resolveWelcome?.(msg);
     },
     onPeerPose: (peerId: string, state: PlayerState): void => world?.remote.upsert(peerId, state),
-    onPeerLeft: (peerId: string): void => world?.remote.remove(peerId),
+    onPeerJoined: (peerId: string, playerName: string): void => {
+      peerNames.set(peerId, playerName);
+    },
+    onPeerLeft: (peerId: string): void => {
+      peerNames.delete(peerId);
+      world?.remote.remove(peerId);
+    },
     onWorldEdit: applyRemoteEdit,
     // snapshots arriving before attachWorld are dropped — the next 10 Hz frame
     // re-sends the full active set, so there's nothing to buffer (ADR 0003).
@@ -387,6 +450,12 @@ export function createJoinNet(code: string, opts: JoinNetOptions = {}): JoinNetH
     // this joiner's chat UI ever receives text from.
     onChatMessage: (msg: ChatMessage): void => world?.chat?.receiveMessage(msg),
     onTradeState: (state: TradeStateMsg): void => world?.onTradeState?.(state),
+    onParty: (msg: PartyMsg): void => {
+      if (world?.onParty) world.onParty(msg);
+      else pendingParty = msg;
+    },
+    onPartyInvite: (msg: PartyInviteMsg): void => world?.onPartyInvite?.(msg),
+    onPartyInventoryState: (msg: PartyInventoryStateMsg): void => world?.onPartyInventoryState?.(msg),
   };
 
   // trystero peers appear seconds after joinRoom, in no particular order in a
@@ -445,6 +514,9 @@ export function createJoinNet(code: string, opts: JoinNetOptions = {}): JoinNetH
         ...(deps.onInventoryState ? { onInventoryState: deps.onInventoryState } : {}),
         ...(deps.chat ? { chat: deps.chat } : {}),
         ...(deps.onTradeState ? { onTradeState: deps.onTradeState } : {}),
+        ...(deps.onParty ? { onParty: deps.onParty } : {}),
+        ...(deps.onPartyInvite ? { onPartyInvite: deps.onPartyInvite } : {}),
+        ...(deps.onPartyInventoryState ? { onPartyInventoryState: deps.onPartyInventoryState } : {}),
       };
       world = attached;
       // joiner: chat submissions become `chat` intents (E5.5) — the host is
@@ -455,6 +527,10 @@ export function createJoinNet(code: string, opts: JoinNetOptions = {}): JoinNetH
       if (deps.onInventoryState && pendingInventoryState) {
         deps.onInventoryState(pendingInventoryState);
         pendingInventoryState = null;
+      }
+      if (deps.onParty && pendingParty) {
+        deps.onParty(pendingParty);
+        pendingParty = null;
       }
       // joiner: no local sim; F/E/T become intents the host resolves (ADR 0003)
       if (deps.spawns) {
@@ -532,6 +608,21 @@ export function createJoinNet(code: string, opts: JoinNetOptions = {}): JoinNetH
     },
     sendTradeCancel(tradeId): void {
       session?.sendTradeCancel(tradeId);
+    },
+    sendPartyAction(action): void {
+      session?.sendPartyAction(action);
+    },
+    sendPartyVitals(report): void {
+      session?.sendPartyVitals(report);
+    },
+    sendPartyInventoryLookup(targetPeerId): void {
+      session?.sendPartyInventoryLookup(targetPeerId);
+    },
+    peerNames(): ReadonlyMap<string, string> {
+      return peerNames;
+    },
+    selfId(): string {
+      return transport.selfId();
     },
 
     dispose(): void {

@@ -256,6 +256,65 @@ describe("JoinSession", () => {
     expect(onTradeState).not.toHaveBeenCalled();
   });
 
+  it("a party roster reaches both members after invite + accept, and vitals ride sendPartyVitals", () => {
+    const net = makeTransportNetwork();
+    new HostSession(net.host, () => SNAPSHOT, { onWorldEdit: () => {} });
+    const aliceRosters: Array<{ leaderId: string | null; members: readonly { peerId: string }[] }> = [];
+    const bobRosters: Array<{ leaderId: string | null; members: readonly { peerId: string }[] }> = [];
+    const alice = new JoinSession(net.addPeer("alice"), "Alice", {
+      onParty: (m) => aliceRosters.push(m),
+    });
+    const bob = new JoinSession(net.addPeer("bob"), "Bob", { onParty: (m) => bobRosters.push(m) });
+
+    alice.sendPartyAction({ op: "invite", targetPeerId: "bob" });
+    bob.sendPartyAction({ op: "acceptInvite" });
+    alice.sendPartyVitals({
+      health: 10,
+      maxHealth: 10,
+      energy: 10,
+      maxEnergy: 10,
+      level: 1,
+      damageDealt: 0,
+      dps: 0,
+      healing: 0,
+      kills: 0,
+    });
+
+    expect(aliceRosters.at(-1)?.leaderId).toBe("alice");
+    expect(aliceRosters.at(-1)?.members.map((m) => m.peerId)).toEqual(["alice", "bob"]);
+    expect(bobRosters.at(-1)).toEqual(aliceRosters.at(-1));
+  });
+
+  it("surfaces an incoming party invite via onPartyInvite", () => {
+    const net = makeTransportNetwork();
+    new HostSession(net.host, () => SNAPSHOT, { onWorldEdit: () => {} });
+    const onPartyInvite = vi.fn();
+    const alice = new JoinSession(net.addPeer("alice"), "Alice", {});
+    new JoinSession(net.addPeer("bob"), "Bob", { onPartyInvite });
+
+    alice.sendPartyAction({ op: "invite", targetPeerId: "bob" });
+
+    expect(onPartyInvite).toHaveBeenCalledExactlyOnceWith({
+      kind: "partyInvite",
+      fromPeerId: "alice",
+      fromPlayerName: "Alice",
+    });
+  });
+
+  it("sendPartyInventoryLookup is denied silently when the target hasn't opted in", () => {
+    const net = makeTransportNetwork();
+    new HostSession(net.host, () => SNAPSHOT, { onWorldEdit: () => {} });
+    const onPartyInventoryState = vi.fn();
+    const alice = new JoinSession(net.addPeer("alice"), "Alice", { onPartyInventoryState });
+    const bob = new JoinSession(net.addPeer("bob"), "Bob", {});
+    alice.sendPartyAction({ op: "invite", targetPeerId: "bob" });
+    bob.sendPartyAction({ op: "acceptInvite" });
+
+    alice.sendPartyInventoryLookup("bob");
+
+    expect(onPartyInventoryState).not.toHaveBeenCalled();
+  });
+
   it("ignores malformed traffic with a warning instead of crashing", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const net = makeTransportNetwork();

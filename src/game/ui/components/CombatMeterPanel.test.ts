@@ -98,6 +98,38 @@ describe("mountCombatMeterPanel", () => {
     window.dispatchEvent(new KeyboardEvent("keydown", { code: "KeyL" }));
   });
 
+  // ---- E5.6: party-wide ranked meter ----
+
+  it("ranks party members by damage dealt, highest first", () => {
+    const panel = mountCombatMeterPanel(loc);
+    panel.render(emptyCombatLog(), 0, [
+      { peerId: "bob", playerName: "Bob", health: 1, maxHealth: 1, energy: 1, maxEnergy: 1, level: 1, damageDealt: 20, dps: 5, healing: 0, kills: 0 },
+      { peerId: "alice", playerName: "Alice", health: 1, maxHealth: 1, energy: 1, maxEnergy: 1, level: 1, damageDealt: 80, dps: 20, healing: 0, kills: 1 },
+    ]);
+    const names = Array.from(panel.el.querySelectorAll(".lw-combat-meter-row")).map((r) => r.textContent);
+    expect(names[0]).toContain("Alice");
+    expect(names[1]).toContain("Bob");
+    panel.dispose();
+  });
+
+  it("shows the empty state when no party member has fought yet", () => {
+    const panel = mountCombatMeterPanel(loc);
+    panel.render(emptyCombatLog(), 0, [
+      { peerId: "bob", playerName: "Bob", health: 1, maxHealth: 1, energy: 1, maxEnergy: 1, level: 1, damageDealt: 0, dps: 0, healing: 0, kills: 0 },
+    ]);
+    expect(panel.el.textContent).toContain(loc.t("combatLog.empty"));
+    panel.dispose();
+  });
+
+  it("falls back to the solo row when partyMembers is omitted", () => {
+    let state = emptyCombatLog();
+    state = foldCombatEvent(state, { sourceId: LOCAL_PLAYER_SOURCE_ID, kind: "hitDealt", amount: 15, atMs: 0 });
+    const panel = mountCombatMeterPanel(loc);
+    panel.render(state, 1000);
+    expect(panel.el.textContent).toContain(loc.t("combatLog.you"));
+    panel.dispose();
+  });
+
   it("ships i18n copy for all three locales", () => {
     for (const locale of ["en", "es", "da"] as const) {
       const l = createLocalizer(locale);

@@ -16,4 +16,8 @@ export interface NetTransport {
   onPeerJoin(cb: (peerId: string) => void): void;
   onPeerLeave(cb: (peerId: string) => void): void;
   close(): void;
+  /** This endpoint's own peer id, as every OTHER peer sees it (E5.1) — lets
+   *  a joiner recognize itself in the host's party roster. Constant for the
+   *  lifetime of the transport. */
+  selfId(): string;
 }

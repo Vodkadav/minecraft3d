@@ -55,6 +55,39 @@ describe("InventoryGrid", () => {
     expect(next.slots[3]).toEqual({ itemId: "wood", count: 5 });
   });
 
+  it("readOnly: a click never mutates and never picks (E5.4 party lookup)", () => {
+    const reg = registry();
+    const onChange = vi.fn();
+    const grid = InventoryGrid({
+      registry: reg,
+      loc: createLocalizer("en"),
+      ariaLabel: "Bob's inventory",
+      onChange,
+      readOnly: true,
+    });
+    grid.render(invWith(reg, [[0, "wood", 5]]));
+    const cells = grid.el.querySelectorAll<HTMLElement>('[role="gridcell"]');
+    cells[0]?.click();
+    cells[3]?.click();
+    expect(onChange).not.toHaveBeenCalled();
+    expect(cells[0]?.dataset.picked).toBe("false");
+    expect(cells[0]?.textContent).toContain("Wood"); // still rendered, just not editable
+  });
+
+  it("readOnly: sets aria-readonly and disables dragging", () => {
+    const reg = registry();
+    const grid = InventoryGrid({
+      registry: reg,
+      loc: createLocalizer("en"),
+      ariaLabel: "Bob's inventory",
+      readOnly: true,
+    });
+    grid.render(invWith(reg, [[0, "wood", 5]]));
+    expect(grid.el.getAttribute("aria-readonly")).toBe("true");
+    const cells = grid.el.querySelectorAll<HTMLElement>('[role="gridcell"]');
+    expect(cells[0]?.draggable).toBe(false);
+  });
+
   it("click-click on the same slot twice cancels the pick", () => {
     const reg = registry();
     const onChange = vi.fn();

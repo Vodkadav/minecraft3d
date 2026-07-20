@@ -95,11 +95,19 @@ import { mountPerfHud } from '../game/ui/components/PerfHud';
 import { mountCombatMeterPanel } from '../game/ui/components/CombatMeterPanel';
 import {
   LOCAL_PLAYER_SOURCE_ID,
+  dpsFor,
   emptyCombatLog,
   foldCombatEvent,
+  totalsFor,
   type CombatLogEventKind,
   type CombatLogState,
 } from '../game/domain/combat/CombatLog';
+import { HOST_PEER_ID, type PartyVitalsReport } from '../game/application/HostSession';
+import type { PartyInventoryStateMsg, PartyInviteMsg, PartyMsg } from '../game/domain/net/Protocol';
+import { mountPartyPanel } from '../game/ui/components/PartyPanel';
+import { InventoryGrid } from '../game/ui/components/InventoryGrid';
+import { Panel } from '../game/ui/components/Panel';
+import { Button } from '../game/ui/components/Button';
 import { createLocalizer } from '../game/ui/i18n/strings';
 import { LocalStorageSettingsStore } from '../game/infrastructure/persistence/LocalStorageSettingsStore';
 import { SettingsController } from '../game/application/SettingsController';
@@ -682,6 +690,104 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
       });
     }
 
+    // E5.1/E5.2/E5.4/E5.6: party — mounted unconditionally (empty/"no party"
+    // state) alongside the solo meter; the outgoing sends only do something
+    // once main.ts's M7 net glue wires `ctx.world.sendPartyAction`/etc after
+    // the host/join session exists (mirrors `applyInventoryState`'s E0.4
+    // wave-3 wiring, just the other direction — see `Scenes.ts`). A solo
+    // (no-net) boot renders "not in a party" and every send is a silent no-op.
+    const selfPeerId = ctx.world?.selfPeerId ?? 'solo';
+    let partyState: PartyMsg = { kind: 'party', partyId: null, leaderId: null, members: [] };
+    let myShareEnabled = false;
+    let inventoryLookupOverlay: { dispose(): void } | null = null;
+
+    const partyPanel = mountPartyPanel(loc, {
+      onInvite: (targetPeerId) => ctx.world?.sendPartyAction?.({ op: 'invite', targetPeerId }),
+      onKick: (targetPeerId) => ctx.world?.sendPartyAction?.({ op: 'kick', targetPeerId }),
+      onLeave: () => ctx.world?.sendPartyAction?.({ op: 'leave' }),
+      onShareToggle: (shared) => {
+        myShareEnabled = shared;
+        ctx.world?.sendPartyAction?.({ op: 'setInventoryShare', shared });
+      },
+      onViewInventory: (targetPeerId) => ctx.world?.sendPartyInventoryLookup?.(targetPeerId),
+    });
+
+    function invitableList(): Array<{ peerId: string; playerName: string }> {
+      const known = ctx.world?.partyPeerNames?.() ?? new Map<string, string>();
+      const memberIds = new Set(partyState.members.map((m) => m.peerId));
+      const list: Array<{ peerId: string; playerName: string }> = [];
+      for (const [peerId, playerName] of known) {
+        if (peerId !== selfPeerId && !memberIds.has(peerId)) list.push({ peerId, playerName });
+      }
+      // the host is always a valid invite target too, even though it's never
+      // discovered by name via `partyPeerNames` (see NetSync.ts).
+      if (selfPeerId !== HOST_PEER_ID && !memberIds.has(HOST_PEER_ID)) {
+        list.push({ peerId: HOST_PEER_ID, playerName: loc.t('party.hostName') });
+      }
+      return list;
+    }
+
+    function renderPartyPanel(): void {
+      partyPanel.render({
+        selfPeerId,
+        leaderId: partyState.leaderId,
+        members: partyState.members,
+        invitable: invitableList(),
+        shareEnabled: myShareEnabled,
+      });
+    }
+    renderPartyPanel();
+
+    const registry = itemsReg.value;
+    const showPartyInventoryOverlay = (msg: PartyInventoryStateMsg): void => {
+      inventoryLookupOverlay?.dispose();
+      const inv = Inventory.fromSlots(registry, msg.slots);
+      if (!isOk(inv)) return;
+      const targetName =
+        partyState.members.find((m) => m.peerId === msg.targetPeerId)?.playerName ?? msg.targetPeerId;
+      const title = loc.t('party.inventory.title', { name: targetName });
+      const grid = InventoryGrid({ registry, loc, ariaLabel: title, readOnly: true });
+      grid.render(inv.value);
+      const titleEl = document.createElement('div');
+      titleEl.textContent = title;
+      const closeBtn = Button({
+        label: loc.t('party.inventory.close'),
+        onClick: () => {
+          inventoryLookupOverlay?.dispose();
+          inventoryLookupOverlay = null;
+        },
+      });
+      const overlayEl = Panel([titleEl, grid.el, closeBtn], { ariaLabel: title });
+      overlayEl.style.position = 'fixed';
+      overlayEl.style.top = '50%';
+      overlayEl.style.left = '50%';
+      overlayEl.style.transform = 'translate(-50%, -50%)';
+      overlayEl.style.zIndex = '80';
+      document.body.appendChild(overlayEl);
+      inventoryLookupOverlay = {
+        dispose(): void {
+          grid.dispose();
+          overlayEl.remove();
+        },
+      };
+    };
+
+    if (ctx.world) {
+      ctx.world.applyParty = (msg: PartyMsg) => {
+        partyState = msg;
+        renderPartyPanel();
+      };
+      ctx.world.applyPartyInvite = (msg: PartyInviteMsg) => {
+        partyPanel.showInvite(
+          msg.fromPeerId,
+          msg.fromPlayerName,
+          () => ctx.world?.sendPartyAction?.({ op: 'acceptInvite' }),
+          () => ctx.world?.sendPartyAction?.({ op: 'declineInvite' }),
+        );
+      };
+      ctx.world.applyPartyInventoryState = showPartyInventoryOverlay;
+    }
+
     // S7b: wire the tested-but-unwired InventoryPersistence/ProgressionPersistence
     // into the boot/save flow (closes the S4/S6 deferral). Only when there's a
     // real save store — dev/tooling boots with no OPFS support skip persistence
@@ -1008,14 +1114,39 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
     // like the perf HUD — no per-frame DOM work when hidden (the default).
     const METER_RENDER_INTERVAL_S = 0.25;
     let meterRenderAcc = 0;
+    // E5.1/E5.6: a low-cadence self-report (vitals + this-encounter combat
+    // tally) — reused as BOTH the party-frame stream and the party meter's
+    // tally carrier (plan constraint: no new high-rate traffic).
+    const PARTY_VITALS_INTERVAL_S = 1;
+    let partyVitalsAcc = 0;
     engine.onUpdate((dt) => {
       spawns.update(dt);
       groundItems.update(dt);
+      const inParty = partyState.members.length > 0;
       if (meterPanel.visible) {
         meterRenderAcc += dt;
         if (meterRenderAcc >= METER_RENDER_INTERVAL_S) {
           meterRenderAcc = 0;
-          meterPanel.render(combatLog, performance.now());
+          meterPanel.render(combatLog, performance.now(), inParty ? partyState.members : undefined);
+        }
+      }
+      if (inParty) {
+        partyVitalsAcc += dt;
+        if (partyVitalsAcc >= PARTY_VITALS_INTERVAL_S) {
+          partyVitalsAcc = 0;
+          const selfTotals = totalsFor(combatLog, LOCAL_PLAYER_SOURCE_ID);
+          const report: PartyVitalsReport = {
+            health: vitals.health,
+            maxHealth: maxHealthEff,
+            energy: survival.stamina,
+            maxEnergy: maxEnergyEff,
+            level: character.level.level,
+            damageDealt: selfTotals.damageDealt,
+            dps: dpsFor(combatLog, LOCAL_PLAYER_SOURCE_ID, performance.now()),
+            healing: selfTotals.healing,
+            kills: selfTotals.kills,
+          };
+          ctx.world?.sendPartyVitals?.(report);
         }
       }
       if (!respawnPose) {

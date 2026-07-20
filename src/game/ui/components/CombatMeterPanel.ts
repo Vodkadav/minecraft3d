@@ -1,11 +1,14 @@
 /**
- * Combat meter panel (E2.5) — a collapsible, keyboard-toggled ("L") HUD
- * panel showing the solo self damage meter: presentation only over the pure
+ * Combat meter panel (E2.5/E5.6) — a collapsible, keyboard-toggled ("L") HUD
+ * panel showing a damage meter: presentation only over the pure
  * `domain/combat/CombatLog` fold. Hidden by default (opt-in, same posture as
  * `PerfHud`'s F4 — a no-flags boot stays visually identical). Cozy framing:
- * celebratory per-source stat line, never a shaming leaderboard — today
- * there's exactly one row ("You"); E5.6 adds more rows from the same
- * `CombatLogState.totals` map with no shape change here.
+ * celebratory per-source stat line, never a shaming leaderboard.
+ *
+ * Solo (no party): one "You" row from the local `CombatLogState`. In a party
+ * (E5.6), the optional `partyMembers` param — the same `party` roster stream
+ * E5.1 already delivers, reusing its `damageDealt`/`dps`/`healing`/`kills`
+ * fields — ranks every member's contribution instead, highest damage first.
  */
 
 import {
@@ -14,6 +17,7 @@ import {
   totalsFor,
   type CombatLogState,
 } from "../../domain/combat/CombatLog";
+import type { PartyMemberInfo } from "../../domain/net/Protocol";
 import type { Localizer } from "../../application/i18n/Localizer";
 import { Bar, type BarHandle } from "./Bar";
 import { Panel } from "./Panel";
@@ -23,9 +27,16 @@ export interface CombatMeterPanelHandle {
   readonly el: HTMLElement;
   readonly visible: boolean;
   setVisible(v: boolean): void;
-  /** Redraw from the current fold state; `nowMs` drives the live DPS figure. */
-  render(state: CombatLogState, nowMs: number): void;
+  /** Redraw from the current fold state; `nowMs` drives the live DPS figure.
+   *  `partyMembers` (E5.6), when non-empty, switches to a ranked multi-row
+   *  meter driven by the party roster instead of the solo `state`/`nowMs`. */
+  render(state: CombatLogState, nowMs: number, partyMembers?: readonly PartyMemberInfo[]): void;
   dispose(): void;
+}
+
+/** Ranked-order copy of `partyMembers`, highest damage dealt first. */
+function rankByDamage(members: readonly PartyMemberInfo[]): readonly PartyMemberInfo[] {
+  return [...members].sort((a, b) => b.damageDealt - a.damageDealt);
 }
 
 function isTextInputFocused(doc: Document): boolean {
@@ -76,7 +87,7 @@ export function mountCombatMeterPanel(
   doc.body.appendChild(panel);
 
   let visible = false;
-  let bar: BarHandle | null = null;
+  let bars: BarHandle[] = [];
 
   function setVisible(v: boolean): void {
     visible = v;
@@ -99,7 +110,48 @@ export function mountCombatMeterPanel(
       return visible;
     },
     setVisible,
-    render(state, nowMs): void {
+    render(state, nowMs, partyMembers): void {
+      // Bar's `max` is fixed at construction, so every row is recreated each
+      // render — cheap, this only runs on the panel's own throttled redraw,
+      // never per frame (same posture as PerfHud).
+      for (const b of bars) b.dispose();
+      bars = [];
+      rows.replaceChildren();
+
+      if (partyMembers && partyMembers.length > 0) {
+        const ranked = rankByDamage(partyMembers);
+        const hasFought = ranked.some((m) => m.damageDealt > 0 || m.healing > 0 || m.kills > 0);
+        empty.hidden = hasFought;
+        rows.hidden = !hasFought;
+        if (!hasFought) return;
+
+        const topDamage = Math.max(1, ranked[0]?.damageDealt ?? 1);
+        for (let i = 0; i < ranked.length; i++) {
+          const m = ranked[i];
+          const rowEl = doc.createElement("div");
+          rowEl.className = "lw-combat-meter-row";
+          const bar = Bar({
+            id: `lw-combat-meter-${m.peerId}`,
+            ariaLabel: m.playerName || m.peerId,
+            labelText: `${loc.t("party.meter.rank", { n: i + 1 })} ${m.playerName || m.peerId} {n}`,
+            max: topDamage,
+            initial: m.damageDealt,
+          });
+          bars.push(bar);
+          const stats = doc.createElement("div");
+          stats.className = "lw-combat-meter-stats";
+          stats.textContent = [
+            loc.t("combatLog.stat.dealt", { n: Math.round(m.damageDealt) }),
+            loc.t("combatLog.stat.dps", { n: m.dps.toFixed(1) }),
+            loc.t("combatLog.stat.healed", { n: Math.round(m.healing) }),
+            loc.t("combatLog.stat.kills", { n: m.kills }),
+          ].join("   ");
+          rowEl.append(bar.el, stats);
+          rows.appendChild(rowEl);
+        }
+        return;
+      }
+
       const hasFought = state.encounterStartMs !== null;
       empty.hidden = hasFought;
       rows.hidden = !hasFought;
@@ -108,18 +160,14 @@ export function mountCombatMeterPanel(
       const totals = totalsFor(state, LOCAL_PLAYER_SOURCE_ID);
       const dps = dpsFor(state, LOCAL_PLAYER_SOURCE_ID, nowMs);
 
-      // Bar's `max` is fixed at construction; a solo meter's own total IS
-      // the max (there's nothing to rank against yet), so the row is
-      // recreated each render — cheap, this only runs on the panel's own
-      // throttled redraw, never per frame (same posture as PerfHud).
-      bar?.dispose();
-      bar = Bar({
+      const bar = Bar({
         id: "lw-combat-meter-you",
         ariaLabel: loc.t("combatLog.you"),
         labelText: `${loc.t("combatLog.you")} {n}`,
         max: Math.max(1, totals.damageDealt),
         initial: totals.damageDealt,
       });
+      bars.push(bar);
 
       const stats = doc.createElement("div");
       stats.className = "lw-combat-meter-stats";
@@ -134,7 +182,7 @@ export function mountCombatMeterPanel(
     },
     dispose(): void {
       (doc.defaultView ?? window).removeEventListener("keydown", onKeyDown);
-      bar?.dispose();
+      for (const b of bars) b.dispose();
       panel.remove();
     },
   };

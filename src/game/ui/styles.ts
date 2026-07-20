@@ -1024,6 +1024,91 @@ ${THEME_CSS_VARS}
   font-size: var(--lw-font-xs);
   color: var(--lw-fg-muted);
 }
+.lw-combat-meter-row {
+  margin-bottom: var(--lw-space-2);
+}
+.lw-combat-meter-row:last-child {
+  margin-bottom: 0;
+}
+
+/* Party panel (E5.1/E5.2/E5.4) — opt-in, P-toggled, OFF by default */
+.lw-party-panel {
+  position: fixed;
+  top: var(--lw-space-4);
+  right: var(--lw-space-4);
+  z-index: 55;
+  min-width: 240px;
+  max-width: 320px;
+}
+.lw-party-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--lw-space-2);
+  margin-bottom: var(--lw-space-2);
+}
+.lw-party-title {
+  font-size: var(--lw-font-xs);
+  font-weight: 700;
+  color: var(--lw-fg-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.lw-party-empty {
+  color: var(--lw-fg-muted);
+  font-size: var(--lw-font-sm);
+}
+.lw-party-invite-banner {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--lw-space-2);
+  margin-bottom: var(--lw-space-2);
+  padding: var(--lw-space-2);
+  background: var(--lw-bg-track);
+  border-radius: var(--lw-radius-md);
+}
+.lw-party-frame {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lw-space-1);
+  padding: var(--lw-space-2) 0;
+  border-bottom: 1px solid var(--lw-border);
+}
+.lw-party-frame-name {
+  font-size: var(--lw-font-sm);
+  font-weight: 600;
+}
+.lw-party-leader-badge {
+  margin-left: var(--lw-space-2);
+  font-size: var(--lw-font-xs);
+  color: var(--lw-accent, var(--lw-fg-muted));
+}
+.lw-party-frame-level {
+  margin-left: var(--lw-space-2);
+  font-size: var(--lw-font-xs);
+  color: var(--lw-fg-muted);
+}
+.lw-party-controls,
+.lw-party-invite-section {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--lw-space-2);
+  margin-top: var(--lw-space-2);
+}
+.lw-party-invite-heading {
+  width: 100%;
+  font-size: var(--lw-font-xs);
+  color: var(--lw-fg-muted);
+  text-transform: uppercase;
+}
+.lw-party-share {
+  display: flex;
+  align-items: center;
+  gap: var(--lw-space-1);
+  font-size: var(--lw-font-sm);
+}
 
 /* Perf HUD (Workstream 9.2) — opt-in, F4-toggled, OFF by default */
 .lw-perf-hud {

@@ -129,6 +129,53 @@ const HAPPY: NetMessage[] = [
     confirmedB: false,
     status: "negotiating",
   },
+  { kind: "partyAction", action: { op: "invite", targetPeerId: "bob" } },
+  { kind: "partyAction", action: { op: "acceptInvite" } },
+  { kind: "partyAction", action: { op: "declineInvite" } },
+  { kind: "partyAction", action: { op: "leave" } },
+  { kind: "partyAction", action: { op: "kick", targetPeerId: "bob" } },
+  { kind: "partyAction", action: { op: "setInventoryShare", shared: true } },
+  {
+    kind: "partyVitals",
+    health: 8,
+    maxHealth: 10,
+    energy: 5,
+    maxEnergy: 10,
+    level: 3,
+    damageDealt: 40,
+    dps: 12.5,
+    healing: 0,
+    kills: 1,
+  },
+  { kind: "partyInventoryLookup", targetPeerId: "bob" },
+  {
+    kind: "party",
+    partyId: "party-1",
+    leaderId: "alice",
+    members: [
+      {
+        peerId: "alice",
+        playerName: "Alice",
+        health: 10,
+        maxHealth: 10,
+        energy: 10,
+        maxEnergy: 10,
+        level: 1,
+        damageDealt: 0,
+        dps: 0,
+        healing: 0,
+        kills: 0,
+      },
+    ],
+  },
+  { kind: "party", partyId: null, leaderId: null, members: [] },
+  { kind: "partyInvite", fromPeerId: "alice", fromPlayerName: "Alice" },
+  {
+    kind: "partyInventoryState",
+    targetPeerId: "bob",
+    capacity: 2,
+    slots: [{ itemId: "wood", count: 4 }, null],
+  },
 ];
 
 describe("parseMessage — happy paths", () => {
@@ -320,6 +367,40 @@ describe("parseMessage — malformed input is an error value", () => {
       confirmedB: false,
       status: "exploding", // unknown status
     },
+    { kind: "partyAction" }, // missing action
+    { kind: "partyAction", action: { op: "teleportParty" } }, // unknown op
+    { kind: "partyAction", action: { op: "invite" } }, // missing targetPeerId
+    { kind: "partyAction", action: { op: "invite", targetPeerId: "" } }, // empty targetPeerId
+    { kind: "partyAction", action: { op: "invite", targetPeerId: "x".repeat(65) } }, // oversized targetPeerId
+    { kind: "partyAction", action: { op: "setInventoryShare", shared: "yes" } }, // wrong type
+    { kind: "partyVitals", health: 8 }, // missing fields
+    { kind: "partyVitals", health: -1, maxHealth: 10, energy: 5, maxEnergy: 10, level: 1, damageDealt: 0, dps: 0, healing: 0, kills: 0 }, // negative
+    { kind: "partyVitals", health: 8, maxHealth: 10, energy: 5, maxEnergy: 10, level: 1, damageDealt: 0, dps: 0, healing: 0, kills: Infinity }, // non-finite
+    { kind: "partyVitals", health: 8, maxHealth: 10, energy: 5, maxEnergy: 10, level: 100000, damageDealt: 0, dps: 0, healing: 0, kills: 0 }, // oversized level
+    { kind: "partyInventoryLookup" }, // missing targetPeerId
+    { kind: "partyInventoryLookup", targetPeerId: "" }, // empty
+    { kind: "party" }, // missing everything
+    { kind: "party", partyId: "p1", leaderId: "alice", members: {} }, // members not an array
+    {
+      kind: "party",
+      partyId: "p1",
+      leaderId: "alice",
+      members: Array.from({ length: 5 }, (_, i) => ({
+        peerId: `p${i}`,
+        playerName: "P",
+        health: 1,
+        maxHealth: 1,
+        energy: 1,
+        maxEnergy: 1,
+        level: 1,
+        damageDealt: 0,
+        dps: 0,
+        healing: 0,
+        kills: 0,
+      })),
+    }, // over the 4-member cap
+    { kind: "partyInvite", fromPeerId: "alice" }, // missing fromPlayerName
+    { kind: "partyInventoryState", targetPeerId: "bob", capacity: 1, slots: [] }, // slots length mismatch
   ];
 
   it.each(BAD.map((m) => [JSON.stringify(m) ?? String(m), m] as const))(
