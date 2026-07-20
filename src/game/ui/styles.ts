@@ -26,13 +26,70 @@ ${THEME_CSS_VARS}
  * hidden authoritative for all current and future overlays. */
 [hidden] { display: none !important; }
 
-/* Panel */
+/* Panel — E8.1 procedural background recipe (PANEL_BACKGROUND_RECIPE):
+   an edge vignette over a static SVG fractal-noise grain over a warm
+   surface-elevation gradient, replacing the old flat bg-panel rectangle.
+   Static by construction (no animated grain) so it's reduced-motion-safe for
+   free; the surface ramp keeps it near the previous color while adding depth.
+   Layers paint top-first: [0] vignette, [1] noise, [2] gradient. */
 .lw-panel {
-  background: var(--lw-bg-panel);
+  background-color: var(--lw-surface-2);
+  background-image:
+    radial-gradient(135% 115% at 50% -12%, rgba(255,255,255,0.07), transparent 42%),
+    radial-gradient(150% 120% at 50% 118%, rgba(0,0,0,0.20), transparent 62%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E"),
+    linear-gradient(158deg, var(--lw-surface-2), var(--lw-surface-1) 72%);
   color: var(--lw-fg);
   border: 1px solid var(--lw-border);
   border-radius: var(--lw-radius-lg);
   padding: var(--lw-space-4);
+  box-shadow: 0 1px 0 rgba(255,255,255,0.05) inset, 0 14px 30px -14px rgba(0,0,0,0.6);
+}
+
+/* Window chrome (E8.1, WINDOW_CHROME_SPEC) — shared overlay-window shell built
+   by components/WindowFrame.ts. */
+.lw-window-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--lw-space-3);
+  margin-bottom: var(--lw-space-3);
+  padding-bottom: var(--lw-space-2);
+  border-bottom: 1px solid var(--lw-ornament);
+}
+.lw-window-header-lead {
+  display: flex;
+  align-items: center;
+  gap: var(--lw-space-2);
+  min-width: 0;
+}
+.lw-window-title {
+  margin: 0;
+  color: var(--lw-fg);
+  font-size: var(--lw-font-lg);
+  font-weight: 700;
+}
+.lw-window-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--lw-space-3);
+  margin-top: var(--lw-space-3);
+  padding-top: var(--lw-space-2);
+  border-top: 1px solid var(--lw-ornament);
+}
+/* Accessible-only text: kept in the a11y tree, removed from the visual layout
+   (tab-dominant windows keep their title as the dialog heading). */
+.lw-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 /* Button */
