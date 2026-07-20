@@ -39,6 +39,12 @@ export const sunU = {
   intensity: runiform(0),
 };
 
+/** Foliage-card near-camera fade band (m from the eye): fully gone below GONE,
+ *  fully present beyond FULL. Kills the in-your-face leaf shimmer without
+ *  making bushes see-through much past arm's reach. */
+const NEAR_FADE_GONE_M = 0.4;
+const NEAR_FADE_FULL_M = 1.2;
+
 export function updateSunUniforms(sun: DirectionalLight): void {
   sunU.dir.value.copy(sun.position).normalize();
   sunU.color.value.copy(sun.color);
@@ -326,7 +332,14 @@ export function foliageCardMaterial(
       smoothstep(35, 70, camDist),
     ) as unknown as Parameters<typeof varying>[0],
   ) as unknown as NF;
-  mat.opacityNode = t.w.mul(edgeFade);
+  // Near-camera fade (playtest: "screen shaking" = leaf cards thrashing in the
+  // player's face). A card within ~1.2 m of the eye is sub-pixel-thin foliage
+  // that TRAA can't resolve, so it shimmers hard; fade it out below 1.2 m,
+  // fully gone by 0.4 m. Per-FRAGMENT (not the vertex-hoisted edgeFade): a big
+  // card is often partly in your face and partly farther, and only the close
+  // part should drop. The cross-plane card keeps crown coverage from farther.
+  const nearFade = smoothstep(NEAR_FADE_GONE_M, NEAR_FADE_FULL_M, camDist);
+  mat.opacityNode = t.w.mul(edgeFade).mul(nearFade);
   mat.alphaTest = 0.32;
   // near-diffuse: one flat normal per card means any real specular paints
   // the WHOLE card with a uniform silver sheen at glancing sun angles —
