@@ -187,17 +187,22 @@ inspection per merge; mandatory `claude-infra:security` review on every networki
   creature/resource/ground-loot markers; waypoints session-only (deferral)
 - [x] E4 Inventory depth: autosort + merge, item filters (persisted), autoloot toggle+radius,
   account-wide bank (K, IndexedDB) — multiplayer bank path deferred behind seed-trust revisit
-- [~] E5 Social (in flight): party/frames/invite/kick/lookup/party-meter, trade escrow, kid-safe
-  chat — all host-authoritative intents; security reviews mandatory before merge
-- [~] E6 World content (mostly landed): E6.1 caves (seeded 3D-noise carving unioned into the
-  voxel SDF, worldgen-version-gated — pre-existing worlds regenerate byte-identical), E6.4
-  research tree (13-node starter tree over ProgressionEvents-derived points, J screen, per-owner
-  persistence), E6.5 asset library (+5 creatures, +17 items incl. the coin/gem/relic latent-gap
-  fix, +9 recipes, beehive/silver-vein nodes, +5 build parts), E6.7 iconography (procedural item
-  icons, distinct map-marker glyph shapes, panel emblems — inline SVG, contrast-checked,
-  aria-hidden alongside text labels). In flight: E6.2 structures, E6.3 biome/time spawning +
-  spawn-rate settings. Achievements for the new systems deferred — not expressible as a
-  pure-data registry addition (see `docs/EXPANSION_PLAN.md` deferrals)
+- [x] E5 Social: party groups (4-cap, leader succession, invite/kick, P panel, party frames),
+  trade escrow (offer-change resets both confirms, atomic host-side swap, no dupe paths),
+  kid-safe chat (host-filtered EN/ES/DA profanity masking + PII redaction covering text AND
+  display names, party channel over live membership), opt-in read-only party inventory lookup,
+  party damage meter — every mutation a host-authoritative intent; all three slices passed
+  independent security review before merge (follow-ups recorded in `docs/EXPANSION_PLAN.md`)
+- [x] E6 World content: E6.1 caves (seeded 3D-noise carving unioned into the voxel SDF,
+  worldgen-version-gated — pre-existing worlds regenerate byte-identical), E6.2 seeded
+  structures/POIs (4 cozy types on a deterministic 96m grid, chests are ordinary placeables,
+  map POIs), E6.3 biome/time-gated spawning (registry-side affinity as source of truth,
+  owl/badger nocturnal, global caps, spawn-rate settings), E6.4 research tree (13-node starter
+  tree over ProgressionEvents-derived points, J screen, per-owner persistence), E6.5 asset
+  library (+5 creatures, +17 items incl. the coin/gem/relic latent-gap fix, +9 recipes,
+  beehive/silver-vein nodes, +5 build parts), E6.7 iconography (procedural item icons, distinct
+  map-marker glyph shapes, panel emblems). Achievements for the new systems deferred — not
+  expressible as a pure-data registry addition (see `docs/EXPANSION_PLAN.md` deferrals)
 - [ ] Expansion playtest gate (structured session — owner schedules)
 
 ## Notes

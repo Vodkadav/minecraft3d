@@ -27,8 +27,8 @@ status: the `## Expansion` checklist in [`PROGRESS.md`](../PROGRESS.md).
 | E2 ARPG HUD | Bars/orbs vitals, creature nameplates + lifebars, floating combat text, combat log + solo meter | Done |
 | E3 Maps | Exploration fog-of-war, minimap, full-screen map (M), pluggable marker sources | Done |
 | E4 Inventory depth | Autosort, item filters, autoloot, account bank (K) | Done (multiplayer bank deferred) |
-| E5 Social | Party + frames, invite/kick, trade escrow, party inventory lookup, kid-safe chat, party meter | In flight |
-| E6 World content | Caves, seeded structures/POIs, biome/time-gated spawning, research tree, asset library growth, settings, iconography | In flight |
+| E5 Social | Party + frames, invite/kick, trade escrow, party inventory lookup, kid-safe chat, party meter | Done (all security-reviewed) |
+| E6 World content | Caves, seeded structures/POIs, biome/time-gated spawning, research tree, asset library growth, settings, iconography | Done |
 
 ## Dependency order
 
@@ -76,6 +76,21 @@ The E6.5 asset-library expansion (5 creatures, 17 items incl. the coin/gem/relic
   `placeable.<id>.name` to EN/ES/DA in `ui/i18n/strings.ts` for consistency with the other
   structural pieces (not read by any UI yet — reserved for a future piece picker). Guarding test:
   `PlacementPieces.test.ts` (`>= 15 pieces` gate, unique ids, functional-set presence).
+
+## Security follow-ups from the E5 reviews (recorded, non-blocking)
+
+- Chat: per-peer rate limiting (token bucket in `handleChat`); host-side mute/kick primitives —
+  chat is not "done" for the child-safety charter until these land; zero-width/homoglyph filter
+  hardening (accepted limitation for a private family mesh).
+- Party: per-peer rate limit on `partyVitals`/`partyInventoryLookup` (cadence is trust-based;
+  4-member cap bounds amplification); sweep stale `invitedTo` entries on party disband (fails
+  closed on use today).
+- Trade: confirm-time validation is per-stack, not cumulative across duplicate item ids — the
+  resolve-time debit catches it, but the UX is confirm-then-silent-cancel.
+- Backlog (pre-existing, blast radius grew with E5): the joiner's host trust anchor is
+  first-welcome-wins; authenticate the host peer id out-of-band eventually.
+- Close chat rate-limiting and name/mute items before exposing multiplayer beyond a
+  private family mesh.
 
 ## Standing deferrals (recorded, not skipped)
 
