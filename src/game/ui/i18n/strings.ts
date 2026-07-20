@@ -172,6 +172,14 @@ export const UI_STRINGS: Catalog = {
     "item.gilded-pickaxe.name": "Gilded Pickaxe",
     "item.relic-charm.name": "Relic Charm",
 
+    // ---- E7.2 ammo ----
+    "item.arrow.name": "Arrow",
+    "item.pebble.name": "Pebble",
+    "item.dart.name": "Dart",
+    "item.bow.name": "Hunting Bow",
+    "item.sling.name": "Sling",
+    "item.dart-thrower.name": "Dart Thrower",
+
     "creature.deer.name": "Deer",
     "creature.wolf.name": "Wolf",
     "creature.elk.name": "Elk",
@@ -660,6 +668,14 @@ export const UI_STRINGS: Catalog = {
     "item.gilded-pickaxe.name": "Pico dorado",
     "item.relic-charm.name": "Amuleto de reliquia",
 
+    // ---- E7.2 ammo ----
+    "item.arrow.name": "Flecha",
+    "item.pebble.name": "Guijarro",
+    "item.dart.name": "Dardo",
+    "item.bow.name": "Arco de caza",
+    "item.sling.name": "Honda",
+    "item.dart-thrower.name": "Lanzadardos",
+
     "creature.deer.name": "Ciervo",
     "creature.wolf.name": "Lobo",
     "creature.elk.name": "Alce",
@@ -1147,6 +1163,14 @@ export const UI_STRINGS: Catalog = {
     "item.gilded-sword.name": "Forgyldt sværd",
     "item.gilded-pickaxe.name": "Forgyldt hakke",
     "item.relic-charm.name": "Relikvieamulet",
+
+    // ---- E7.2 ammo ----
+    "item.arrow.name": "Pil",
+    "item.pebble.name": "Sten",
+    "item.dart.name": "Kastepil",
+    "item.bow.name": "Jagtbue",
+    "item.sling.name": "Slynge",
+    "item.dart-thrower.name": "Kastepilkaster",
 
     "creature.deer.name": "Hjort",
     "creature.wolf.name": "Ulv",

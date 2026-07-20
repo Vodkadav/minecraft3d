@@ -61,7 +61,10 @@ export class ProjectileRegistry {
  * `starterItems.ts`, §4 ownership table).
  */
 export const STARTER_PROJECTILES: readonly ProjectileSpec[] = [
-  // ---- E7.2 Ranged + ammo (arrows, pebbles) ----
+  // ---- E7.2 Ranged + ammo (arrows, pebbles, darts) ----
+  { id: "arrow", speed: 40, gravity: 9.8, lifetimeMs: 3000, radius: 0.15, tracerVfx: "arrowTracer" },
+  { id: "pebble", speed: 30, gravity: 9.8, lifetimeMs: 2000, radius: 0.12, tracerVfx: "pebbleTracer" },
+  { id: "dart", speed: 35, gravity: 6, lifetimeMs: 2500, radius: 0.1, tracerVfx: "dartTracer" },
   // ---- E7.3 Spellcasting (Sparkle Bolt) ----
   // ---- E7.6 Monster abilities (ranged spit) ----
 ];

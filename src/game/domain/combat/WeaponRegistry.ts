@@ -9,6 +9,7 @@
  */
 
 import type { ItemDefinition, WeaponMetadata } from "../items/ItemDefinition";
+import { STARTER_ITEMS } from "../items/starterItems";
 import { err, ok, type Result } from "../Result";
 
 export type WeaponError =
@@ -43,10 +44,13 @@ export class WeaponRegistry {
   }
 }
 
-// NOTE: no `WEAPON_REGISTRY` starter-data singleton yet — no shipped item
-// carries `combat` metadata as of E7.0 (every pre-existing item stays
-// untouched per the slice's scope). The first combat stream to add a weapon
-// item to `starterItems.ts` should also add
-// `export const WEAPON_REGISTRY = unwrap(WeaponRegistry.create(STARTER_ITEMS));`
-// here, mirroring `CREATURE_REGISTRY`/`PROJECTILE_REGISTRY`'s composition-root
-// pattern — deferred rather than built speculatively against an empty table.
+// E7.2 is the first stream to add weapon items (bow/sling/dart-thrower) to
+// `starterItems.ts` — per this file's own former NOTE, it now also builds the
+// starter-data singleton, mirroring `CREATURE_REGISTRY`/`PROJECTILE_REGISTRY`'s
+// composition-root pattern.
+export const WEAPON_REGISTRY: WeaponRegistry = unwrap(WeaponRegistry.create(STARTER_ITEMS));
+
+function unwrap(result: Result<WeaponRegistry, WeaponError>): WeaponRegistry {
+  if (!result.ok) throw new Error(`bad starter weapon table: ${result.error.kind} (${result.error.id})`);
+  return result.value;
+}

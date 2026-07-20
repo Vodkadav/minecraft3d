@@ -197,4 +197,80 @@ export const STARTER_ITEMS: readonly ItemDefinition[] = [
   { id: "gilded-sword", displayName: "Gilded Sword", maxStackSize: 1, tags: ["tool", "weapon", "crafted"], tier: 4 },
   { id: "gilded-pickaxe", displayName: "Gilded Pickaxe", maxStackSize: 1, tags: ["tool", "crafted"], tier: 4 },
   { id: "relic-charm", displayName: "Relic Charm", maxStackSize: 1, tags: ["crafted", "gear"], tier: 4 },
+
+  // ---- E7.2 ammo ----
+  // Draw-to-charge ranged weapons + their consumed ammo (ADR 0004 §5:
+  // `combat` is additive — every pre-existing item above is untouched).
+  // `damage` here is the weapon's BASE damage; the host scales it by
+  // `RangedCharge.chargeMultiplier(chargeMs)` itself before it ever reaches
+  // a hit (security item 5 — never a client-claimed damage number).
+  {
+    id: "arrow",
+    displayName: "Arrow",
+    maxStackSize: 64,
+    tags: ["crafted", "ammo"],
+    tier: 0,
+  },
+  {
+    id: "pebble",
+    displayName: "Pebble",
+    maxStackSize: 64,
+    tags: ["crafted", "ammo"],
+    tier: 0,
+  },
+  {
+    id: "dart",
+    displayName: "Dart",
+    maxStackSize: 64,
+    tags: ["crafted", "ammo"],
+    tier: 0,
+  },
+  {
+    id: "bow",
+    displayName: "Hunting Bow",
+    maxStackSize: 1,
+    tags: ["tool", "weapon", "crafted"],
+    tier: 0,
+    combat: {
+      kind: "ranged",
+      damage: 12,
+      attackSpeed: 1,
+      projectile: "arrow",
+      ammoItemId: "arrow",
+      damageType: "physical",
+      feelEvent: "arrowHit",
+    },
+  },
+  {
+    id: "sling",
+    displayName: "Sling",
+    maxStackSize: 1,
+    tags: ["tool", "weapon", "crafted"],
+    tier: 0,
+    combat: {
+      kind: "ranged",
+      damage: 8,
+      attackSpeed: 1.5,
+      projectile: "pebble",
+      ammoItemId: "pebble",
+      damageType: "physical",
+      feelEvent: "arrowHit",
+    },
+  },
+  {
+    id: "dart-thrower",
+    displayName: "Dart Thrower",
+    maxStackSize: 1,
+    tags: ["tool", "weapon", "crafted"],
+    tier: 0,
+    combat: {
+      kind: "ranged",
+      damage: 10,
+      attackSpeed: 1.2,
+      projectile: "dart",
+      ammoItemId: "dart",
+      damageType: "physical",
+      feelEvent: "arrowHit",
+    },
+  },
 ];
