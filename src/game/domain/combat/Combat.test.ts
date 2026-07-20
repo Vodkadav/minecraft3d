@@ -62,3 +62,44 @@ describe("lootFor", () => {
     expect(lootFor("dragon", 0.5)).toEqual([]);
   });
 });
+
+describe("lootFor — E7.8 bonus loot pools", () => {
+  it("a species with no pool entry is unaffected by context (identical to the flat-rule result)", () => {
+    for (const roll of [0, 0.25, 0.5, 0.75, 0.999]) {
+      expect(lootFor("deer", roll, { difficulty: "hard", isNight: true })).toEqual(
+        lootFor("deer", roll),
+      );
+    }
+  });
+
+  it("a species with a pool entry gets exactly one extra stack beyond its flat rules", () => {
+    for (const roll of [0, 0.1, 0.33, 0.5, 0.66, 0.9, 0.999]) {
+      const flatCount = CREATURE_STATS["wolf"]!.loot.length;
+      expect(lootFor("wolf", roll).length).toBe(flatCount + 1);
+    }
+  });
+
+  it("is deterministic for the same roll and context", () => {
+    const ctx = { difficulty: "hard" as const, isNight: true };
+    expect(lootFor("wolf", 0.37, ctx)).toEqual(lootFor("wolf", 0.37, ctx));
+  });
+
+  it("omitting context matches the explicit normal/day default", () => {
+    expect(lootFor("wolf", 0.6)).toEqual(
+      lootFor("wolf", 0.6, { difficulty: "normal", isNight: false }),
+    );
+  });
+
+  it("harder difficulty/night skews the bonus drop toward rarer items across a roll sample", () => {
+    const rolls = Array.from({ length: 100 }, (_, i) => (i + 0.5) / 100);
+    const isRareOrBetter = (drop: ReturnType<typeof lootFor>) =>
+      drop.some((s) => s.itemId === "wolf-fang" || s.itemId === "sparkle-gem");
+    const easyCount = rolls.filter((r) =>
+      isRareOrBetter(lootFor("wolf", r, { difficulty: "peaceful", isNight: false })),
+    ).length;
+    const hardCount = rolls.filter((r) =>
+      isRareOrBetter(lootFor("wolf", r, { difficulty: "hard", isNight: true })),
+    ).length;
+    expect(hardCount).toBeGreaterThan(easyCount);
+  });
+});
