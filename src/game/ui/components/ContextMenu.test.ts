@@ -53,7 +53,39 @@ describe("ContextMenu", () => {
     expect(document.querySelector('[role="menu"]')).toBeNull();
     anchor.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
     expect(menu.isOpen).toBe(false);
+    // no menu exists, so the anchor makes no popup claim either
+    expect(anchor.hasAttribute("aria-haspopup")).toBe(false);
     menu.dispose();
+  });
+
+  it("marks the anchor aria-haspopup=menu and toggles aria-expanded with open state", () => {
+    const anchor = mountAnchor();
+    const menu = attachContextMenu(anchor, {
+      actions: ACTIONS,
+      loc: createLocalizer("en"),
+      ariaLabel: "Item actions",
+      onSelect: vi.fn(),
+    });
+    expect(anchor.getAttribute("aria-haspopup")).toBe("menu");
+    expect(anchor.getAttribute("aria-expanded")).toBe("false");
+    anchor.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
+    expect(anchor.getAttribute("aria-expanded")).toBe("true");
+    document.body.dispatchEvent(new Event("pointerdown", { bubbles: true, cancelable: true }));
+    expect(anchor.getAttribute("aria-expanded")).toBe("false");
+    menu.dispose();
+  });
+
+  it("dispose clears the aria-haspopup/aria-expanded claim from the anchor", () => {
+    const anchor = mountAnchor();
+    const menu = attachContextMenu(anchor, {
+      actions: ACTIONS,
+      loc: createLocalizer("en"),
+      ariaLabel: "Item actions",
+      onSelect: vi.fn(),
+    });
+    menu.dispose();
+    expect(anchor.hasAttribute("aria-haspopup")).toBe(false);
+    expect(anchor.hasAttribute("aria-expanded")).toBe(false);
   });
 
   it("right-click opens the menu and focuses the first enabled item", () => {

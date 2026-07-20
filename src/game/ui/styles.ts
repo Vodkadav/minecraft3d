@@ -2008,6 +2008,89 @@ ${THEME_CSS_VARS}
   background: rgba(255,255,255,0.08);
   pointer-events: none;
 }
+
+/* ---- E8.8 mobile/responsive ----
+   Phone-viewport overrides only — every rule above stays untouched, so the
+   no-flags desktop render can't regress. Two goals: (1) close the concrete
+   overflow bugs where a desktop min-width is wider than a phone viewport
+   (.lw-inv-overlay-panel's 420px, .lw-objective-tracker/.lw-combat-meter/
+   .lw-party-panel's 220-320px), which clip off-screen on a ~360-428px phone
+   today; (2) keep every interactive control at the >=44px touch-target floor
+   even where reflowing shrinks its container. */
+@media (max-width: 640px) {
+  /* Generic controls that don't already carry an explicit min-height at
+     desktop size (.lw-hotbar-slot/.lw-action-slot/.lw-context-menu-item/
+     .lw-field-input all already do — left alone). */
+  .laas-ui .lw-button,
+  .laas-ui select,
+  .laas-ui input[type="text"],
+  .laas-ui input[type="range"] {
+    min-height: 44px;
+  }
+
+  /* Overlay dialogs (WindowFrame screens sharing .lw-inv-overlay-panel:
+     Inventory/Bank/Character/Research/Campfire/Chest/Trade) — the desktop
+     min-width forces a 420px-wide panel that overflows any phone viewport;
+     go near-full-width with a comfortable side margin instead. */
+  .lw-inv-overlay-panel {
+    min-width: 0;
+    width: calc(100vw - var(--lw-space-4) * 2);
+    max-width: calc(100vw - var(--lw-space-4) * 2);
+  }
+  .lw-inv-tabs {
+    flex-wrap: wrap;
+  }
+
+  /* HUD side clusters — same "desktop min-width wider than the viewport"
+     overflow risk as the overlay panel above. Single-column already (each
+     is its own corner-docked block); just stop forcing a width past the
+     phone's edge. */
+  .lw-objective-tracker,
+  .lw-party-panel,
+  .lw-combat-meter {
+    min-width: 0;
+    width: calc(100vw - var(--lw-space-4) * 2);
+    max-width: calc(100vw - var(--lw-space-4) * 2);
+  }
+
+  /* Hotbar / action bar — a fixed row of slots (9 hotbar slots, or however
+     many ability+consumable action-bar slots) can be wider than a phone
+     screen. Scroll the row horizontally rather than shrinking slots below
+     the touch-target floor or letting them clip. */
+  .lw-hotbar {
+    max-width: calc(100vw - var(--lw-space-4) * 2);
+    overflow-x: auto;
+    padding-bottom: var(--lw-space-1); /* clears space for a touch scrollbar without covering slots */
+  }
+  .lw-hotbar-slot {
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
+    flex: 0 0 auto;
+  }
+  .lw-action-bar-slots {
+    max-width: calc(100vw - var(--lw-space-4) * 2);
+    overflow-x: auto;
+    padding-bottom: var(--lw-space-1);
+  }
+  .lw-action-slot {
+    flex: 0 0 auto;
+  }
+
+  /* Vitals "orbs" layout's desktop side padding (space-6 = 2rem each edge)
+     eats too much of a narrow screen's width. */
+  .lw-vitals-cluster[data-layout="orbs"] {
+    padding: 0 var(--lw-space-2);
+  }
+
+  /* Minimap corner widget — match the existing [data-mobile="true"] compact
+     size so it doesn't crowd the objective tracker sharing its corner. */
+  .lw-minimap {
+    width: 96px;
+    height: 96px;
+  }
+}
 `;
 
 export function injectStyles(doc: Document): void {

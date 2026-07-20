@@ -17,7 +17,10 @@
  * outside-pointerdown all close the menu and return focus to the anchor —
  * the menu never leaves focus stranded. A disabled action stays visible and
  * reachable (`aria-disabled`, per WAI-ARIA menu authoring practice) but does
- * nothing when activated. Static positioning + the shared `.laas-ui`
+ * nothing when activated. The anchor carries `aria-haspopup="menu"` +
+ * `aria-expanded` (toggled with open state) whenever a menu actually exists,
+ * so assistive tech announces the trigger the same way it would a menu
+ * button (E8.8 audit fix). Static positioning + the shared `.laas-ui`
  * reduced-motion rule in `styles.ts` (E8.1) mean this needs no motion code of
  * its own to be reduced-motion-safe.
  *
@@ -58,6 +61,13 @@ export function attachContextMenu(anchor: HTMLElement, opts: ContextMenuOptions)
 
   if (hasActions) {
     injectStyles(doc);
+
+    // WAI-ARIA menu-button pattern: expose that this anchor owns a menu and
+    // its open state, mirroring the F10-Shift/long-press "trigger" role it
+    // already plays. Only set when a menu actually exists (matches the
+    // existing "no menu built" no-op contract for an empty action list).
+    anchor.setAttribute("aria-haspopup", "menu");
+    anchor.setAttribute("aria-expanded", "false");
 
     menu = doc.createElement("div");
     menu.className = "laas-ui lw-context-menu";
@@ -113,6 +123,7 @@ export function attachContextMenu(anchor: HTMLElement, opts: ContextMenuOptions)
   function openAt(x: number, y: number): void {
     if (!hasActions || !menu || open) return;
     open = true;
+    anchor.setAttribute("aria-expanded", "true");
     menu.hidden = false;
     position(menu, x, y);
     const firstEnabled = opts.actions.findIndex((a) => a.enabled);
@@ -125,6 +136,7 @@ export function attachContextMenu(anchor: HTMLElement, opts: ContextMenuOptions)
   function close(returnFocus: boolean): void {
     if (!open || !menu) return;
     open = false;
+    anchor.setAttribute("aria-expanded", "false");
     menu.hidden = true;
     doc.removeEventListener("pointerdown", onOutsidePointerDown, true);
     if (returnFocus) anchor.focus();
@@ -228,6 +240,10 @@ export function attachContextMenu(anchor: HTMLElement, opts: ContextMenuOptions)
     dispose(): void {
       clearLongPress();
       close(false);
+      if (hasActions) {
+        anchor.removeAttribute("aria-haspopup");
+        anchor.removeAttribute("aria-expanded");
+      }
       anchor.removeEventListener("contextmenu", onContextMenu);
       anchor.removeEventListener("keydown", onAnchorKeyDown);
       anchor.removeEventListener("touchstart", onTouchStart as EventListener);

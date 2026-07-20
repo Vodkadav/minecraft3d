@@ -87,3 +87,37 @@ describe("applyAccessibility (colorblind rarity / reduce flair)", () => {
     expect(UI_STYLES).toMatch(/:root\[data-reduce-flair="true"\]/);
   });
 });
+
+/**
+ * E8.8 mobile/responsive block — appended at the end of UI_STYLES behind a
+ * single `@media (max-width: 640px)` query so every desktop rule above it
+ * stays untouched. Asserted by text match (matching this file's existing
+ * convention) rather than a computed-style check, since happy-dom's rendering
+ * engine has no real viewport to evaluate a media query against.
+ */
+describe("UI_STYLES mobile/responsive (E8.8)", () => {
+  const mediaBlockMatch = UI_STYLES.match(/@media \(max-width: 640px\) \{([\s\S]*)\}\s*`?$/);
+  const mediaBlock = mediaBlockMatch?.[1] ?? "";
+
+  it("ships exactly one clearly-marked mobile media block at the end of the sheet", () => {
+    expect(UI_STYLES).toContain("---- E8.8 mobile/responsive ----");
+    expect(UI_STYLES.match(/@media \(max-width: 640px\)/g)).toHaveLength(1);
+  });
+
+  it("closes the .lw-inv-overlay-panel desktop min-width overflow (420px wider than a phone)", () => {
+    expect(mediaBlock).toMatch(/\.lw-inv-overlay-panel\s*\{[^}]*min-width:\s*0/);
+  });
+
+  it("closes the same min-width-wider-than-viewport risk on the HUD side clusters", () => {
+    expect(mediaBlock).toMatch(/\.lw-objective-tracker,\s*\.lw-party-panel,\s*\.lw-combat-meter\s*\{[^}]*min-width:\s*0/);
+  });
+
+  it("keeps generic buttons/inputs at the 44px touch-target floor", () => {
+    expect(mediaBlock).toMatch(/\.lw-button,[\s\S]*?\{[^}]*min-height:\s*44px/);
+  });
+
+  it("keeps hotbar slots at >=44px while letting the row scroll instead of clipping", () => {
+    expect(mediaBlock).toMatch(/\.lw-hotbar-slot\s*\{[^}]*width:\s*44px/);
+    expect(mediaBlock).toMatch(/\.lw-hotbar\s*\{[^}]*overflow-x:\s*auto/);
+  });
+});
