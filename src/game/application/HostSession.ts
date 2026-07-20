@@ -604,23 +604,43 @@ export class HostSession {
       return;
     }
 
-    // party channel (E5.5 deferral — E5.1's Party.ts hasn't landed): route
-    // through the `partyMembersOf` port. Unwired ⇒ FAIL CLOSED: the message
-    // reaches only its own sender, never a public broadcast — leaking an
-    // intended-private message would be a child-safety regression, not a
-    // convenience shortcut.
-    const members = this.hooks.partyMembersOf?.(senderPeerId) ?? null;
+    // party channel (E5.1+E5.5 reconciliation): membership is read LIVE from
+    // the party maps (a test override can still inject via the
+    // `partyMembersOf` hook), so a kicked/left peer drops out of the party
+    // chat channel in the same tick the roster clears. No party ⇒ FAIL
+    // CLOSED: the message reaches only its own sender, never a public
+    // broadcast — leaking an intended-private message would be a
+    // child-safety regression, not a convenience shortcut.
+    const members = this.hooks.partyMembersOf?.(senderPeerId) ?? this.livePartyMembersOf(senderPeerId);
     if (members === null) {
       if (senderPeerId === HOST_PEER_ID) this.hooks.onChat?.(msg);
       else this.transport.send(senderPeerId, wire);
       return;
     }
-    for (const memberId of members) this.transport.send(memberId, wire);
+    // HOST_PEER_ID is not a transport peer — its delivery is the onChat
+    // self-loop below, never a wire send.
+    for (const memberId of members) {
+      if (memberId !== HOST_PEER_ID) this.transport.send(memberId, wire);
+    }
     if (senderPeerId === HOST_PEER_ID || members.includes(HOST_PEER_ID)) {
       this.hooks.onChat?.(msg);
-    } else if (senderPeerId !== HOST_PEER_ID) {
+    }
+    // a joiner sender always sees its own party line echoed back, whether or
+    // not the host happens to be a member.
+    if (senderPeerId !== HOST_PEER_ID) {
       this.transport.send(senderPeerId, wire);
     }
+  }
+
+  /** The OTHER members of the sender's party, read live from the party maps
+   *  (E5.1) — null when the sender is in no party, which the party-channel
+   *  routing above treats as fail-closed. */
+  private livePartyMembersOf(senderPeerId: string): readonly string[] | null {
+    const partyId = this.partyIdByPeer.get(senderPeerId);
+    if (!partyId) return null;
+    const party = this.parties.get(partyId);
+    if (!party) return null;
+    return party.memberIds.filter((id) => id !== senderPeerId);
   }
 
   // ---- E5.3 trading ----

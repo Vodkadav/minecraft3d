@@ -1037,6 +1037,34 @@ describe("HostSession", () => {
       });
       expect(carolInbox.filter((m) => (m as { kind: string }).kind === "chatMessage")).toEqual([]);
     });
+
+    it("party: routes over the LIVE party maps — a kicked member stops receiving in the same tick", () => {
+      net = makeTransportNetwork();
+      session = new HostSession(net.host, () => SNAPSHOT, { onWorldEdit: () => {} }, { clock: () => now });
+      const alice = net.addPeer("alice");
+      const bob = net.addPeer("bob");
+      const carol = net.addPeer("carol");
+      alice.broadcast({ kind: "join", playerName: "Alice" });
+      bob.broadcast({ kind: "join", playerName: "Bob" });
+      carol.broadcast({ kind: "join", playerName: "Carol" });
+      alice.broadcast({ kind: "partyAction", action: { op: "invite", targetPeerId: "bob" } });
+      bob.broadcast({ kind: "partyAction", action: { op: "acceptInvite" } });
+      const bobInbox = collect(bob);
+      const carolInbox = collect(carol);
+      const aliceInbox = collect(alice);
+
+      alice.broadcast({ kind: "chat", channel: "party", text: "hi party" });
+      const chatOf = (inbox: unknown[]) =>
+        inbox.filter((m) => (m as { kind: string }).kind === "chatMessage");
+      expect(chatOf(bobInbox)).toHaveLength(1);
+      expect(chatOf(aliceInbox)).toHaveLength(1); // sender echo
+      expect(chatOf(carolInbox)).toEqual([]); // non-member never sees it
+
+      alice.broadcast({ kind: "partyAction", action: { op: "kick", targetPeerId: "bob" } });
+      alice.broadcast({ kind: "chat", channel: "party", text: "after the kick" });
+      // bob got the first line only — membership is read live, no stale grant
+      expect(chatOf(bobInbox)).toHaveLength(1);
+    });
   });
 
   describe("E5.3 trading", () => {
