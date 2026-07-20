@@ -28,6 +28,7 @@ import {
   resolvePlacement,
   rotate,
   type GridSpec,
+  type PlacePieceCommand,
   type PlacementState,
   type RotationState,
 } from '../../game/domain/placement/Placement';
@@ -92,6 +93,16 @@ export interface PlacementToolHandle {
   /** Every currently-committed piece (Workstream 8.1, S7b's boot-sync pass —
    *  reconciles the domain PlaceableStore against the geometry registry). */
   listPieces(): readonly PlacedPiece[];
+  /** Programmatic commit at a known world position (E6.2 structure stamping)
+   *  — reuses the same grid-mode resolve/commit/mesh/persist path as a
+   *  player's `commitAim`, minus the audio/feel/progress side effects. Null
+   *  when the piece id is unknown or the placement is blocked (occupied,
+   *  clips terrain, no support) — the caller skips that one piece. */
+  commitPieceAt(
+    pieceId: string,
+    worldPos: readonly [number, number, number],
+    rotationIndex?: number,
+  ): PlacedPiece | null;
 }
 
 export function attachPlacementTool(deps: PlacementToolDeps): PlacementToolHandle {
@@ -168,17 +179,44 @@ export function attachPlacementTool(deps: PlacementToolDeps): PlacementToolHandl
     ghost.geometry = ghostGeometry(pieceIndex);
   };
 
+  const finishCommit = (cmd: PlacePieceCommand): PlacedPiece => {
+    const piece = registry.add(cmd);
+    addSolidMesh(piece);
+    persist();
+    onPieceCommitted?.(piece);
+    return piece;
+  };
+
   const commitAim = (): void => {
     if (!lastState) return;
     const cmd = commit(lastState);
     if (!cmd) return;
-    const piece = registry.add(cmd);
-    addSolidMesh(piece);
-    persist();
+    finishCommit(cmd);
     audio?.play('place', { position: cmd.center });
     feel?.trigger('place', { worldPos: cmd.center });
     onProgress?.('place');
-    onPieceCommitted?.(piece);
+  };
+
+  const commitPieceAt = (
+    pieceId: string,
+    worldPos: readonly [number, number, number],
+    rotationIndex = 0,
+  ): PlacedPiece | null => {
+    const pieceDef = PLACEMENT_PIECES.find((p) => p.id === pieceId);
+    if (!pieceDef) return null;
+    const rotation: RotationState = { stepDeg: 90, index: rotationIndex };
+    const state = resolvePlacement({
+      hit: { point: [worldPos[0], worldPos[1], worldPos[2]], normal: [0, 1, 0] },
+      mode: 'grid',
+      pieceDef,
+      rotation,
+      grid: GRID,
+      world,
+      rules: RULES,
+    });
+    const cmd = commit(state);
+    if (!cmd) return null;
+    return finishCommit(cmd);
   };
 
   const raycaster = new Raycaster(undefined, undefined, 0, REACH_M);
@@ -279,6 +317,7 @@ export function attachPlacementTool(deps: PlacementToolDeps): PlacementToolHandl
     isBuildMode: () => buildMode,
     raycastAimedPiece: (reachM = REACH_M) => (buildMode ? null : pieceAtCrosshair(reachM)),
     meshFor: (id: number) => meshesById.get(id),
+    commitPieceAt,
     listPieces: () => registry.all(),
     dispose: (): void => {
       window.removeEventListener('keydown', onKeyDown);

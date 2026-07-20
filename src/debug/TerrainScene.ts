@@ -38,6 +38,8 @@ import {
   type PlaceableInteractionHandle,
 } from '../voxel/placement/PlaceableInteractionTool';
 import { attachTreasureField } from '../voxel/treasure/TreasureField';
+import { attachStructureField, type StructureField } from '../voxel/worldgen/StructureField';
+import { WORLDGEN_VERSION } from '../game/domain/world/NewWorldSave';
 import { attachSpawnField } from '../spawn/SpawnFieldView';
 import { attachGroundItemField } from '../spawn/GroundItemField';
 import { DEFAULT_BANK_OPTIONS, mountGameHud } from '../spawn/GameHud';
@@ -468,6 +470,7 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
   // remove hooks are wired unconditionally here so no piece can ever be
   // placed before the indirection exists to catch it.
   let placeableInteractionRef: PlaceableInteractionHandle | null = null;
+  let structureFieldRef: StructureField | null = null;
   let saveStoreForPersistence: WorldSaveStore | null = null;
   // Workstream 6: DigTool/PlacementTool are constructed before the HUD (whose
   // recordProgress is the real sink) — this indirection lets them fire
@@ -843,6 +846,32 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
       engine.onUpdate(() => placeableInteraction.update());
       placeableInteractionRef = placeableInteraction;
       if (ctx.world) ctx.world.placeables = placeableInteraction; // M7 net glue reaches it here
+
+      // E6.2: world-seeded structures/POIs — composition-gated behind the
+      // `worldgen.version` entity stamp (NewWorldSave.ts) so every save
+      // written before this slice landed has no such key and never streams
+      // structures: the prime directive's "no effect on existing worlds"
+      // satisfied by construction, not a runtime feature flag. Stamps
+      // pieces through the SAME PlacedPieceRegistry/PlaceableStore the
+      // player's own build tool uses (`placementRef.commitPieceAt`), so a
+      // structure's chest is an ordinary placeable afterwards.
+      if (voxels.entity('worldgen.version') === WORLDGEN_VERSION) {
+        const structureStamped = voxels.entity('worldgen.structures.stamped');
+        const structures = attachStructureField({
+          seed: params.seed,
+          surface: { heightAt: (x, z) => hf.heightAtCpu(x, z) },
+          registry: itemsReg.value,
+          placement: placementRef,
+          placeableInteraction,
+          getPlayerXZ: () => [engine.camera.position.x, engine.camera.position.z],
+          ...(Array.isArray(structureStamped)
+            ? { stamped: structureStamped.filter((id): id is string => typeof id === 'string') }
+            : {}),
+          onStamped: (ids) => voxels.setEntity('worldgen.structures.stamped', ids),
+        });
+        engine.onUpdate(() => structures.update());
+        structureFieldRef = structures;
+      }
     }
 
     const AIM_DIR = new Vector3();
@@ -1023,7 +1052,18 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
     // MarkerSource array — wiring a future source (e.g. E0.5 ground loot)
     // is one more entry here, no change to MinimapModel/MapScreen.
     function liveMarkers(): readonly MapMarker[] {
-      return mergeMarkers([() => spawns.liveMarkers(), () => groundItems.liveMarkers()]);
+      return mergeMarkers([
+        () => spawns.liveMarkers(),
+        () => groundItems.liveMarkers(),
+        // E6.2: structures stamped so far this world, as "poi" markers.
+        () =>
+          (structureFieldRef?.liveMarkers() ?? []).map((m) => ({
+            id: m.id,
+            kind: 'poi' as const,
+            x: m.x,
+            z: m.z,
+          })),
+      ]);
     }
     const minimap = mountMinimapView({
       heightAt: (x, z) => hf.heightAtCpu(x, z),

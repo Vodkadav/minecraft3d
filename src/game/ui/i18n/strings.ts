@@ -413,6 +413,11 @@ export const UI_STRINGS: Catalog = {
     "research.grandDesign.name": "Grand Design",
     "research.grandDesign.desc": "The capstone of every branch — even better loot from everything.",
 
+    "worldgen.structure.abandonedCamp": "Abandoned Camp",
+    "worldgen.structure.stoneRuin": "Stone Ruin",
+    "worldgen.structure.wayshelter": "Cozy Wayshelter",
+    "worldgen.structure.bridgeCrossing": "Bridge Crossing",
+
     "map.title": "Map",
     "map.open.aria": "Open the full map",
     "map.close": "Close",
@@ -840,6 +845,11 @@ export const UI_STRINGS: Catalog = {
     "research.grandDesign.name": "Gran diseño",
     "research.grandDesign.desc": "El remate de cada rama — botín aún mejor de todo.",
 
+    "worldgen.structure.abandonedCamp": "Campamento abandonado",
+    "worldgen.structure.stoneRuin": "Ruina de piedra",
+    "worldgen.structure.wayshelter": "Refugio acogedor",
+    "worldgen.structure.bridgeCrossing": "Cruce del puente",
+
     "map.title": "Mapa",
     "map.open.aria": "Abrir el mapa completo",
     "map.close": "Cerrar",
@@ -1266,6 +1276,11 @@ export const UI_STRINGS: Catalog = {
     "research.ironWill.desc": "Et stort løft til maks. sundhed.",
     "research.grandDesign.name": "Stort design",
     "research.grandDesign.desc": "Kronen på hver gren — endnu bedre bytte fra alt.",
+
+    "worldgen.structure.abandonedCamp": "Forladt lejr",
+    "worldgen.structure.stoneRuin": "Sten ruin",
+    "worldgen.structure.wayshelter": "Hyggeligt vejskur",
+    "worldgen.structure.bridgeCrossing": "Bro-overgang",
 
     "map.title": "Kort",
     "map.open.aria": "Åbn det fulde kort",
