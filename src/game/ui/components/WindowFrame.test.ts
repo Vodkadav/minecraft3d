@@ -55,6 +55,17 @@ describe("WindowFrame", () => {
     expect(WindowFrame(baseOpts()).panel.querySelector(".lw-window-footer")).toBeNull();
   });
 
+  it("places header actions before the close button in the trailing group", () => {
+    const recenter = document.createElement("button");
+    recenter.textContent = "Recenter";
+    const { panel, closeButton } = WindowFrame({ ...baseOpts(), headerActions: [recenter] });
+    const trailing = panel.querySelector(".lw-window-header-actions");
+    expect(trailing?.contains(recenter)).toBe(true);
+    expect(trailing?.contains(closeButton)).toBe(true);
+    // recenter comes before close
+    expect(recenter.compareDocumentPosition(closeButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it("passes panelClassName through to the panel section", () => {
     const { panel } = WindowFrame({ ...baseOpts(), panelClassName: "lw-inv-overlay-panel" });
     expect(panel.classList.contains("lw-inv-overlay-panel")).toBe(true);

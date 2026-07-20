@@ -23,10 +23,8 @@ import { Inventory } from "../domain/inventory/Inventory";
 import type { ItemRegistry } from "../domain/items/ItemRegistry";
 import { Bank, SHARED_BANK_TAB } from "../domain/storage/Bank";
 import type { Localizer } from "../application/i18n/Localizer";
-import { Button } from "./components/Button";
 import { InventoryGrid } from "./components/InventoryGrid";
-import { Panel } from "./components/Panel";
-import { createPanelEmblemEl } from "./icons/PanelEmblem";
+import { WindowFrame } from "./components/WindowFrame";
 import { injectStyles } from "./styles";
 
 export interface BankScreenOptions {
@@ -93,20 +91,6 @@ export function mountBankScreen(opts: BankScreenOptions): BankScreenHandle {
   characterTabBtn.textContent = opts.loc.t("bank.tab.character");
   tabs.append(sharedTabBtn, characterTabBtn);
 
-  const closeBtn = Button({
-    label: opts.loc.t("inventory.close"),
-    ariaLabel: opts.loc.t("bank.close.aria"),
-    variant: "quiet",
-    onClick: () => close(),
-  });
-
-  const header = doc.createElement("div");
-  header.className = "lw-inv-header";
-  const headerLead = doc.createElement("div");
-  headerLead.className = "lw-panel-title-wrap";
-  headerLead.append(createPanelEmblemEl(doc, "bank"), tabs);
-  header.append(headerLead, closeBtn);
-
   const playerGrid = InventoryGrid({
     registry: opts.registry,
     loc: opts.loc,
@@ -156,8 +140,21 @@ export function mountBankScreen(opts: BankScreenOptions): BankScreenHandle {
   body.className = "lw-chest-body";
   body.append(playerGrid.el, bankGrid.el);
 
-  const panel = Panel([header, body], { className: "lw-inv-overlay-panel" });
-  overlay.appendChild(panel);
+  const frame = WindowFrame({
+    doc,
+    title: opts.loc.t("bank.title"),
+    titleVisuallyHidden: true,
+    emblem: "bank",
+    headerExtra: tabs,
+    close: {
+      label: opts.loc.t("inventory.close"),
+      ariaLabel: opts.loc.t("bank.close.aria"),
+      onClose: () => close(),
+    },
+    body: [body],
+    panelClassName: "lw-inv-overlay-panel",
+  });
+  overlay.appendChild(frame.panel);
   doc.body.appendChild(overlay);
 
   function applyTab(): void {

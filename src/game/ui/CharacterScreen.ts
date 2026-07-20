@@ -22,9 +22,7 @@ import { ATTRIBUTE_KEYS, type AttributeKey } from "../domain/character/Character
 import { xpForLevel } from "../domain/character/Leveling";
 import { canAllocateTalent, TALENT_NODES } from "../domain/character/TalentTree";
 import type { Localizer } from "../application/i18n/Localizer";
-import { Button } from "./components/Button";
-import { Panel } from "./components/Panel";
-import { createPanelEmblemEl } from "./icons/PanelEmblem";
+import { WindowFrame } from "./components/WindowFrame";
 import { injectStyles } from "./styles";
 
 export interface CharacterScreenOptions {
@@ -95,25 +93,24 @@ export function mountCharacterScreen(opts: CharacterScreenOptions): CharacterScr
   talentsTabBtn.textContent = opts.loc.t("character.tab.talents");
   tabs.append(attributesTabBtn, talentsTabBtn);
 
-  const closeBtn = Button({
-    label: opts.loc.t("character.close"),
-    ariaLabel: opts.loc.t("character.close.aria"),
-    variant: "quiet",
-    onClick: () => close(),
-  });
-
-  const header = doc.createElement("div");
-  header.className = "lw-inv-header";
-  const headerLead = doc.createElement("div");
-  headerLead.className = "lw-panel-title-wrap";
-  headerLead.append(createPanelEmblemEl(doc, "character"), tabs);
-  header.append(headerLead, closeBtn);
-
   const body = doc.createElement("div");
   body.className = "lw-character-body";
 
-  const panel = Panel([header, body], { className: "lw-inv-overlay-panel" });
-  overlay.appendChild(panel);
+  const frame = WindowFrame({
+    doc,
+    title: opts.loc.t("character.title"),
+    titleVisuallyHidden: true,
+    emblem: "character",
+    headerExtra: tabs,
+    close: {
+      label: opts.loc.t("character.close"),
+      ariaLabel: opts.loc.t("character.close.aria"),
+      onClose: () => close(),
+    },
+    body: [body],
+    panelClassName: "lw-inv-overlay-panel",
+  });
+  overlay.appendChild(frame.panel);
   doc.body.appendChild(overlay);
 
   function setCharacterInternal(next: CharacterState): void {

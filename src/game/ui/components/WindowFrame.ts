@@ -32,6 +32,9 @@ export interface WindowFrameOptions {
    *  The caller owns its state (aria-selected, click handlers); WindowFrame
    *  only lays it out. */
   readonly headerExtra?: HTMLElement;
+  /** Optional header action buttons placed just before the close button
+   *  (e.g. Map's "recenter"). The caller builds and owns them. */
+  readonly headerActions?: readonly HTMLElement[];
   readonly close: {
     readonly label: string;
     readonly ariaLabel: string;
@@ -80,7 +83,12 @@ export function WindowFrame(opts: WindowFrameOptions): WindowFrameHandle {
   closeButton.setAttribute("aria-label", opts.close.ariaLabel);
   closeButton.addEventListener("click", () => opts.close.onClose());
 
-  header.append(lead, closeButton);
+  const trailing = doc.createElement("div");
+  trailing.className = "lw-window-header-actions";
+  if (opts.headerActions) trailing.append(...opts.headerActions);
+  trailing.append(closeButton);
+
+  header.append(lead, trailing);
 
   const children: HTMLElement[] = [header, ...opts.body];
 

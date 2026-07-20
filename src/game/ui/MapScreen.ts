@@ -25,9 +25,8 @@ import {
 import type { ExplorationState } from "../domain/map/Exploration";
 import type { Localizer } from "../application/i18n/Localizer";
 import { Button } from "./components/Button";
-import { Panel } from "./components/Panel";
+import { WindowFrame } from "./components/WindowFrame";
 import { markerGlyphShape } from "./icons/MarkerGlyphs";
-import { createPanelEmblemEl } from "./icons/PanelEmblem";
 import { injectStyles } from "./styles";
 
 export interface MapPlayer {
@@ -109,23 +108,6 @@ export function mountMapScreen(opts: MapScreenOptions): MapScreenHandle {
     },
   });
 
-  const closeBtn = Button({
-    label: opts.loc.t("map.close"),
-    ariaLabel: opts.loc.t("map.close.aria"),
-    variant: "quiet",
-    onClick: () => close(),
-  });
-
-  const header = doc.createElement("div");
-  header.className = "lw-inv-header";
-  const titleWrap = doc.createElement("div");
-  titleWrap.className = "lw-panel-title-wrap";
-  const title = doc.createElement("h2");
-  title.textContent = opts.loc.t("map.title");
-  titleWrap.append(createPanelEmblemEl(doc, "map"), title);
-  const actions = doc.createElement("div");
-  actions.append(recenterBtn, closeBtn);
-  header.append(titleWrap, actions);
 
   const canvasWrap = doc.createElement("div");
   canvasWrap.className = "lw-map-canvas-wrap";
@@ -151,8 +133,20 @@ export function mountMapScreen(opts: MapScreenOptions): MapScreenHandle {
   body.style.minHeight = "0";
   body.append(canvasWrap, hint);
 
-  const panel = Panel([header, body], { className: "lw-map-overlay-panel" });
-  overlay.appendChild(panel);
+  const frame = WindowFrame({
+    doc,
+    title: opts.loc.t("map.title"),
+    emblem: "map",
+    headerActions: [recenterBtn],
+    close: {
+      label: opts.loc.t("map.close"),
+      ariaLabel: opts.loc.t("map.close.aria"),
+      onClose: () => close(),
+    },
+    body: [body],
+    panelClassName: "lw-map-overlay-panel",
+  });
+  overlay.appendChild(frame.panel);
   doc.body.appendChild(overlay);
 
   function currentView(widthPx: number, heightPx: number): MinimapView {

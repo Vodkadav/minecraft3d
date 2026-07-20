@@ -23,7 +23,7 @@ import { Button } from "./components/Button";
 import { CraftingScreen } from "./components/CraftingScreen";
 import { InventoryGrid } from "./components/InventoryGrid";
 import { ItemFilterEditor } from "./components/ItemFilterEditor";
-import { Panel } from "./components/Panel";
+import { WindowFrame } from "./components/WindowFrame";
 import { injectStyles } from "./styles";
 
 export interface InventoryScreenOptions {
@@ -118,17 +118,6 @@ export function mountInventoryScreen(opts: InventoryScreenOptions): InventoryScr
     filterTabBtn,
   );
 
-  const closeBtn = Button({
-    label: opts.loc.t("inventory.close"),
-    ariaLabel: opts.loc.t("inventory.close.aria"),
-    variant: "quiet",
-    onClick: () => close(),
-  });
-
-  const header = doc.createElement("div");
-  header.className = "lw-inv-header";
-  header.append(tabs, closeBtn);
-
   const grid = InventoryGrid({
     registry: opts.registry,
     loc: opts.loc,
@@ -206,8 +195,20 @@ export function mountInventoryScreen(opts: InventoryScreenOptions): InventoryScr
   const body = doc.createElement("div");
   body.appendChild(inventoryBody);
 
-  const panel = Panel([header, body], { className: "lw-inv-overlay-panel" });
-  overlay.appendChild(panel);
+  const frame = WindowFrame({
+    doc,
+    title: opts.loc.t("inventory.title"),
+    titleVisuallyHidden: true,
+    headerExtra: tabs,
+    close: {
+      label: opts.loc.t("inventory.close"),
+      ariaLabel: opts.loc.t("inventory.close.aria"),
+      onClose: () => close(),
+    },
+    body: [body],
+    panelClassName: "lw-inv-overlay-panel",
+  });
+  overlay.appendChild(frame.panel);
   doc.body.appendChild(overlay);
 
   function elFor(t: Tab): HTMLElement {

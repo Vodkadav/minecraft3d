@@ -63,6 +63,12 @@ ${THEME_CSS_VARS}
   gap: var(--lw-space-2);
   min-width: 0;
 }
+.lw-window-header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--lw-space-2);
+  flex: 0 0 auto;
+}
 .lw-window-title {
   margin: 0;
   color: var(--lw-fg);
