@@ -29,9 +29,12 @@
 import {
   BoxGeometry,
   ConeGeometry,
+  DoubleSide,
   Group,
   Mesh,
+  MeshBasicMaterial,
   MeshStandardMaterial,
+  RingGeometry,
   SphereGeometry,
   type BufferGeometry,
   type Object3D,
@@ -49,8 +52,16 @@ import {
   decideBehavior,
   steer,
   wanderWaypoint,
+  type AbilityRangeHint,
   type Behavior,
 } from "../game/domain/ai/CreatureBrain";
+import {
+  IDLE_ABILITY_STATE,
+  tickAbility,
+  type AbilityState,
+  type CreatureAbility,
+} from "../game/domain/ai/CreatureAbilities";
+import { CREATURE_REGISTRY } from "../game/domain/creatures/CreatureRegistry";
 import type { CreatureEntity, InteractAction } from "../game/domain/net/Protocol";
 import { reconcileEntities } from "../game/domain/spawn/CreatureStream";
 import { lerpToward, smoothingFactor, stepYaw } from "../game/domain/spawn/CreatureSmoothing";
@@ -80,6 +91,15 @@ import {
   type MeleeTarget,
 } from "../game/domain/combat/MeleeResolve";
 import type { DefeatEffectsHandle } from "../feel/DefeatEffects";
+import { resolveAoe } from "../game/domain/combat/Aoe";
+import { AOE_REGISTRY } from "../game/domain/combat/AoeRegistry";
+import {
+  findHit,
+  spawnProjectile,
+  stepProjectile,
+  type ProjectileState,
+} from "../game/domain/combat/Projectile";
+import { PROJECTILE_REGISTRY } from "../game/domain/combat/ProjectileRegistry";
 
 /** Seconds between proximity re-steps when no cell is crossed. */
 const STEP_INTERVAL_S = 1.0;
@@ -118,6 +138,21 @@ const RIDE_SPEED_MULT = 1.6;
 /** E2.2: how long after an attack-given/bite-received the nameplate policy's
  *  `inCombat` mode stays true (ms). */
 const COMBAT_WINDOW_MS = 6000;
+
+// ---- E7.6 monster abilities ----
+/** Bright, friendly amber-gold telegraph ring — a fair warning, never a
+ *  danger red (cozy tone, ADR 0004 §4). Matches ImpactParticles'
+ *  monsterTelegraph/monsterCast palette. */
+const TELEGRAPH_RING_COLOR = 0xfff2b0;
+/** Ranged/cozySpell casters have no ground blast to preview — a small fixed
+ *  "about to act" ring instead of the (non-existent) hitbox an aoeStomp gets. */
+const TELEGRAPH_DEFAULT_RADIUS_M = 1.4;
+/** Rough torso height above ground a monster spit/toss aims at. */
+const MONSTER_SPIT_TARGET_HEIGHT_M = 1.0;
+const MONSTER_SPIT_PLAYER_RADIUS_M = 0.5;
+/** DoS/perf safety cap (host-local, but an unbounded list is still a
+ *  footgun) — mirrors the spirit of E7.2's MAX_ACTIVE_PROJECTILES_PER_PEER. */
+const MAX_MONSTER_PROJECTILES = 16;
 /** Host→joiner snapshot cadence (ADR 0003) — matches the pose loop's 10 Hz. */
 const SNAPSHOT_INTERVAL_S = 0.1;
 
@@ -332,6 +367,23 @@ interface CreatureEntry {
    *  the host's own local `ridingId` — a peer mount is resolved via intents
    *  and glued to that peer's streamed pose (ADR 0003 addendum). */
   riddenBy: string | null;
+  /** E7.6: HOST-only cooldown/windup state per `CreatureAbility.id` this
+   *  species has (empty for every pre-E7.6 species). A joiner never ticks
+   *  this — it only reads the streamed `behavior` for its own animation. */
+  readonly abilityStates: Map<string, AbilityState>;
+  /** E7.6: this creature's ground telegraph ring, present only while a
+   *  windup is visibly in progress — created on demand, disposed on hide
+   *  (`showTelegraphRing`/`hideTelegraphRing`), never cached across casts. */
+  telegraphRing: Mesh | null;
+}
+
+/** E7.6: one live, host-simulated monster spit/toss — `state` steps every
+ *  tick via E7.2's pure `Projectile` module; `mesh` is its cosmetic tracer. */
+interface MonsterProjectile {
+  readonly ability: CreatureAbility;
+  readonly projectileId: string;
+  state: ProjectileState;
+  readonly mesh: Mesh;
 }
 
 export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
@@ -424,6 +476,17 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
     materials.set(species, new MeshStandardMaterial({ color: v.color, roughness: 0.85 }));
   }
 
+  // E7.6: instance-scoped (like `geometries`/`materials` above) so a fresh
+  // attachSpawnField() after a prior instance's dispose() never touches an
+  // already-disposed THREE resource.
+  const telegraphRingGeometry = new RingGeometry(0.7, 0.85, 24);
+  const monsterProjectileGeometry = new SphereGeometry(0.14, 8, 6);
+  const monsterProjectileMaterial = new MeshStandardMaterial({
+    color: 0xdff0a0,
+    emissive: 0x8fae3a,
+    emissiveIntensity: 0.6,
+  });
+
   const nodes = new Map<string, { entity: SpawnEntity; obj: Mesh }>();
   const creatures = new Map<string, CreatureEntry>();
   const models = new CreatureModelLibrary();
@@ -485,6 +548,10 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
   // addendum — a peer-ridden creature is glued to this instead of AI steering).
   const peerPositions = new Map<string, readonly [number, number]>();
   const lastPeerXZ = new Map<string, readonly [number, number]>();
+  // E7.6: HOST-only, host-local monster spits/tosses in flight — see the
+  // "E7.6 monster abilities" section below for why this stays separate from
+  // HostSession's player-fired projectile map.
+  const monsterProjectiles: MonsterProjectile[] = [];
 
   // mounting/dismounting also toggles the ride speed boost through the controller
   const setRiding = (id: string | null): void => {
@@ -559,6 +626,8 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
         lastBiteMs: -Infinity,
         remoteTarget: null,
         riddenBy: null,
+        abilityStates: new Map(),
+        telegraphRing: null,
       });
       return;
     }
@@ -918,6 +987,192 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
     resolveDismountPeer(peerId);
   }
 
+  // ---- E7.6 monster abilities — HOST-owned resolution (ADR 0004 §2: only
+  // the host ever names a damage number). Every ability here only ever
+  // targets THIS host's own local player, exactly mirroring the pre-existing
+  // bite-on-contact path (`deps.onPlayerHit`) above/below — see the stream
+  // report for the multiplayer-visibility follow-up this implies. No new
+  // wire message: the telegraph ring is host-only VFX; the existing
+  // `behavior` stream field (already a loosely-typed string, Protocol.ts's
+  // `isCreatureEntity` never enumerated it) already carries the new "cast"/
+  // "kite" values to a joiner's animation for free. ----
+
+  /** This species' ability list — `CreatureRegistry` stays the single source
+   *  of truth (mirrors `CREATURE_STATS`/`TEMPERAMENT`'s derivation pattern);
+   *  looked up live since it's a cheap Map.get over a static species set. */
+  function creatureAbilities(species: string): readonly CreatureAbility[] {
+    const found = CREATURE_REGISTRY.get(species);
+    return isOk(found) ? (found.value.abilities ?? []) : [];
+  }
+
+  /** The first ability whose engagement range currently reaches the player —
+   *  feeds `CreatureBrain`'s stand-and-cast/retreat-and-fire steering
+   *  overlay. Today's starter data never gives one creature two abilities;
+   *  a future one just uses its first in-range ability for steering. */
+  function primaryAbilityHint(species: string, distToPlayer: number): AbilityRangeHint | null {
+    for (const ability of creatureAbilities(species)) {
+      if (distToPlayer <= ability.range) {
+        return { castStyle: ability.castStyle, range: ability.range, minRange: ability.minRange };
+      }
+    }
+    return null;
+  }
+
+  function telegraphRadius(ability: CreatureAbility): number {
+    if (ability.aoeId) {
+      const spec = AOE_REGISTRY.get(ability.aoeId);
+      if (isOk(spec)) return spec.value.radius;
+    }
+    return TELEGRAPH_DEFAULT_RADIUS_M;
+  }
+
+  /** Lazily creates this creature's ground telegraph ring as a child of
+   *  `c.obj` (moves/removes with the creature for free, no separate cleanup
+   *  in `remove()`) — idempotent while a windup is in progress. */
+  function showTelegraphRing(c: CreatureEntry): Mesh {
+    if (c.telegraphRing) return c.telegraphRing;
+    const material = new MeshBasicMaterial({
+      color: TELEGRAPH_RING_COLOR,
+      transparent: true,
+      opacity: 0,
+      side: DoubleSide,
+      depthWrite: false,
+    });
+    const ring = new Mesh(telegraphRingGeometry, material);
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.set(0, -c.lift + 0.06, 0);
+    c.obj.add(ring);
+    c.telegraphRing = ring;
+    return ring;
+  }
+
+  /** Grows from a pinpoint to the ability's full warning radius as
+   *  `progress` (0..1, `CreatureAbilities.tickAbility`'s windup fraction)
+   *  approaches 1 — the ring's *arrival* reads as "now", a readable
+   *  countdown (plan §1 telegraphing research: animation + SFX + a VFX
+   *  marker + a delay). A gentle pulse keeps it lively without reading as
+   *  alarming (cozy tone, ADR 0004 §4). For an `aoeStomp` the radius IS the
+   *  real blast radius — doubling as a fair preview of the danger zone. */
+  function pulseTelegraphRing(c: CreatureEntry, ability: CreatureAbility, progress: number): void {
+    const ring = showTelegraphRing(c);
+    const targetRadius = telegraphRadius(ability);
+    const outerM = Math.max(0.05, 0.15 + (targetRadius - 0.15) * progress);
+    ring.scale.setScalar(outerM / 0.85); // telegraphRingGeometry's own outer radius is 0.85
+    const material = ring.material as MeshBasicMaterial;
+    material.opacity = 0.3 + 0.4 * progress + 0.2 * (0.5 + 0.5 * Math.sin(clockMs / 90));
+  }
+
+  /** Disposes the ring's per-instance material (opacity/scale can't share
+   *  across simultaneously-casting creatures) — cheap since a ring only
+   *  ever lives for one windup's duration. */
+  function hideTelegraphRing(c: CreatureEntry): void {
+    if (!c.telegraphRing) return;
+    c.obj.remove(c.telegraphRing);
+    (c.telegraphRing.material as MeshBasicMaterial).dispose();
+    c.telegraphRing = null;
+  }
+
+  function disposeMonsterProjectile(p: MonsterProjectile): void {
+    group.remove(p.mesh);
+  }
+
+  /** Spawns a locally simulated E7.2 `Projectile` flight from the casting
+   *  creature toward the player's CURRENT position — not routed through
+   *  `HostSession`'s player-fired `activeProjectiles` map (that one is
+   *  keyed by an attacking peer, not a monster origin; see the stream
+   *  report for why this stays host-local rather than joining that map). */
+  function spawnMonsterProjectile(
+    ability: CreatureAbility,
+    origin: readonly [number, number, number],
+    px: number,
+    pz: number,
+  ): void {
+    if (!ability.projectileId || monsterProjectiles.length >= MAX_MONSTER_PROJECTILES) return;
+    const specResult = PROJECTILE_REGISTRY.get(ability.projectileId);
+    if (!isOk(specResult)) return;
+    const spec = specResult.value;
+    const py = deps.ground.heightAt(px, pz) + MONSTER_SPIT_TARGET_HEIGHT_M;
+    const dx = px - origin[0];
+    const dy = py - origin[1];
+    const dz = pz - origin[2];
+    const mag = Math.hypot(dx, dy, dz) || 1;
+    const mesh = new Mesh(monsterProjectileGeometry, monsterProjectileMaterial);
+    mesh.position.set(origin[0], origin[1], origin[2]);
+    group.add(mesh);
+    monsterProjectiles.push({
+      ability,
+      projectileId: ability.projectileId,
+      state: spawnProjectile(origin, [dx / mag, dy / mag, dz / mag], spec.speed),
+      mesh,
+    });
+  }
+
+  /** Advances every live monster spit/toss one tick and resolves a hit
+   *  against the host's own local player only (mirrors `hittableEntities`'s
+   *  player-authoritative-position spirit, just aimed the other way). */
+  function stepMonsterProjectiles(dt: number): void {
+    if (monsterProjectiles.length === 0) return;
+    const [px, pz] = deps.getPlayerXZ();
+    const py = deps.ground.heightAt(px, pz) + MONSTER_SPIT_TARGET_HEIGHT_M;
+    for (let i = monsterProjectiles.length - 1; i >= 0; i--) {
+      const p = monsterProjectiles[i]!;
+      const specResult = PROJECTILE_REGISTRY.get(p.projectileId);
+      if (!isOk(specResult)) {
+        disposeMonsterProjectile(p);
+        monsterProjectiles.splice(i, 1);
+        continue;
+      }
+      const spec = specResult.value;
+      const outcome = stepProjectile(p.state, spec, dt * 1000);
+      p.state = outcome.state;
+      p.mesh.position.set(p.state.x, p.state.y, p.state.z);
+      const hit = findHit(p.state, spec.radius, [
+        { id: "player", x: px, y: py, z: pz, radius: MONSTER_SPIT_PLAYER_RADIUS_M },
+      ]);
+      if (hit) {
+        if (p.ability.damage > 0) {
+          deps.onPlayerHit?.(p.ability.damage);
+          deps.audio?.play("hurt");
+        }
+        deps.feel?.trigger(p.ability.feelEvent as FeelEventId, {
+          worldPos: [p.state.x, p.state.y, p.state.z],
+        });
+      }
+      if (hit || outcome.expired) {
+        disposeMonsterProjectile(p);
+        monsterProjectiles.splice(i, 1);
+      }
+    }
+  }
+
+  /** Resolves one ability's `"fire"` tick. AoE stomps resolve instantly
+   *  through E7.4's `resolveAoe`, passed ONLY the host's own authoritative
+   *  player position — never a client-supplied entity set (the E7.2 review's
+   *  forward contract). Ranged/cozySpell abilities spawn a simulated shot
+   *  instead (`spawnMonsterProjectile`), resolved over the following ticks. */
+  function resolveMonsterAbilityFire(c: CreatureEntry, ability: CreatureAbility, px: number, pz: number): void {
+    const origin: [number, number, number] = [c.obj.position.x, c.obj.position.y + 0.5, c.obj.position.z];
+    deps.feel?.trigger("monsterCast", { worldPos: origin });
+    if (ability.aoeId) {
+      const specResult = AOE_REGISTRY.get(ability.aoeId);
+      if (isOk(specResult)) {
+        const hitsResult = resolveAoe(specResult.value, { x: origin[0], y: origin[1], z: origin[2] }, [
+          { id: "player", x: px, y: origin[1], z: pz },
+        ]);
+        if (isOk(hitsResult) && hitsResult.value.length > 0) {
+          const damage = ability.damage * hitsResult.value[0]!.magnitude;
+          if (damage > 0) {
+            deps.onPlayerHit?.(damage);
+            deps.audio?.play("hurt");
+          }
+        }
+        deps.feel?.trigger(ability.feelEvent as FeelEventId, { worldPos: origin });
+      }
+      return;
+    }
+    spawnMonsterProjectile(ability, origin, px, pz);
+  }
+
   function stepCreatures(dt: number): void {
     const [px, pz] = deps.getPlayerXZ();
     const epoch = Math.floor(clockMs / WANDER_EPOCH_MS);
@@ -974,12 +1229,34 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
           deps.onCombatEvent?.("hitTaken", damage);
         }
       }
+      // E7.6: tick every ability's cooldown/windup regardless of range (a
+      // cooldown always counts down), telegraph while winding up, and
+      // resolve a "fire" tick. See the "E7.6 monster abilities" section
+      // above for the helpers and the host-only/single-target scope note.
+      for (const ability of creatureAbilities(c.entity.species)) {
+        const prevState = c.abilityStates.get(ability.id) ?? IDLE_ABILITY_STATE;
+        const wasWindingUp = prevState.windupElapsedMs !== null;
+        const tick = tickAbility(ability, prevState, distToPlayer, dt * 1000);
+        c.abilityStates.set(ability.id, tick.state);
+        if (tick.action === "windup") {
+          if (!wasWindingUp) {
+            deps.feel?.trigger("monsterTelegraph", { worldPos: [x, c.obj.position.y, z] });
+          }
+          pulseTelegraphRing(c, ability, tick.progress);
+        } else if (tick.action === "fire") {
+          hideTelegraphRing(c);
+          resolveMonsterAbilityFire(c, ability, px, pz);
+        } else if (c.telegraphRing) {
+          hideTelegraphRing(c);
+        }
+      }
       const behavior = decideBehavior(
         c.entity.species,
         distToPlayer,
         healthFrac,
         c.taming.phase === "tamed",
         night ? NIGHT_AGGRO_RANGE_MULT : 1,
+        primaryAbilityHint(c.entity.species, distToPlayer),
       );
       const wp = wanderWaypoint(c.entity.id, c.anchor, epoch);
       const [vx, vz] = steer(behavior, [x, z], [px, pz], wp);
@@ -992,6 +1269,7 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
       c.obj.position.set(nx, deps.ground.heightAt(nx, nz) + c.lift, nz);
       c.obj.rotation.y = Math.atan2(vx, vz);
     }
+    stepMonsterProjectiles(dt);
   }
 
   // ---- host: build the streamed snapshot. A dying creature keeps streaming
@@ -1059,6 +1337,8 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
         lastBiteMs: -Infinity,
         remoteTarget: [e.x, e.y, e.z, e.yaw],
         riddenBy: null,
+        abilityStates: new Map(),
+        telegraphRing: null,
       });
       return;
     }
@@ -1246,9 +1526,16 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
     dispose(): void {
       window.removeEventListener("keydown", onKeyDown);
       for (const id of [...nodes.keys(), ...creatures.keys()]) remove(id);
+      // E7.6: any monster spit/toss still in flight — not tracked in
+      // `nodes`/`creatures`, so `remove()` above never touches these.
+      for (const p of monsterProjectiles) group.remove(p.mesh);
+      monsterProjectiles.length = 0;
       deps.parent.remove(group);
       for (const g of geometries.values()) g.dispose();
       for (const m of materials.values()) m.dispose();
+      telegraphRingGeometry.dispose();
+      monsterProjectileGeometry.dispose();
+      monsterProjectileMaterial.dispose();
     },
 
     get activeCount(): number {

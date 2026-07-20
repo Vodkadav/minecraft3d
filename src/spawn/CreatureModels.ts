@@ -40,6 +40,11 @@ const BEHAVIOR_CLIP: Readonly<Record<Behavior, string>> = {
   flee: "Gallop",
   aggro: "Gallop",
   follow: "Walk",
+  // E7.6: no dedicated cast/kite rig exists — "cast" (stand-and-cast, holds
+  // position) reuses Idle, "kite" (retreat-and-fire's backing-off) reuses
+  // Walk, matching each behavior's actual steering speed/stillness.
+  cast: "Idle",
+  kite: "Walk",
 };
 
 export const DEATH_CLIP = "Death";

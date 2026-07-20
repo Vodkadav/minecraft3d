@@ -67,6 +67,11 @@ export const STARTER_PROJECTILES: readonly ProjectileSpec[] = [
   { id: "dart", speed: 35, gravity: 6, lifetimeMs: 2500, radius: 0.1, tracerVfx: "dartTracer" },
   // ---- E7.3 Spellcasting (Sparkle Bolt) ----
   // ---- E7.6 Monster abilities (ranged spit) ----
+  // A wolf's thorn spit — a quick, flat, cozy-reskinned "bite from range".
+  { id: "wolf-thorn", speed: 22, gravity: 9.8, lifetimeMs: 1500, radius: 0.2, tracerVfx: "thornTracer" },
+  // A badger's acorn burst (cozySpell flavor) — lobbed a little higher/slower,
+  // reading as a magical toss rather than a straight-line spit.
+  { id: "badger-acorn", speed: 16, gravity: 11, lifetimeMs: 1200, radius: 0.18, tracerVfx: "acornTracer" },
 ];
 
 export const PROJECTILE_REGISTRY: ProjectileRegistry = unwrap(

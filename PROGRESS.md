@@ -231,8 +231,9 @@ slice (E7.0 protocol growth, E7.2–E7.6).
 - [x] E7.5 Deployables: timed grenade, proximity mine, telegraphed bumble-trap; host-owned
   arm/trigger (Deployable state machine, DeployableRegistry, deployItem handler + trigger tick,
   DeployableField VFX) — security-reviewed (APPROVED), merged
-- [ ] E7.6 Monster abilities: telegraphed windups (spit/cast/stomp), stand-and-cast /
-  retreat-and-fire brain decisions
+- [x] E7.6 Monster abilities: telegraphed windups (spit/cast/stomp), stand-and-cast /
+  retreat-and-fire brain decisions (CreatureAbilities, optional abilities? on wolf/bear/badger)
+  — host-driven, no new wire; security-reviewed (APPROVED), merged
 - [x] E7.7 Defeat VFX: poof + confetti + loot fountain, gentle player-down (no item loss)
   (feel/DefeatEffects.ts, squash-and-recover, respawn shimmer) — presentation-only, no wire; merged
 - [x] E7.8 Loot pools: weighted rarity tiers, difficulty/encounter multiplier, deterministic

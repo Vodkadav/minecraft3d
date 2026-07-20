@@ -11,6 +11,51 @@
  */
 
 import type { CreatureDefinition } from "./CreatureDefinition";
+import type { CreatureAbility } from "../ai/CreatureAbilities";
+
+// ---- E7.6 monster abilities — cozy-reskinned, gently damaging, each with a
+// telegraphed windup (fairness delay, plan §1). Appended as named constants
+// (not inlined) so `starterCreatures.test.ts`-style completeness checks and
+// `CreatureAbilities.test.ts` can both point at the same literal values.
+// Only species that already bite (stats.damage > 0) get one; boar is left
+// melee-only on purpose — not every hostile creature needs every system. ----
+const WOLF_THORN_SPIT: CreatureAbility = {
+  id: "wolf-thorn-spit",
+  kind: "rangedSpit",
+  castStyle: "retreatAndFire",
+  range: 12,
+  minRange: 5,
+  windupMs: 700,
+  cooldownMs: 4000,
+  damage: 4,
+  projectileId: "wolf-thorn",
+  damageType: "physical",
+  feelEvent: "arrowHit",
+};
+const BEAR_GROUND_POUND: CreatureAbility = {
+  id: "bear-ground-pound",
+  kind: "aoeStomp",
+  castStyle: "standAndCast",
+  range: 6,
+  windupMs: 900,
+  cooldownMs: 6000,
+  damage: 6,
+  aoeId: "bear-stomp",
+  damageType: "physical",
+  feelEvent: "boom",
+};
+const BADGER_ACORN_BURST: CreatureAbility = {
+  id: "badger-acorn-burst",
+  kind: "cozySpell",
+  castStyle: "standAndCast",
+  range: 9,
+  windupMs: 500,
+  cooldownMs: 5000,
+  damage: 3,
+  projectileId: "badger-acorn",
+  damageType: "nature",
+  feelEvent: "spellNature",
+};
 
 export const STARTER_CREATURES: readonly CreatureDefinition[] = [
   {
@@ -50,6 +95,9 @@ export const STARTER_CREATURES: readonly CreatureDefinition[] = [
     disposition: "hostile",
     visual: { shape: "cone", color: 0x5d4633, size: 1.0, lift: 0.5 },
     biomeAffinity: ["highland", "alpine"],
+    // E7.6: retreat-and-fire — the wolf backs off to spit thorns rather than
+    // always closing to a bite.
+    abilities: [WOLF_THORN_SPIT],
   },
 
   // ---- Workstream 7.2 creature variety ----
@@ -171,6 +219,8 @@ export const STARTER_CREATURES: readonly CreatureDefinition[] = [
     disposition: "hostile",
     visual: { shape: "cone", color: 0x3b2a1d, size: 1.6, lift: 0.8 },
     biomeAffinity: ["highland"],
+    // E7.6: stand-and-cast — the bear plants and pounds the ground.
+    abilities: [BEAR_GROUND_POUND],
   },
   {
     id: "owl",
@@ -212,6 +262,8 @@ export const STARTER_CREATURES: readonly CreatureDefinition[] = [
     // E6.3: secondary nocturnal candidate flagged by E6.5. Its bite damage
     // is unchanged — nocturnal is presentation flavor, never a danger spike.
     activityWindow: "nocturnal",
+    // E7.6: stand-and-cast — a whimsical acorn toss (cozySpell flavor).
+    abilities: [BADGER_ACORN_BURST],
   },
   {
     id: "squirrel",

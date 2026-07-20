@@ -67,6 +67,10 @@ export const STARTER_AOES: readonly AoeSpec[] = [
   // a smaller radius/low base damage on the item itself (starterItems.ts).
   { id: "bumble-trap-pop", radius: 2, falloff: "none", blockSafe: true, vfx: "vfx.boom.bumbletrap" },
   // ---- E7.6 Monster abilities (AoE stomp) ----
+  // A bear's ground pound — a gentle-radius shockwave, block-safe like every
+  // AoE default (cozy stance, plan §9), falls off so only a close player
+  // takes the full hit.
+  { id: "bear-stomp", radius: 3.5, falloff: "linear", blockSafe: true, vfx: "vfx.stomp.bear" },
 ];
 
 export const AOE_REGISTRY: AoeRegistry = unwrap(AoeRegistry.create(STARTER_AOES));

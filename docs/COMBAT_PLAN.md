@@ -34,7 +34,7 @@ status: the `## Combat (E7)` checklist in [`PROGRESS.md`](../PROGRESS.md). Archi
 | E7.3 Spells | Sparkle Bolt / Frost Puff / Healing Bloom / Vine Snare, focus resource, cast bar | Pending |
 | E7.4 AoE | Shared radius/falloff resolver, block-safe flag, boom VFX | Done |
 | E7.5 Deployables | Grenade / proximity mine / bumble-trap, host arm+trigger | Done |
-| E7.6 Monster abilities | Telegraphed windups, stand-and-cast / retreat-and-fire | Pending |
+| E7.6 Monster abilities | Telegraphed windups, stand-and-cast / retreat-and-fire | Done |
 | E7.7 Defeat VFX | Poof + confetti + loot fountain, gentle player-down | Done |
 | E7.8 Loot pools | Weighted rarity tiers, difficulty multiplier, deterministic roll | Done |
 
@@ -86,6 +86,12 @@ E7.1, E7.7, E7.8 fully independent.
   possession is verified by construction here (stronger than E7.2's equip gap). Block-safe by default.
   Nits (track, not blocking): no max-lifetime on proximity/stepped deployables (a griefer can park
   their cap-of-6 mines indefinitely) + same broadcast-cadence throttle as projectiles.
+- **E7.6 Monster abilities** (APPROVED): no new wire surface — new `cast`/`kite` behaviors ride the
+  existing `CreatureEntity.behavior` string field; abilities are host-driven AI, damage host-computed,
+  `resolveAoe`/`Projectile` run over the host's own single-player set only. Fair telegraphs, cozy
+  palette, `starterCreatures` order preserved. Nits (track, not blocking): ability damage bypasses the
+  night/difficulty multipliers the melee bite uses; monster abilities (like the bite) only hit the
+  host's local player, never joiners (gameplay gap, not a vuln).
 
 ## Integration follow-up (cross-stream, recorded not skipped)
 
