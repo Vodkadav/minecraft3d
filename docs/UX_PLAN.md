@@ -42,9 +42,9 @@ the token/primitive level is low-risk and propagates automatically.
 |---|---|---|
 | E8.0 Visual-language contract | Rarity color scale + surface elevation tokens, window-chrome spec, panel-background recipe, colorblind rarity alt palette — types/tokens only, no behavior | ✅ Done (17b00d4) |
 | E8.1 Window chrome & procedural backgrounds | `WindowFrame` shared overlay shell; every overlay screen migrates onto it; layered-gradient + SVG-noise panel backgrounds replace flat rectangles | ✅ Done (50b2216, 2801cca, f88daad) |
-| E8.2 Iconography v2 | Authored per-category glyph paths, rarity frame ring, overlay badges (equipped/new/qty); `PanelEmblem` grows into a per-screen emblem library + party/faction crest generator | Pending |
-| E8.3 Rich tooltip system | Pure `domain/ui/TooltipModel.ts` item-card model; `RichTooltip` component (hover/focus/long-press) replaces single-line hovers for items everywhere | Pending |
-| E8.4 Context menus | Pure `domain/ui/ItemActions.ts` action list; `ContextMenu` component (mouse/keyboard/touch), replacing the `InventoryGrid` split-only handler | Pending |
+| E8.2 Iconography v2 | Authored per-category glyph paths, rarity frame ring, overlay badges (equipped/new/qty); `PanelEmblem` grows into a per-screen emblem library + party/faction crest generator | ✅ Done (9e2b0c9; badge slot-wiring deferred — no state source) |
+| E8.3 Rich tooltip system | Pure `domain/ui/TooltipModel.ts` item-card model; `RichTooltip` component (hover/focus/long-press) replaces single-line hovers for items everywhere | ✅ Done (7dfed91) |
+| E8.4 Context menus | Pure `domain/ui/ItemActions.ts` action list; `ContextMenu` component (mouse/keyboard/touch), replacing the `InventoryGrid` split-only handler | ✅ Done (1c3c087) |
 | E8.5 Inputs & chat polish | Shared `Field.ts` input primitive; chat gains rarity-colored item links, channel pills, unread badge, kid-safe canned emote palette | Pending |
 | E8.6 Menus, lobby & settings overhaul | `MainMenuView`/`LobbyView`/`SettingsView`/`CreditsScreen`/`LoadingScreen` restyle onto E8.1 chrome; Settings UI category (hud style, tooltip verbosity, colorblind palette, reduce-flair); lobby becomes the "play together" surface | Pending |
 | E8.7 HUD cohesion & action bar | Unify hotbar/vitals/minimap/objective/party/combat-meter into one visual system; togglable ability/consumable action bar; gentle buff/effect strip; toasts restyled | Pending |

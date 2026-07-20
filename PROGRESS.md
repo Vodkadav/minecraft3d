@@ -267,8 +267,16 @@ wire-touching slice).
   propagating to all Panel() consumers incl. HUD clusters for free. Browser visual-QA'd against a
   dimmed-world backdrop. Also fixed a long-standing dropped `}` on `.laas-room-code` that had nested
   the whole sheet (4351ddc)
-- [ ] E8.2 Iconography v2: authored per-category glyph paths, rarity frame ring, overlay badges
-  (equipped/new/qty); `PanelEmblem` grows into a per-screen emblem library + party/faction crest
+- [x] E8.2 Iconography v2: per-category glyph shapes already existed (E6.7); added the rarity
+  language — `ui/icons/ItemRarity.ts` (tier→RarityTier, the single rarity source) + a frame ring on
+  item icons (`ItemIconElement` `rarityTier`: tier `--lw-rarity-*-frame` color + a per-tier corner
+  motif from `THEME.rarityPattern` — dot/stripe/diamond/starburst, so rarity reads by shape too,
+  colorblind-safe). Wired onto inventory + hotbar slots; the E8.3 tooltip reads the same source so
+  ring and tooltip rarity agree. `PanelEmblem` grew to a 10-kind library (`PANEL_EMBLEM_KINDS`;
+  chest/campfire/trade/research overlays now show emblems), plus `ui/icons/Crest.ts` (seeded party/
+  faction heraldic crest) and `ui/icons/ItemBadges.ts` (equipped/new corner badges, shape-distinct).
+  Badge slot-wiring deferred — no equipped/unseen state source yet (recorded). Icon gallery visually
+  verified. 38 icon tests
 - [x] E8.3 Rich tooltip system: pure `domain/ui/TooltipModel.ts` item-card model (localized name,
   rarity tier — defaults to "common", no item carries a real one yet, see UX_PLAN's standing
   deferrals — category, tag-driven stat/affix rows for food/combat items, optional quantity/
