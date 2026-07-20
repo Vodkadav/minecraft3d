@@ -69,6 +69,61 @@ export class AbilityRegistry {
  *  (see `ProjectileRegistry.ts`'s doc comment for the append convention). */
 export const STARTER_ABILITIES: readonly AbilitySpec[] = [
   // ---- E7.3 Spellcasting (Sparkle Bolt, Frost Puff, Healing Bloom, Vine Snare) ----
+  // A cyan spark shot — the ranged-damage spell. Reuses the host-simulated
+  // projectile pool a ranged weapon's arrow uses (HostSession.castProjectileSpell).
+  {
+    id: "sparkle-bolt",
+    displayName: "Sparkle Bolt",
+    targeting: "projectile",
+    resourceCost: 15,
+    cooldownMs: 700,
+    damage: 8,
+    projectile: "sparkle-bolt",
+    damageType: "spark",
+    feelEvent: "spellSpark",
+  },
+  // A short, gentle cone puff a little ahead of the caster — cozy "slow"
+  // flavor; the actual creature-speed reduction is a status-effect system
+  // not yet built (deferred, see this stream's follow-up note), this slice
+  // resolves the host-authoritative damage/target selection only.
+  {
+    id: "frost-puff",
+    displayName: "Frost Puff",
+    targeting: "cone",
+    resourceCost: 20,
+    cooldownMs: 3000,
+    damage: 4,
+    aoe: "frost-puff",
+    damageType: "frost",
+    feelEvent: "spellFrost",
+  },
+  // Self/ally AoE heal — targets are the host's own connected-peer roster
+  // (HostSession.connectedPeerTargets), never a claimed target list.
+  // falloff "none" on its AoeSpec: a cozy full-strength heal anywhere in
+  // range, no "you healed less because you stood at the edge" penalty.
+  {
+    id: "healing-bloom",
+    displayName: "Healing Bloom",
+    targeting: "selfAoe",
+    resourceCost: 30,
+    cooldownMs: 6000,
+    healing: 20,
+    aoe: "healing-bloom",
+    damageType: "nature",
+    feelEvent: "heal",
+  },
+  // Ground-target root — cozy CC flavor (same deferred-status-effect note as
+  // Frost Puff); no `damage` field, this is a pure crowd-control spell.
+  {
+    id: "vine-snare",
+    displayName: "Vine Snare",
+    targeting: "groundTarget",
+    resourceCost: 18,
+    cooldownMs: 4000,
+    aoe: "vine-snare",
+    damageType: "nature",
+    feelEvent: "spellNature",
+  },
 ];
 
 export const ABILITY_REGISTRY: AbilityRegistry = unwrap(AbilityRegistry.create(STARTER_ABILITIES));

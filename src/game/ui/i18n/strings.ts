@@ -335,6 +335,13 @@ export const UI_STRINGS: Catalog = {
     "combat.attackMeter.aria": "Attack strength",
     "combat.defeated": "Defeated!",
 
+    // ---- E7.3 spellcasting ----
+    "combat.castBar.aria": "Focus",
+    "ability.sparkle-bolt.name": "Sparkle Bolt",
+    "ability.frost-puff.name": "Frost Puff",
+    "ability.healing-bloom.name": "Healing Bloom",
+    "ability.vine-snare.name": "Vine Snare",
+
     "party.title": "Party",
     "party.close": "Close",
     "party.close.aria": "Close the party panel",
@@ -844,6 +851,13 @@ export const UI_STRINGS: Catalog = {
     "combat.attackMeter.aria": "Fuerza de ataque",
     "combat.defeated": "¡Derrotado!",
 
+    // ---- E7.3 spellcasting ----
+    "combat.castBar.aria": "Enfoque",
+    "ability.sparkle-bolt.name": "Rayo Centelleante",
+    "ability.frost-puff.name": "Ráfaga de Escarcha",
+    "ability.healing-bloom.name": "Flor Curativa",
+    "ability.vine-snare.name": "Enredadera Atrapadora",
+
     "party.title": "Grupo",
     "party.close": "Cerrar",
     "party.close.aria": "Cerrar el panel de grupo",
@@ -1352,6 +1366,13 @@ export const UI_STRINGS: Catalog = {
 
     "combat.attackMeter.aria": "Angrebsstyrke",
     "combat.defeated": "Besejret!",
+
+    // ---- E7.3 spellcasting ----
+    "combat.castBar.aria": "Fokus",
+    "ability.sparkle-bolt.name": "Glimmerskud",
+    "ability.frost-puff.name": "Frostpust",
+    "ability.healing-bloom.name": "Helende Blomst",
+    "ability.vine-snare.name": "Rankefælde",
 
     "party.title": "Gruppe",
     "party.close": "Luk",

@@ -20,10 +20,12 @@ import { ItemRegistry } from "../domain/items/ItemRegistry";
 import type { DamageType } from "../domain/items/ItemDefinition";
 import {
   AIMED_ATTACK_RATE_LIMIT,
+  CAST_SPELL_RATE_LIMIT,
   MAX_ACTIVE_PROJECTILES_PER_PEER,
   remoteAllowedPlaceableAction,
   tryConsumeToken,
   validateAimedAttack,
+  validateCastSpell,
   validateDig,
   validateInventoryOp,
   validatePlaceableInteract,
@@ -34,6 +36,7 @@ import {
 import {
   parseMessage,
   type AimedAttackMsg,
+  type CastSpellMsg,
   type ChatMsg,
   type DigMsg,
   type EquipSlot,
@@ -65,6 +68,12 @@ import {
 import { chargeMultiplier } from "../domain/combat/RangedCharge";
 import { PROJECTILE_REGISTRY } from "../domain/combat/ProjectileRegistry";
 import { WEAPON_REGISTRY } from "../domain/combat/WeaponRegistry";
+// ---- E7.3 spellcasting ----
+import { ABILITY_REGISTRY, type AbilitySpec } from "../domain/combat/AbilityRegistry";
+import { AOE_REGISTRY } from "../domain/combat/AoeRegistry";
+import { resolveAoe, type AoeTarget } from "../domain/combat/Aoe";
+import { resolveAoeCenter, scaleAbilityHits, type AbilityHit } from "../domain/combat/Ability";
+import { canCast, spawnFocus, spendFocus, tickFocus, type FocusState } from "../domain/survival/Focus";
 import { buildChatMessage, type ChatChannel, type ChatMessage } from "../domain/social/Chat";
 import {
   bothConfirmed,
@@ -210,6 +219,16 @@ export interface HostSessionHooks {
    *  same source of truth that's also broadcast to joiners (mirrors
    *  `onPeerPose`'s "host sees its own truth locally too" pattern). */
   onProjectilesSnapshot?(entities: readonly ProjectileEntity[]): void;
+  /** E7.3: a host-resolved spell AoE hit (Frost Puff/Healing Bloom/Vine
+   *  Snare) — `hit.damage`/`hit.healing` are ALREADY scaled from the host's
+   *  own `AbilitySpec` + `Aoe.resolveAoe` falloff (never a client claim).
+   *  `hit.id` is a creature id (Frost Puff/Vine Snare, via
+   *  `findHittableEntities`) or a connected peer id (Healing Bloom's
+   *  self/ally heal). Applying the effect (creature damage, player heal, a
+   *  future slow/root status) is a later wiring stream's job — mirrors
+   *  E7.7's own deferred "main.ts wiring follow-up"; this hook only carries
+   *  the host's authoritative resolved amount, never a THREE.js concern. */
+  onAbilityHit?(casterId: string, hit: AbilityHit, spell: AbilitySpec): void;
 }
 
 export interface HostSessionDeps {
@@ -258,6 +277,12 @@ interface PeerRecord {
   equipped: Partial<Record<EquipSlot, string>>;
   /** E7.2 security follow-up #1: per-peer token bucket for `aimedAttack`. */
   aimedAttackRate: RateLimitState;
+  /** E7.3: this peer's authoritative spellcasting resource — regenerated in
+   *  `tick()`, debited in `handleCastSpell` (mirrors `aimedAttackRate`'s
+   *  "the host's own record, never a client claim" posture for ammo). */
+  focus: FocusState;
+  /** E7.3: per-peer token bucket for `castSpell` (mirrors `aimedAttackRate`). */
+  castSpellRate: RateLimitState;
 }
 
 /** E7.2: one live, host-simulated projectile. `state` steps every `tick()`;
@@ -328,6 +353,8 @@ export class HostSession {
         vitals: null,
         equipped: {},
         aimedAttackRate: { tokens: AIMED_ATTACK_RATE_LIMIT.capacity, lastRefillMs: this.clock() },
+        focus: spawnFocus(),
+        castSpellRate: { tokens: CAST_SPELL_RATE_LIMIT.capacity, lastRefillMs: this.clock() },
       }),
     );
     transport.onPeerLeave((peerId) => {
@@ -440,6 +467,9 @@ export class HostSession {
         return;
       case "aimedAttack":
         this.handleAimedAttack(peerId, msg);
+        return;
+      case "castSpell":
+        this.handleCastSpell(peerId, msg);
         return;
       default:
         // host->joiner kinds echoed back at the host: no-op.
@@ -1266,13 +1296,137 @@ export class HostSession {
     });
   }
 
+  // ---- E7.3 spellcasting ----
+
+  /** A joiner's spell cast (E7.3, ADR 0004 §2/§6). Mirrors
+   *  `handleAimedAttack`'s guard order exactly: null-pose origin gate,
+   *  rate-limit, registry-resolve (drop on Unknown), then debit the host's
+   *  OWN authoritative focus record for the sender — every branch drops the
+   *  intent silently on failure, never a throw, never a partial effect. */
+  private handleCastSpell(peerId: string, msg: CastSpellMsg): void {
+    const peer = this.peers.get(peerId);
+    if (!peer) return;
+
+    // security #3 equivalent: null-pose gate — never trust an origin with no
+    // validated recent pose on record for this sender.
+    if (!validateCastSpell(peer.lastPose?.state ?? null, msg)) return;
+
+    // security #1 equivalent: per-peer token bucket.
+    const limited = tryConsumeToken(peer.castSpellRate, CAST_SPELL_RATE_LIMIT, this.clock());
+    peer.castSpellRate = limited.next;
+    if (!limited.allowed) return;
+
+    // security #4 equivalent: resolve the claimed spell id through the
+    // registry — drop on Unknown rather than trusting the wire id at face
+    // value.
+    const abilityResult = ABILITY_REGISTRY.get(msg.abilityId);
+    if (!isOk(abilityResult)) return;
+    const spell = abilityResult.value;
+
+    // security #5 equivalent: focus is debited from the host's OWN
+    // authoritative record for the sender — a peer with too little focus
+    // simply gets no cast, never a conjured/free spell.
+    if (!canCast(peer.focus, spell.resourceCost)) return;
+    peer.focus = spendFocus(peer.focus, spell.resourceCost);
+
+    if (spell.targeting === "projectile") {
+      this.castProjectileSpell(peerId, spell, msg);
+      return;
+    }
+    this.castAoeSpell(peerId, spell, msg);
+  }
+
+  /** Sparkle Bolt's targeting mode — reuses the SAME host-simulated
+   *  projectile pool (`activeProjectiles`) and per-peer DoS cap a ranged
+   *  weapon's arrow uses (security #2 equivalent): a spell shot is just
+   *  another projectile from the host's point of view. */
+  private castProjectileSpell(peerId: string, spell: AbilitySpec, msg: CastSpellMsg): void {
+    if (!msg.dir || !spell.projectile) return;
+    const specResult = PROJECTILE_REGISTRY.get(spell.projectile);
+    if (!isOk(specResult)) return;
+    const spec = specResult.value;
+
+    let activeForPeer = 0;
+    for (const p of this.activeProjectiles.values()) {
+      if (p.ownerId === peerId) activeForPeer++;
+    }
+    if (activeForPeer >= MAX_ACTIVE_PROJECTILES_PER_PEER) return;
+
+    const id = `proj:${this.nextProjectileId++}`;
+    this.activeProjectiles.set(id, {
+      id,
+      projectileId: spec.id,
+      ownerId: peerId,
+      gravity: spec.gravity,
+      lifetimeMs: spec.lifetimeMs,
+      radius: spec.radius,
+      pierces: spec.pierces ?? 0,
+      damage: spell.damage ?? 0,
+      damageType: spell.damageType,
+      feelEvent: spell.feelEvent,
+      state: spawnProjectile(msg.origin, msg.dir, spec.speed),
+    });
+  }
+
+  /** Frost Puff / Healing Bloom / Vine Snare's targeting modes — resolved
+   *  instantly (no persistent network entity, unlike a projectile) via
+   *  `Aoe.resolveAoe` against ONLY the host's own authoritative entity set
+   *  (security #5's target-list equivalent): `selfAoe` (Healing Bloom)
+   *  resolves against the host's own connected-peer roster
+   *  (`connectedPeerTargets`, never a claimed target list); `cone`/
+   *  `groundTarget` resolve against the same `findHittableEntities` creature
+   *  set a ranged shot's hit test uses. Every peer sees the same VFX via one
+   *  `effect` broadcast (mirrors `AoeField`'s bomb-boom contract). */
+  private castAoeSpell(peerId: string, spell: AbilitySpec, msg: CastSpellMsg): void {
+    if (!spell.aoe) return;
+    const aoeResult = AOE_REGISTRY.get(spell.aoe);
+    if (!isOk(aoeResult)) return;
+    const aoeSpec = aoeResult.value;
+
+    const centerResult = resolveAoeCenter(
+      { targeting: spell.targeting, origin: msg.origin, dir: msg.dir, groundPoint: msg.groundPoint },
+      aoeSpec,
+    );
+    if (!isOk(centerResult)) return;
+    const [cx, cy, cz] = centerResult.value;
+
+    const targets: readonly AoeTarget[] =
+      spell.targeting === "selfAoe" ? this.connectedPeerTargets() : (this.hooks.findHittableEntities?.() ?? []);
+    const resolved = resolveAoe(aoeSpec, { x: cx, y: cy, z: cz }, targets);
+    if (!isOk(resolved)) return;
+
+    for (const hit of scaleAbilityHits(spell, resolved.value)) {
+      this.hooks.onAbilityHit?.(peerId, hit, spell);
+    }
+    this.transport.broadcast({ kind: "effect", effectId: aoeSpec.vfx, x: cx, y: cy, z: cz });
+  }
+
+  /** Every connected peer's last validated position, keyed by peerId — the
+   *  candidate target set for a `selfAoe` spell (Healing Bloom's self/ally
+   *  heal). A peer with no validated pose yet simply isn't a candidate
+   *  (mirrors the null-pose posture used everywhere else in this file). */
+  private connectedPeerTargets(): readonly AoeTarget[] {
+    const targets: AoeTarget[] = [];
+    for (const [id, p] of this.peers) {
+      if (!p.lastPose) continue;
+      const [x, y, z] = p.lastPose.state.position;
+      targets.push({ id, x, y, z });
+    }
+    return targets;
+  }
+
   /** Advance every live projectile one tick, resolve collisions against
    *  `hooks.findHittableEntities()`, and stream the resulting set. Called by
    *  the composition root's frame loop (mirrors `SpawnFieldView.update`'s own
    *  per-frame stepping, just hosted here since the sim itself is pure/
-   *  Three.js-free — see ADR 0004 §3). A no-op call when nothing is active
-   *  costs nothing. */
+   *  Three.js-free — see ADR 0004 §3). Every connected peer's focus also
+   *  regenerates here (E7.3) — cheap even when nothing is active, mirroring
+   *  how `Survival.tickSurvival` runs every frame regardless of state. */
   tick(dtMs: number): void {
+    const dtSec = dtMs / 1000;
+    for (const peer of this.peers.values()) {
+      peer.focus = tickFocus(peer.focus, dtSec);
+    }
     if (this.activeProjectiles.size === 0) return;
     const targets = this.hooks.findHittableEntities?.() ?? [];
     for (const [id, proj] of this.activeProjectiles) {

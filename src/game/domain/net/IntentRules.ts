@@ -211,6 +211,17 @@ export const AIMED_ATTACK_RATE_LIMIT: RateLimitConfig = { capacity: 6, refillPer
  */
 export const MAX_ACTIVE_PROJECTILES_PER_PEER = 12;
 
+/**
+ * E7.3 spellcasting: `castSpell`'s own token bucket, sized the same way as
+ * `AIMED_ATTACK_RATE_LIMIT` — generous over any legitimate spell's own
+ * `cooldownMs` (the fastest starter spell, Sparkle Bolt, recharges in
+ * 700 ms) but bounded so a hostile peer can't flood cast intents. A
+ * projectile-targeting spell ALSO shares `MAX_ACTIVE_PROJECTILES_PER_PEER`
+ * with ranged weapons (same host-simulated pool) — this bucket is the
+ * pacing bound for every spell, AoE-shaped ones included.
+ */
+export const CAST_SPELL_RATE_LIMIT: RateLimitConfig = { capacity: 4, refillPerSecond: 2 };
+
 export function validateInventoryOp(op: InventoryOp, capacity: number): boolean {
   switch (op.op) {
     case "move":

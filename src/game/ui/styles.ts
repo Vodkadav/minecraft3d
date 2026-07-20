@@ -208,6 +208,32 @@ ${THEME_CSS_VARS}
   transition: transform var(--lw-motion-fast) linear;
 }
 
+/* E7.3: spellcasting focus gauge — stacked just above the attack meter,
+   hidden at full focus (see CastBar.ts). Distinct accent color so it never
+   reads as the same meter as attack-strength. */
+.lw-cast-bar {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--lw-space-4) + 84px);
+  transform: translateX(-50%);
+  width: 140px;
+  height: 8px;
+  border-radius: var(--lw-radius-pill);
+  background: var(--lw-bg-track);
+  border: 1px solid var(--lw-border);
+  overflow: hidden;
+  z-index: 20;
+  pointer-events: none;
+}
+.lw-cast-bar-fill {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  transform-origin: left;
+  background: var(--lw-accent);
+  transition: transform var(--lw-motion-fast) linear;
+}
+
 /* E2.1: Diablo-style corner orbs + level portrait. Procedural CSS only (no
    binary assets) — circles via border-radius, vertical fill via scaleY on
    the same .lw-bar-fill element the bar layout already uses. Health orb at
