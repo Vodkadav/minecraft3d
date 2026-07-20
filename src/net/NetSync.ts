@@ -29,6 +29,8 @@ import type {
   GroundItemEntity,
   InventoryOp,
   SerializedInventoryWire,
+  TradeStackWire,
+  TradeStateMsg,
   WelcomeMsg,
   WorldEdit,
 } from "../game/domain/net/Protocol";
@@ -215,6 +217,11 @@ export interface JoinWorldDeps {
    *  (E0.4) — the composition root reconciles its inventory UI from this,
    *  never mutating it locally. */
   onInventoryState?(wire: SerializedInventoryWire): void;
+  /** The host's resolved trade escrow (E5.3) — only arrives when this joiner
+   *  is one of the two participants (peer<->peer only; the room host itself
+   *  never holds a `HostSession` peer record for its own inventory, so
+   *  host<->joiner trading isn't wired — a follow-up, not this slice). */
+  onTradeState?(state: TradeStateMsg): void;
 }
 
 export interface JoinWorldHandle {
@@ -231,6 +238,12 @@ export interface JoinNetHandle {
   sendFill(x: number, y: number, z: number, radius: number, materialId: number): void;
   /** Direct manipulation of the joiner's own authoritative inventory (E0.4). */
   sendInventoryOp(op: InventoryOp): void;
+  /** E5.3 trading — every mutation is an intent; `onTradeState` (via
+   *  `attachWorld`) is the only path a trade UI ever updates from. */
+  sendTradePropose(targetPeerId: string): void;
+  sendTradeOffer(tradeId: string, offer: readonly TradeStackWire[]): void;
+  sendTradeConfirm(tradeId: string): void;
+  sendTradeCancel(tradeId: string): void;
   dispose(): void;
 }
 
@@ -271,6 +284,7 @@ export function createJoinNet(code: string, opts: JoinNetOptions = {}): JoinNetH
     readonly onHostGone?: () => void;
     readonly onHostReturned?: () => void;
     readonly onInventoryState?: (wire: SerializedInventoryWire) => void;
+    readonly onTradeState?: (state: TradeStateMsg) => void;
   } | null = null;
   let applyingRemote = false;
   // an inventoryState can arrive before attachWorld (right after join, while
@@ -337,6 +351,7 @@ export function createJoinNet(code: string, opts: JoinNetOptions = {}): JoinNetH
       if (world?.onInventoryState) world.onInventoryState(wire);
       else pendingInventoryState = wire;
     },
+    onTradeState: (state: TradeStateMsg): void => world?.onTradeState?.(state),
   };
 
   // trystero peers appear seconds after joinRoom, in no particular order in a
@@ -393,6 +408,7 @@ export function createJoinNet(code: string, opts: JoinNetOptions = {}): JoinNetH
         ...(deps.onHostGone ? { onHostGone: deps.onHostGone } : {}),
         ...(deps.onHostReturned ? { onHostReturned: deps.onHostReturned } : {}),
         ...(deps.onInventoryState ? { onInventoryState: deps.onInventoryState } : {}),
+        ...(deps.onTradeState ? { onTradeState: deps.onTradeState } : {}),
       };
       world = attached;
       if (deps.onInventoryState && pendingInventoryState) {
@@ -462,6 +478,18 @@ export function createJoinNet(code: string, opts: JoinNetOptions = {}): JoinNetH
     },
     sendInventoryOp(op): void {
       session?.sendInventoryOp(op);
+    },
+    sendTradePropose(targetPeerId): void {
+      session?.sendTradePropose(targetPeerId);
+    },
+    sendTradeOffer(tradeId, offer): void {
+      session?.sendTradeOffer(tradeId, offer);
+    },
+    sendTradeConfirm(tradeId): void {
+      session?.sendTradeConfirm(tradeId);
+    },
+    sendTradeCancel(tradeId): void {
+      session?.sendTradeCancel(tradeId);
     },
 
     dispose(): void {

@@ -425,6 +425,41 @@ ${THEME_CSS_VARS}
   flex-direction: column;
   gap: var(--lw-space-2);
 }
+
+/* Trade window (E5.3) */
+.lw-trade-help {
+  color: var(--lw-fg);
+  font-size: var(--lw-font-sm);
+}
+.lw-trade-their-name {
+  color: var(--lw-fg);
+  margin: 0 0 var(--lw-space-1) 0;
+}
+.lw-trade-offer-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--lw-space-1);
+  min-height: 44px;
+}
+.lw-trade-offer-item {
+  color: var(--lw-fg);
+  border: 1px solid var(--lw-border);
+  border-radius: var(--lw-radius-sm);
+  padding: var(--lw-space-1) var(--lw-space-2);
+}
+.lw-trade-footer {
+  display: flex;
+  align-items: center;
+  gap: var(--lw-space-3);
+  flex-wrap: wrap;
+}
+.lw-trade-confirm-status {
+  color: var(--lw-fg);
+  font-size: var(--lw-font-sm);
+}
 .lw-inv-tab-body {
   display: flex;
   flex-direction: column;

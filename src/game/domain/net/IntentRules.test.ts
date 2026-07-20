@@ -7,6 +7,7 @@ import {
   validateInventoryOp,
   validatePlaceableInteract,
   validatePose,
+  validateTradePropose,
 } from "./IntentRules";
 
 function pose(x: number, y: number, z: number): PlayerState {
@@ -177,5 +178,19 @@ describe("validateInventoryOp", () => {
         CAPACITY,
       ),
     ).toBe(false);
+  });
+});
+
+describe("validateTradePropose", () => {
+  it("accepts a target other than yourself", () => {
+    expect(validateTradePropose("alice", "bob")).toBe(true);
+  });
+
+  it("rejects proposing a trade with yourself", () => {
+    expect(validateTradePropose("alice", "alice")).toBe(false);
+  });
+
+  it("rejects an empty target", () => {
+    expect(validateTradePropose("alice", "")).toBe(false);
   });
 });

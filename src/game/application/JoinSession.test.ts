@@ -209,6 +209,53 @@ describe("JoinSession", () => {
     expect(onHostClosing).not.toHaveBeenCalled();
   });
 
+  it("E5.3: sendTradePropose/Offer/Confirm reach the host and both joiners receive tradeState", () => {
+    const { net } = makeHostedNetwork();
+    const onTradeStateAlice = vi.fn();
+    const onTradeStateBob = vi.fn();
+    const alice = new JoinSession(net.addPeer("alice"), "Alice", { onTradeState: onTradeStateAlice });
+    const bob = new JoinSession(net.addPeer("bob"), "Bob", { onTradeState: onTradeStateBob });
+
+    alice.sendTradePropose("bob");
+    expect(onTradeStateAlice).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: "tradeState", peerA: "alice", peerB: "bob", status: "negotiating" }),
+    );
+    expect(onTradeStateBob).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: "tradeState", peerA: "alice", peerB: "bob", status: "negotiating" }),
+    );
+
+    alice.sendTradeOffer("trade:1", [{ itemId: "wood", count: 1 }]);
+    expect(onTradeStateBob).toHaveBeenLastCalledWith(
+      expect.objectContaining({ offerA: [{ itemId: "wood", count: 1 }] }),
+    );
+
+    bob.sendTradeCancel("trade:1");
+    expect(onTradeStateAlice).toHaveBeenLastCalledWith(expect.objectContaining({ status: "cancelled" }));
+  });
+
+  it("drops a fake tradeState arriving from a non-host peer (mesh hardening)", () => {
+    const net = makeTransportNetwork();
+    new HostSession(net.host, () => SNAPSHOT, { onWorldEdit: () => {} });
+    const onTradeState = vi.fn();
+    new JoinSession(net.addPeer("alice"), "Alice", { onTradeState });
+
+    const mallory = net.addPeer("mallory");
+    net.linkPeers("mallory", "alice");
+    mallory.broadcast({
+      kind: "tradeState",
+      tradeId: "fake",
+      peerA: "mallory",
+      peerB: "alice",
+      offerA: [],
+      offerB: [],
+      confirmedA: false,
+      confirmedB: false,
+      status: "negotiating",
+    });
+
+    expect(onTradeState).not.toHaveBeenCalled();
+  });
+
   it("ignores malformed traffic with a warning instead of crashing", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const net = makeTransportNetwork();

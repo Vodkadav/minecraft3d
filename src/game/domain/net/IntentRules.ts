@@ -105,6 +105,13 @@ export function remoteAllowedPlaceableAction(action: PlaceableAction): boolean {
  * sane count. Deeper checks (does the sender actually have the stack, does
  * the placeable exist) are `HostSession`'s job against its live state.
  */
+/** A trade proposal must target someone other than yourself — `Trade.ts`'s
+ *  `proposeTrade` already rejects a same-peer trade, but catching it here
+ *  means `HostSession` never even allocates the escrow. */
+export function validateTradePropose(senderPeerId: string, targetPeerId: string): boolean {
+  return targetPeerId.length > 0 && targetPeerId !== senderPeerId;
+}
+
 export function validateInventoryOp(op: InventoryOp, capacity: number): boolean {
   switch (op.op) {
     case "move":

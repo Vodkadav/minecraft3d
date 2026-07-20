@@ -23,6 +23,7 @@ import {
   validateInventoryOp,
   validatePlaceableInteract,
   validatePose,
+  validateTradePropose,
 } from "../domain/net/IntentRules";
 import {
   parseMessage,
@@ -35,8 +36,18 @@ import {
   type PlaceableInteractMsg,
   type PoseMsg,
   type SerializedInventoryWire,
+  type TradeStackWire,
   type WorldEdit,
 } from "../domain/net/Protocol";
+import {
+  bothConfirmed,
+  cancel as cancelTrade,
+  complete as completeTrade,
+  confirm as confirmTrade,
+  proposeTrade,
+  setOffer,
+  type TradeSession,
+} from "../domain/social/Trade";
 import type { ChunkDelta, PlayerState } from "../domain/world/WorldSaveData";
 import type { NetTransport } from "./ports/NetTransport";
 
@@ -129,6 +140,11 @@ export class HostSession {
   private readonly clock: () => number;
   private readonly registry: ItemRegistry;
   private readonly playerInventoryCapacity: number;
+  /** E5.3: at most one active (negotiating) trade per peer — cozy scope,
+   *  no juggling multiple simultaneous trades. */
+  private readonly trades = new Map<string, TradeSession>();
+  private readonly activeTradeByPeer = new Map<string, string>();
+  private nextTradeId = 1;
 
   constructor(
     private readonly transport: NetTransport,
@@ -148,6 +164,10 @@ export class HostSession {
     );
     transport.onPeerLeave((peerId) => {
       this.peers.delete(peerId);
+      // E5.3: a disconnect mid-trade is a full rollback, same as an explicit
+      // cancel — nothing was ever moved out of either inventory before the
+      // atomic swap, so there's nothing to undo but the escrow record.
+      this.cancelActiveTradeFor(peerId);
       transport.broadcast({ kind: "peerLeft", peerId });
       this.hooks.onPeerLeft?.(peerId);
     });
@@ -211,6 +231,18 @@ export class HostSession {
         return;
       case "inventoryOp":
         this.handleInventoryOp(peerId, msg.inventoryOp);
+        return;
+      case "tradeProposeIntent":
+        this.handleTradePropose(peerId, msg.targetPeerId);
+        return;
+      case "tradeOfferIntent":
+        this.handleTradeOffer(peerId, msg.tradeId, msg.offer);
+        return;
+      case "tradeConfirmIntent":
+        this.handleTradeConfirm(peerId, msg.tradeId);
+        return;
+      case "tradeCancelIntent":
+        this.handleTradeCancel(peerId, msg.tradeId);
         return;
       default:
         // host->joiner kinds echoed back at the host: no-op.
@@ -397,6 +429,180 @@ export class HostSession {
     peer.inventory = credited.value;
     this.hooks.onGroundItemRemove?.(targetId);
     this.sendInventoryState(peerId, peer.inventory);
+  }
+
+  // ---- E5.3 trading ----
+
+  private handleTradePropose(peerId: string, targetPeerId: string): void {
+    if (!validateTradePropose(peerId, targetPeerId)) return;
+    if (!this.peers.has(peerId) || !this.peers.has(targetPeerId)) return;
+    // cozy scope: one active trade per peer — a pending trade on either side
+    // silently refuses a second proposal rather than juggling several.
+    if (this.activeTradeByPeer.has(peerId) || this.activeTradeByPeer.has(targetPeerId)) return;
+
+    const id = `trade:${this.nextTradeId++}`;
+    const proposed = proposeTrade(id, peerId, targetPeerId);
+    if (!isOk(proposed)) return;
+    this.trades.set(id, proposed.value);
+    this.activeTradeByPeer.set(peerId, id);
+    this.activeTradeByPeer.set(targetPeerId, id);
+    this.sendTradeState(proposed.value);
+  }
+
+  private handleTradeOffer(peerId: string, tradeId: string, offer: readonly TradeStackWire[]): void {
+    const trade = this.trades.get(tradeId);
+    if (!trade || this.activeTradeByPeer.get(peerId) !== tradeId) return;
+    const updated = setOffer(trade, peerId, offer);
+    if (!isOk(updated)) return;
+    this.trades.set(tradeId, updated.value);
+    this.sendTradeState(updated.value);
+  }
+
+  /** A confirm is only accepted once the confirming peer's OWN offered
+   *  stacks are revalidated against their REAL, live inventory right now —
+   *  never trusting the claim made back at offer time (a peer could have
+   *  spent/lost the item in between). Once both sides are confirmed, the
+   *  swap is resolved atomically: debit both first, credit both only if
+   *  BOTH debits succeed, full rollback (trade cancelled, nothing moved)
+   *  otherwise — the no-dupe/no-loss contract the cozy tone requires. */
+  private handleTradeConfirm(peerId: string, tradeId: string): void {
+    const trade = this.trades.get(tradeId);
+    if (!trade || this.activeTradeByPeer.get(peerId) !== tradeId) return;
+    const peer = this.peers.get(peerId);
+    if (!peer) return;
+
+    const myOffer = trade.offers[peerId] ?? [];
+    for (const stack of myOffer) {
+      if (!peer.inventory.has(stack.itemId, stack.count)) return; // can't confirm what you don't have
+    }
+
+    const confirmed = confirmTrade(trade, peerId);
+    if (!isOk(confirmed)) return;
+    this.trades.set(tradeId, confirmed.value);
+
+    if (!bothConfirmed(confirmed.value)) {
+      this.sendTradeState(confirmed.value);
+      return;
+    }
+    this.resolveTrade(confirmed.value);
+  }
+
+  private resolveTrade(trade: TradeSession): void {
+    const [peerAId, peerBId] = trade.peers;
+    const peerA = this.peers.get(peerAId);
+    const peerB = this.peers.get(peerBId);
+    if (!peerA || !peerB) {
+      this.failTrade(trade);
+      return;
+    }
+
+    const offerA = trade.offers[peerAId] ?? [];
+    const offerB = trade.offers[peerBId] ?? [];
+
+    let debitedA = peerA.inventory;
+    for (const stack of offerA) {
+      const r = debitedA.remove(stack.itemId, stack.count);
+      if (!isOk(r)) {
+        this.failTrade(trade);
+        return;
+      }
+      debitedA = r.value;
+    }
+    let debitedB = peerB.inventory;
+    for (const stack of offerB) {
+      const r = debitedB.remove(stack.itemId, stack.count);
+      if (!isOk(r)) {
+        this.failTrade(trade); // neither debit is applied to peer records — safe to abandon
+        return;
+      }
+      debitedB = r.value;
+    }
+
+    let creditedA = debitedA;
+    for (const stack of offerB) {
+      const r = creditedA.add(stack.itemId, stack.count);
+      if (!isOk(r)) {
+        this.failTrade(trade); // rollback: debits were only ever local Result values, never committed
+        return;
+      }
+      creditedA = r.value;
+    }
+    let creditedB = debitedB;
+    for (const stack of offerA) {
+      const r = creditedB.add(stack.itemId, stack.count);
+      if (!isOk(r)) {
+        this.failTrade(trade);
+        return;
+      }
+      creditedB = r.value;
+    }
+
+    peerA.inventory = creditedA;
+    peerB.inventory = creditedB;
+    this.sendInventoryState(peerAId, peerA.inventory);
+    this.sendInventoryState(peerBId, peerB.inventory);
+
+    const completed = completeTrade(trade);
+    const finalTrade = isOk(completed) ? completed.value : trade;
+    this.trades.set(trade.id, finalTrade);
+    this.activeTradeByPeer.delete(peerAId);
+    this.activeTradeByPeer.delete(peerBId);
+    this.sendTradeState(finalTrade);
+  }
+
+  /** Completion couldn't be validated (a stack vanished between confirm and
+   *  swap, or a participant disconnected mid-resolve) — cancel outright.
+   *  Nothing was ever written to either `PeerRecord.inventory` above this
+   *  point, so there is nothing to undo but the escrow record itself. */
+  private failTrade(trade: TradeSession): void {
+    const cancelled = cancelTrade(trade);
+    const finalTrade = isOk(cancelled) ? cancelled.value : trade;
+    this.trades.set(trade.id, finalTrade);
+    for (const p of trade.peers) this.activeTradeByPeer.delete(p);
+    this.sendTradeState(finalTrade);
+  }
+
+  private handleTradeCancel(peerId: string, tradeId: string): void {
+    const trade = this.trades.get(tradeId);
+    if (!trade || this.activeTradeByPeer.get(peerId) !== tradeId) return;
+    const cancelled = cancelTrade(trade);
+    if (!isOk(cancelled)) return;
+    this.trades.set(tradeId, cancelled.value);
+    for (const p of trade.peers) this.activeTradeByPeer.delete(p);
+    this.sendTradeState(cancelled.value);
+  }
+
+  private cancelActiveTradeFor(peerId: string): void {
+    const tradeId = this.activeTradeByPeer.get(peerId);
+    if (!tradeId) return;
+    const trade = this.trades.get(tradeId);
+    if (!trade) return;
+    const cancelled = cancelTrade(trade);
+    const finalTrade = isOk(cancelled) ? cancelled.value : trade;
+    this.trades.set(tradeId, finalTrade);
+    for (const p of trade.peers) this.activeTradeByPeer.delete(p);
+    // the disconnecting peer's transport is already gone; sendTradeState
+    // simply no-ops sending to a peer no longer in `this.peers`.
+    this.sendTradeState(finalTrade);
+  }
+
+  /** Private — a trade offer is as private as an inventory: sent only to the
+   *  two participants, never broadcast. */
+  private sendTradeState(trade: TradeSession): void {
+    const [peerAId, peerBId] = trade.peers;
+    const msg = {
+      kind: "tradeState" as const,
+      tradeId: trade.id,
+      peerA: peerAId,
+      peerB: peerBId,
+      offerA: trade.offers[peerAId] ?? [],
+      offerB: trade.offers[peerBId] ?? [],
+      confirmedA: trade.confirmed[peerAId] === true,
+      confirmedB: trade.confirmed[peerBId] === true,
+      status: trade.status,
+    };
+    if (this.peers.has(peerAId)) this.transport.send(peerAId, msg);
+    if (this.peers.has(peerBId)) this.transport.send(peerBId, msg);
   }
 
   private broadcastPlaceableState(placeableId: string, state: unknown): void {

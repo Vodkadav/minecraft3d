@@ -403,6 +403,41 @@ describe("createJoinNet", () => {
     expect(onInventoryState).toHaveBeenCalledWith({ capacity: 27, slots: Array(27).fill(null) });
   });
 
+  it("E5.3: two joiners can trade — propose/offer reach both via onTradeState, never the local player alone", async () => {
+    const { net } = await joinedSetup(); // hostSide only; we bring our own two joiners
+    const bobDetached = net.addDetachedPeer("bob");
+    const bob = createJoinNet("ABCDEFGH", { playerName: "Bob", transportFactory: () => bobDetached.transport });
+    bobDetached.connect();
+    await bob.waitForWelcome(5000);
+
+    const carolDetached = net.addDetachedPeer("carol");
+    const carol = createJoinNet("ABCDEFGH", { playerName: "Carol", transportFactory: () => carolDetached.transport });
+    carolDetached.connect();
+    await carol.waitForWelcome(5000);
+
+    const onTradeStateBob = vi.fn();
+    const onTradeStateCarol = vi.fn();
+    bob.attachWorld({ voxels: null, parent: new Group(), getPose: () => POSE, onTradeState: onTradeStateBob });
+    carol.attachWorld({ voxels: null, parent: new Group(), getPose: () => POSE, onTradeState: onTradeStateCarol });
+
+    bob.sendTradePropose("carol");
+
+    expect(onTradeStateBob).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: "tradeState", peerA: "bob", peerB: "carol", status: "negotiating" }),
+    );
+    expect(onTradeStateCarol).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: "tradeState", peerA: "bob", peerB: "carol", status: "negotiating" }),
+    );
+
+    bob.sendTradeOffer("trade:1", [{ itemId: "wood", count: 2 }]);
+    expect(onTradeStateCarol).toHaveBeenLastCalledWith(
+      expect.objectContaining({ offerA: [{ itemId: "wood", count: 2 }] }),
+    );
+
+    carol.sendTradeCancel("trade:1");
+    expect(onTradeStateBob).toHaveBeenLastCalledWith(expect.objectContaining({ status: "cancelled" }));
+  });
+
   it("E0.4 wave-3: wires a placeables chest deposit/withdraw intent onto the wire as inventoryOp", async () => {
     const { net, join, connect } = await joinedSetup();
     connect();
