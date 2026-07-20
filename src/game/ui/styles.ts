@@ -1054,7 +1054,13 @@ ${THEME_CSS_VARS}
 .lw-menu-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 0;
+  /* Decorative only: paint BELOW the menu's in-flow content (wordmark + nav)
+     within the laas-main-menu stacking context, and never capture clicks.
+     A positive/zero z-index here paints the fixed backdrop OVER the static
+     nav (positioned-child layer beats the in-flow layer), burying the menu
+     buttons -- the S9 dead-button regression. */
+  z-index: -1;
+  pointer-events: none;
   overflow: hidden;
   background: linear-gradient(
     to bottom,

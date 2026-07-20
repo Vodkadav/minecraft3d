@@ -50,6 +50,34 @@ describe("UI_STYLES structural integrity", () => {
   });
 });
 
+/**
+ * Regression guard for the S9 dead-menu-button bug: `.laas-main-menu` is a
+ * `position:relative; z-index:1` stacking context, so its `position:fixed`
+ * `.lw-menu-backdrop` child — if given z-index >= 0 — paints OVER the in-flow
+ * nav (positioned-child layer beats the in-flow layer) and swallows every
+ * button's click. The backdrop is decorative: it must stay below content and
+ * be click-through.
+ */
+describe("UI_STYLES menu backdrop never buries the menu buttons", () => {
+  beforeEach(() => {
+    document.head.replaceChildren();
+    document.body.replaceChildren();
+  });
+
+  it("paints the backdrop below content and lets clicks pass through", () => {
+    injectStyles(document);
+    const menu = document.createElement("section");
+    menu.className = "laas-ui laas-main-menu";
+    const backdrop = document.createElement("div");
+    backdrop.className = "laas-ui lw-menu-backdrop";
+    menu.appendChild(backdrop);
+    document.body.appendChild(menu);
+    const cs = getComputedStyle(backdrop);
+    expect(Number(cs.zIndex)).toBeLessThan(0);
+    expect(cs.pointerEvents).toBe("none");
+  });
+});
+
 /** E8.8 colorblind rarity palette + E8.6 reduce-flair. */
 describe("applyAccessibility (colorblind rarity / reduce flair)", () => {
   beforeEach(() => {

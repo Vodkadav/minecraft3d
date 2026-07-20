@@ -1,0 +1,11 @@
+- generic [ref=e3]:
+  - region "Diggy World" [ref=e4]:
+    - img "Diggy World" [ref=e15]:
+      - img [ref=e16]:
+        - generic [ref=e18]: Diggy World
+    - navigation "Diggy World" [ref=e19]:
+      - button "Start a single-player offline world" [ref=e20] [cursor=pointer]: Solo (offline)
+      - button "Online" [ref=e21] [cursor=pointer]
+      - button "Settings" [ref=e22] [cursor=pointer]
+      - button "Credits" [ref=e23] [cursor=pointer]
+  - status
