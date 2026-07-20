@@ -8,7 +8,9 @@
 
 import { isErr } from "../domain/Result";
 import type {
+  AimedAttackMsg,
   CreatureEntity,
+  EquipSlot,
   GroundItemEntity,
   InteractAction,
   InventoryOp,
@@ -17,6 +19,7 @@ import type {
   PartyInviteMsg,
   PartyMsg,
   PlaceableAction,
+  ProjectileEntity,
   SerializedInventoryWire,
   TradeStackWire,
   TradeStateMsg,
@@ -38,6 +41,10 @@ export interface JoinSessionHooks {
   /** The host's full active ground-drop set (E0.5) — same full-set-stream
    *  contract as `onCreatures`. */
   onGroundItems?(entities: readonly GroundItemEntity[]): void;
+  /** The host's full active projectile set (E7.2) — same full-set-stream
+   *  contract as `onCreatures`; a joiner never simulates a shot locally,
+   *  only renders a cosmetic tracer from this. */
+  onProjectiles?(entities: readonly ProjectileEntity[]): void;
   onPeerJoined?(peerId: string, playerName: string): void;
   onPeerLeft?(peerId: string): void;
   onHostClosing?(): void;
@@ -114,6 +121,9 @@ export class JoinSession {
           return;
         case "groundItems":
           hooks.onGroundItems?.(msg.entities);
+          return;
+        case "projectiles":
+          hooks.onProjectiles?.(msg.entities);
           return;
         case "peerJoined":
           hooks.onPeerJoined?.(msg.peerId, msg.playerName);
@@ -232,5 +242,24 @@ export class JoinSession {
   /** A read-only lookup of a fellow party member's inventory (E5.4). */
   sendPartyInventoryLookup(targetPeerId: string): void {
     this.transport.broadcast({ kind: "partyInventoryLookup", targetPeerId });
+  }
+
+  /** Claim an equip choice for a slot (E7.0/E7.2) — the host only records it
+   *  once it resolves the item through its own weapon registry. */
+  sendEquipItem(slot: EquipSlot, itemId: string): void {
+    this.transport.broadcast({ kind: "equipItem", slot, itemId });
+  }
+
+  /** A ranged/melee/spell aim (E7.2 draw-to-charge for ranged) — origin/dir/
+   *  weaponSlot/chargeMs only; the host computes the actual damage/hit from
+   *  its own equipped-weapon record (ADR 0004 §2, security item 5). */
+  sendAimedAttack(origin: AimedAttackMsg["origin"], dir: AimedAttackMsg["dir"], weaponSlot: EquipSlot, chargeMs?: number): void {
+    this.transport.broadcast({
+      kind: "aimedAttack",
+      origin,
+      dir,
+      weaponSlot,
+      ...(chargeMs !== undefined ? { chargeMs } : {}),
+    });
   }
 }
