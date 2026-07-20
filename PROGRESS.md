@@ -170,6 +170,29 @@ Deferred (explicit, recorded in the plan doc): minimap/compass, breeding + boss,
 sprint-slow + door collision — one engine-dir decision), joiner inventory-sync protocol, live 3D
 menu backdrop, engine-side terrain/vegetation pop-in.
 
+## Expansion
+
+Diggy World expansion wave (plan: [`docs/EXPANSION_PLAN.md`](docs/EXPANSION_PLAN.md)), executed
+2026-07-19/20 as security-reviewed, orchestrator-verified slices (full `npm run ci` + diff
+inspection per merge; mandatory `claude-infra:security` review on every networking-touching slice):
+
+- [x] E0 Foundations: billboard text, CreatureRegistry (single add-a-creature seam), WorldClock
+  day/night, **host-authoritative per-peer inventories** (seed-once join claim, owner-only state,
+  bounded wire validators), ground-drop loot with authoritative peek→credit→remove pickup
+- [x] E1 Stats/talents: character level/XP + talent points, additive-only multipliers, free respec;
+  wired live into vitals/stamina/combat/gather/loot
+- [x] E2 ARPG HUD: bars/orbs vitals styles, creature nameplates + overhead lifebars (faction-aware,
+  policy settings), floating damage/heal/XP numbers, combat log + solo damage meter (L)
+- [x] E3 Maps: exploration fog-of-war (persisted), corner minimap, full-screen map (M) with
+  creature/resource/ground-loot markers; waypoints session-only (deferral)
+- [x] E4 Inventory depth: autosort + merge, item filters (persisted), autoloot toggle+radius,
+  account-wide bank (K, IndexedDB) — multiplayer bank path deferred behind seed-trust revisit
+- [~] E5 Social (in flight): party/frames/invite/kick/lookup/party-meter, trade escrow, kid-safe
+  chat — all host-authoritative intents; security reviews mandatory before merge
+- [~] E6 World content (in flight): caves, research tree dispatched; structures, biome/time
+  spawning, asset library growth, iconography pending
+- [ ] Expansion playtest gate (structured session — owner schedules)
+
 ## Notes
 
 - Prime directive: never regress the finished desktop LAAS render — all new work is additive and
