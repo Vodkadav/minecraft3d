@@ -154,6 +154,20 @@ describe("buildChatMessage", () => {
     expect(isOk(r) && r.value.text).toBe("**** it, email me [email]");
   });
 
+  it("filters a profane display name (security follow-up F1)", () => {
+    const r = buildChatMessage({ ...base, senderName: "damn", text: "hi" });
+    expect(isOk(r) && r.value.senderName).toBe("****");
+  });
+
+  it("redacts a PII display name and keeps it under the 24-char wire cap (F1)", () => {
+    const r = buildChatMessage({ ...base, senderName: "a@b.co a@b.co a@b.co", text: "hi" });
+    expect(isOk(r)).toBe(true);
+    if (isOk(r)) {
+      expect(r.value.senderName).not.toContain("@");
+      expect(r.value.senderName.length).toBeLessThanOrEqual(24);
+    }
+  });
+
   it("rejects empty text", () => {
     const r = buildChatMessage({ ...base, text: "" });
     expect(isErr(r) && r.error.kind).toBe("Empty");

@@ -156,7 +156,14 @@ export function buildChatMessage(args: BuildChatMessageArgs): Result<ChatMessage
   }
   return ok({
     senderPeerId: args.senderPeerId,
-    senderName: args.senderName,
+    // Security follow-up F1: display names are join-time validated for shape
+    // and length only — a name can itself be profanity or PII, and chat
+    // renders it prominently on every line, so it goes through the same
+    // filter as the text. Redaction placeholders can LENGTHEN a string, and
+    // the wire validator rejects senderName > 24 chars (Protocol's
+    // MAX_PLAYER_NAME_LEN) — cap after filtering so a redacted name never
+    // makes joiners drop the whole message.
+    senderName: filterChatText(args.senderName).slice(0, 24),
     text: filterChatText(trimmed),
     channel: args.channel,
     timestamp: args.timestamp,
