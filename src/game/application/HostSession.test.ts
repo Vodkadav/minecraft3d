@@ -24,6 +24,13 @@ const REGISTRY = (() => {
     // authoritative inventory (the real `arrow` id, matching `WEAPON_REGISTRY`'s
     // starter `bow` entry's `ammoItemId`).
     { id: "arrow", displayName: "Arrow", maxStackSize: 64, tags: [], tier: 0 },
+    // E7.5: the real deployable ids so `Inventory.fromSlots` (called from a
+    // `join` claim) accepts a seeded stack for the deployables suite below —
+    // WEAPON_REGISTRY/DEPLOYABLE_REGISTRY resolve their combat data from
+    // starterItems.ts's real entries regardless of this test registry.
+    { id: "grenade", displayName: "Grenade", maxStackSize: 8, tags: [], tier: 0 },
+    { id: "proximity-mine", displayName: "Proximity Mine", maxStackSize: 8, tags: [], tier: 0 },
+    { id: "bumble-trap", displayName: "Bumble-Trap", maxStackSize: 8, tags: [], tier: 0 },
   ]);
   if (!isOk(r)) throw new Error("registry setup failed");
   return r.value;
@@ -1754,5 +1761,185 @@ describe("HostSession — E7.2 ranged + ammo", () => {
 
     const last = projectilesMessages(bobInbox).at(-1)!;
     expect(last.entities).toEqual([]);
+  });
+});
+
+describe("HostSession — E7.5 deployables", () => {
+  function deployablesMessages(inbox: unknown[]): { kind: string; entities: unknown[] }[] {
+    return inbox.filter((m) => (m as { kind: string }).kind === "deployables") as {
+      kind: string;
+      entities: unknown[];
+    }[];
+  }
+
+  function effectMessages(inbox: unknown[]): { kind: string; effectId: string; x: number; y: number; z: number }[] {
+    return inbox.filter((m) => (m as { kind: string }).kind === "effect") as {
+      kind: string;
+      effectId: string;
+      x: number;
+      y: number;
+      z: number;
+    }[];
+  }
+
+  function makeSession(
+    hooks: Partial<HostSessionHooks> = {},
+  ): { net: ReturnType<typeof makeTransportNetwork>; session: HostSession; now: { value: number } } {
+    const net2 = makeTransportNetwork();
+    const nowBox = { value: 1000 };
+    const session2 = new HostSession(
+      net2.host,
+      () => SNAPSHOT,
+      { onWorldEdit: () => {}, ...hooks },
+      { registry: REGISTRY, clock: () => nowBox.value },
+    );
+    return { net: net2, session: session2, now: nowBox };
+  }
+
+  function joinAndDeploy(
+    net2: ReturnType<typeof makeTransportNetwork>,
+    itemId: string,
+    count: number,
+    opts: { sendPose?: boolean } = {},
+  ): ReturnType<ReturnType<typeof makeTransportNetwork>["addPeer"]> {
+    const alice = net2.addPeer("alice");
+    const slots: ({ itemId: string; count: number } | null)[] = Array(27).fill(null);
+    if (count > 0) slots[0] = { itemId, count };
+    alice.broadcast({ kind: "join", playerName: "Alice", inventory: { capacity: 27, slots } });
+    if (opts.sendPose !== false) alice.broadcast({ kind: "pose", state: pose(0, 1, 0) });
+    return alice;
+  }
+
+  it("drops deployItem when the sender has never sent a pose (security #3, null-pose gate)", () => {
+    const { net: net2, session } = makeSession();
+    const bob = net2.addPeer("bob");
+    const bobInbox = collect(bob);
+    const alice = joinAndDeploy(net2, "grenade", 5, { sendPose: false });
+    alice.broadcast({ kind: "deployItem", deployableId: "grenade", position: [0, 1, 3] });
+    session.tick(16);
+    expect(deployablesMessages(bobInbox).flatMap((m) => m.entities)).toEqual([]);
+  });
+
+  it("drops an unknown deployableId (security #4)", () => {
+    const { net: net2, session } = makeSession();
+    const bob = net2.addPeer("bob");
+    const bobInbox = collect(bob);
+    const alice = joinAndDeploy(net2, "grenade", 5);
+    alice.broadcast({ kind: "deployItem", deployableId: "not-a-real-trap", position: [0, 1, 3] });
+    session.tick(16);
+    expect(deployablesMessages(bobInbox).flatMap((m) => m.entities)).toEqual([]);
+  });
+
+  it("a valid grenade placement debits one grenade and streams the deployable after a tick (security #5)", () => {
+    const { net: net2, session } = makeSession();
+    const bob = net2.addPeer("bob");
+    const bobInbox = collect(bob);
+    const alice = joinAndDeploy(net2, "grenade", 5);
+    const aliceInbox = collect(alice);
+    alice.broadcast({ kind: "deployItem", deployableId: "grenade", position: [0, 1, 3] });
+
+    expect(inventoryStateOf(aliceInbox)?.slots[0]).toEqual({ itemId: "grenade", count: 4 });
+
+    session.tick(16);
+    const msgs = deployablesMessages(bobInbox);
+    expect(msgs.length).toBeGreaterThan(0);
+    const last = msgs.at(-1)!;
+    expect(last.entities).toHaveLength(1);
+    expect(last.entities[0]).toMatchObject({ deployableId: "grenade", ownerId: "alice", armed: false });
+  });
+
+  it("a placement with none of the item in inventory is dropped — never conjures a deployable", () => {
+    const { net: net2, session } = makeSession();
+    const bob = net2.addPeer("bob");
+    const bobInbox = collect(bob);
+    const alice = joinAndDeploy(net2, "grenade", 0);
+    alice.broadcast({ kind: "deployItem", deployableId: "grenade", position: [0, 1, 3] });
+    session.tick(16);
+    expect(deployablesMessages(bobInbox).flatMap((m) => m.entities)).toEqual([]);
+  });
+
+  it("caps live deployables per peer (security #2)", () => {
+    const { net: net2, session, now } = makeSession();
+    const bob = net2.addPeer("bob");
+    const bobInbox = collect(bob);
+    const alice = joinAndDeploy(net2, "grenade", 8); // grenade's maxStackSize (starterItems.ts)
+    for (let i = 0; i < 8; i++) {
+      now.value += 5000; // refill the token bucket to full before every placement
+      alice.broadcast({ kind: "deployItem", deployableId: "grenade", position: [0, 1, 3] });
+    }
+    session.tick(1); // far short of the grenade's 1500ms fuse — nothing has triggered yet
+    const last = deployablesMessages(bobInbox).at(-1)!;
+    expect(last.entities).toHaveLength(6); // MAX_ACTIVE_DEPLOYABLES_PER_PEER
+  });
+
+  it("rate-limits rapid-fire placements (security #1)", () => {
+    const { net: net2, session } = makeSession();
+    const bob = net2.addPeer("bob");
+    const bobInbox = collect(bob);
+    const alice = joinAndDeploy(net2, "grenade", 6);
+    for (let i = 0; i < 6; i++) {
+      alice.broadcast({ kind: "deployItem", deployableId: "grenade", position: [0, 1, 3] });
+    }
+    session.tick(1);
+    const last = deployablesMessages(bobInbox).at(-1)!;
+    expect(last.entities).toHaveLength(4); // DEPLOY_ITEM_RATE_LIMIT.capacity, no refill elapsed
+  });
+
+  it("a grenade's fuse triggers automatically, resolves the blast via resolveAoe/onDeployableHit, and streams the boom effect (security #6)", () => {
+    const onDeployableHit = vi.fn();
+    const onEffect = vi.fn();
+    const { net: net2, session } = makeSession({
+      findHittableEntities: () => [{ id: "creature:1", x: 0, y: 1, z: 3, radius: 0.5 }],
+      onDeployableHit,
+      onEffect,
+    });
+    const bob = net2.addPeer("bob");
+    const bobInbox = collect(bob);
+    const alice = joinAndDeploy(net2, "grenade", 5);
+    alice.broadcast({ kind: "deployItem", deployableId: "grenade", position: [0, 1, 3] });
+
+    session.tick(1500); // matches the grenade DeployableSpec's armDelayMs fuse
+
+    expect(onDeployableHit).toHaveBeenCalledTimes(1);
+    expect(onDeployableHit).toHaveBeenCalledWith("creature:1", 26, "boom", "boom", "alice");
+    expect(onEffect).toHaveBeenCalledWith("vfx.boom.grenade", 0, 1, 3);
+    expect(effectMessages(bobInbox).at(-1)).toMatchObject({ effectId: "vfx.boom.grenade", x: 0, y: 1, z: 3 });
+    const last = deployablesMessages(bobInbox).at(-1)!;
+    expect(last.entities).toEqual([]); // triggered — removed from the stream
+  });
+
+  it("a proximity mine ignores a nearby target while still arming, then triggers the instant it arms", () => {
+    const onDeployableHit = vi.fn();
+    const { net: net2, session } = makeSession({
+      // Exactly at the mine's own position — inside the 2m trigger radius
+      // AND, for a clean assertion, at the AoE blast's center (magnitude 1).
+      findHittableEntities: () => [{ id: "creature:1", x: 0, y: 1, z: 3, radius: 0.5 }],
+      onDeployableHit,
+    });
+    const bob = net2.addPeer("bob");
+    const bobInbox = collect(bob);
+    const alice = joinAndDeploy(net2, "proximity-mine", 3);
+    alice.broadcast({ kind: "deployItem", deployableId: "proximity-mine", position: [0, 1, 3] });
+
+    session.tick(500); // still arming (armDelayMs 800) — never triggers, even with a target in range
+    expect(onDeployableHit).not.toHaveBeenCalled();
+    expect(deployablesMessages(bobInbox).at(-1)!.entities).toHaveLength(1);
+
+    session.tick(300); // crosses the 800ms arm delay -> armed -> immediate proximity check -> triggers
+    expect(onDeployableHit).toHaveBeenCalledTimes(1);
+    expect(onDeployableHit).toHaveBeenCalledWith("creature:1", 22, "boom", "trapTrigger", "alice");
+    expect(deployablesMessages(bobInbox).at(-1)!.entities).toEqual([]);
+  });
+
+  it("streams armed:true once a proximity mine finishes arming with nobody nearby yet", () => {
+    const { net: net2, session } = makeSession();
+    const bob = net2.addPeer("bob");
+    const bobInbox = collect(bob);
+    const alice = joinAndDeploy(net2, "proximity-mine", 3);
+    alice.broadcast({ kind: "deployItem", deployableId: "proximity-mine", position: [0, 1, 3] });
+
+    session.tick(800); // exactly the arm delay, no findHittableEntities hook -> nothing nearby
+    const last = deployablesMessages(bobInbox).at(-1)!;
+    expect(last.entities).toEqual([expect.objectContaining({ deployableId: "proximity-mine", armed: true })]);
   });
 });

@@ -211,6 +211,16 @@ export const AIMED_ATTACK_RATE_LIMIT: RateLimitConfig = { capacity: 6, refillPer
  */
 export const MAX_ACTIVE_PROJECTILES_PER_PEER = 12;
 
+/**
+ * E7.5 security guards (mirroring E7.2's AIMED_ATTACK_RATE_LIMIT/
+ * MAX_ACTIVE_PROJECTILES_PER_PEER follow-ups #1/#2 from commit one, rather
+ * than shipping unwired and hardening later): a deploy is a much heavier-
+ * weight action than a shot (consumes a whole item, arms a lingering blast),
+ * so both budgets are tighter than the ranged ones.
+ */
+export const DEPLOY_ITEM_RATE_LIMIT: RateLimitConfig = { capacity: 4, refillPerSecond: 1 };
+export const MAX_ACTIVE_DEPLOYABLES_PER_PEER = 6;
+
 export function validateInventoryOp(op: InventoryOp, capacity: number): boolean {
   switch (op.op) {
     case "move":

@@ -329,6 +329,40 @@ export const STARTER_RECIPES: readonly Recipe[] = [
     station: "workbench",
   },
 
+  // --- E7.5 deployables (mines/traps/grenades) ---
+  {
+    id: "grenade",
+    ingredients: [
+      { itemId: "charcoal", count: 2 },
+      { itemId: "flint", count: 1 },
+      { itemId: "rope", count: 1 },
+    ],
+    output: { itemId: "grenade", count: 1 },
+    unlockTier: 2,
+    station: "workbench",
+  },
+  {
+    id: "proximity-mine",
+    ingredients: [
+      { itemId: "ingot", count: 2 },
+      { itemId: "flint", count: 1 },
+      { itemId: "clay", count: 1 },
+    ],
+    output: { itemId: "proximity-mine", count: 1 },
+    unlockTier: 2,
+    station: "workbench",
+  },
+  {
+    id: "bumble-trap",
+    ingredients: [
+      { itemId: "stick", count: 2 },
+      { itemId: "rope", count: 2 },
+    ],
+    output: { itemId: "bumble-trap", count: 1 },
+    unlockTier: 1,
+    station: "workbench",
+  },
+
   // --- E7.1 melee weapons ---
   {
     id: "wooden-club",

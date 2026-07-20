@@ -228,6 +228,65 @@ export const STARTER_ITEMS: readonly ItemDefinition[] = [
     },
   },
 
+  // --- E7.5 deployables (mines/traps/grenades) ---
+  // Item id doubles as the `DeployableRegistry`/`AoeRegistry`-adjacent id
+  // (see DeployableRegistry.ts's E7.5 section doc comment): the host debits
+  // THIS item on a valid `deployItem`, then resolves damage/damageType/
+  // feelEvent from this SAME id's `combat` block (kind "deployable"), and
+  // the arm/trigger timing + blast radius from `DEPLOYABLE_REGISTRY.get`
+  // (also this id). `combat.deployable` is set for data completeness even
+  // though `deployItem`'s wire shape already names the id directly.
+  {
+    id: "grenade",
+    displayName: "Grenade",
+    maxStackSize: 8,
+    tags: ["weapon", "deployable", "crafted"],
+    tier: 2,
+    combat: {
+      kind: "deployable",
+      damage: 26,
+      attackSpeed: 0.5,
+      deployable: "grenade",
+      aoe: "grenade-boom",
+      damageType: "boom",
+      feelEvent: "boom",
+    },
+  },
+  {
+    id: "proximity-mine",
+    displayName: "Proximity Mine",
+    maxStackSize: 8,
+    tags: ["weapon", "deployable", "crafted"],
+    tier: 2,
+    combat: {
+      kind: "deployable",
+      damage: 22,
+      attackSpeed: 0.5,
+      deployable: "proximity-mine",
+      aoe: "mine-boom",
+      damageType: "boom",
+      feelEvent: "trapTrigger",
+    },
+  },
+  // Cozy stance (plan §2 decision 2): a low base damage — the bumble-trap's
+  // point is a snare/knock-up telegraphed gotcha, never a damage-spike trap.
+  {
+    id: "bumble-trap",
+    displayName: "Bumble-Trap",
+    maxStackSize: 8,
+    tags: ["weapon", "deployable", "crafted"],
+    tier: 1,
+    combat: {
+      kind: "deployable",
+      damage: 4,
+      attackSpeed: 0.5,
+      deployable: "bumble-trap",
+      aoe: "bumble-trap-pop",
+      damageType: "nature",
+      feelEvent: "trapTrigger",
+    },
+  },
+
   // --- E7.1 melee weapons ---
   // Weapon variety exercising the E7.0 `combat: WeaponMetadata` block
   // (WeaponRegistry.ts): a fast/weak starter club, a very quick dagger, a

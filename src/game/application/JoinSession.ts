@@ -10,6 +10,8 @@ import { isErr } from "../domain/Result";
 import type {
   AimedAttackMsg,
   CreatureEntity,
+  DeployableEntity,
+  DeployItemMsg,
   EquipSlot,
   GroundItemEntity,
   InteractAction,
@@ -45,6 +47,13 @@ export interface JoinSessionHooks {
    *  contract as `onCreatures`; a joiner never simulates a shot locally,
    *  only renders a cosmetic tracer from this. */
   onProjectiles?(entities: readonly ProjectileEntity[]): void;
+  /** The host's full active deployable set (E7.5) — same full-set-stream
+   *  contract as `onCreatures`/`onProjectiles`; a joiner never simulates a
+   *  mine/trap/grenade's arm/trigger timing locally, only mirrors this. */
+  onDeployables?(entities: readonly DeployableEntity[]): void;
+  /** A one-shot boom/telegraph VFX cue (E7.4/E7.5) — an `AoeRegistry` id or a
+   *  telegraph vfx id, resolved by the presentation layer, never parsed here. */
+  onEffect?(effectId: string, x: number, y: number, z: number): void;
   onPeerJoined?(peerId: string, playerName: string): void;
   onPeerLeft?(peerId: string): void;
   onHostClosing?(): void;
@@ -124,6 +133,12 @@ export class JoinSession {
           return;
         case "projectiles":
           hooks.onProjectiles?.(msg.entities);
+          return;
+        case "deployables":
+          hooks.onDeployables?.(msg.entities);
+          return;
+        case "effect":
+          hooks.onEffect?.(msg.effectId, msg.x, msg.y, msg.z);
           return;
         case "peerJoined":
           hooks.onPeerJoined?.(msg.peerId, msg.playerName);
@@ -261,5 +276,12 @@ export class JoinSession {
       weaponSlot,
       ...(chargeMs !== undefined ? { chargeMs } : {}),
     });
+  }
+
+  /** Place a mine/trap/grenade (E7.5) — deployableId + position only; the
+   *  host owns the resulting arm-timer/trigger state machine and resolves
+   *  the eventual blast from its own record (ADR 0004 §2). */
+  sendDeployItem(deployableId: string, position: DeployItemMsg["position"]): void {
+    this.transport.broadcast({ kind: "deployItem", deployableId, position });
   }
 }
