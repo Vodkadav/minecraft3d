@@ -25,6 +25,7 @@ import { NAMEPLATE_MODES, type NameplateMode } from "../domain/hud/Nameplate";
 import { DAY_LENGTH_MAX_SECONDS, DAY_LENGTH_MIN_SECONDS } from "../domain/time/WorldClock";
 import { DIFFICULTIES, type Difficulty } from "../domain/settings/Difficulty";
 import { wireButtonSound } from "./audioUi";
+import { createPanelEmblemEl } from "./icons/PanelEmblem";
 import { applyAccessibility, injectStyles } from "./styles";
 
 function field(
@@ -58,9 +59,12 @@ export function SettingsView(
   root.className = "laas-ui laas-settings";
   root.setAttribute("aria-label", loc.t("settings.title"));
 
+  const headingWrap = doc.createElement("div");
+  headingWrap.className = "lw-panel-title-wrap";
   const heading = doc.createElement("h1");
   heading.textContent = loc.t("settings.title");
-  root.appendChild(heading);
+  headingWrap.append(createPanelEmblemEl(doc, "settings"), heading);
+  root.appendChild(headingWrap);
 
   const apply = (patch: Partial<SettingsInput>) => {
     void controller.apply(patch).then((r) => {

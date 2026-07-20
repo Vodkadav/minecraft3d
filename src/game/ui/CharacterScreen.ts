@@ -24,6 +24,7 @@ import { canAllocateTalent, TALENT_NODES } from "../domain/character/TalentTree"
 import type { Localizer } from "../application/i18n/Localizer";
 import { Button } from "./components/Button";
 import { Panel } from "./components/Panel";
+import { createPanelEmblemEl } from "./icons/PanelEmblem";
 import { injectStyles } from "./styles";
 
 export interface CharacterScreenOptions {
@@ -103,7 +104,10 @@ export function mountCharacterScreen(opts: CharacterScreenOptions): CharacterScr
 
   const header = doc.createElement("div");
   header.className = "lw-inv-header";
-  header.append(tabs, closeBtn);
+  const headerLead = doc.createElement("div");
+  headerLead.className = "lw-panel-title-wrap";
+  headerLead.append(createPanelEmblemEl(doc, "character"), tabs);
+  header.append(headerLead, closeBtn);
 
   const body = doc.createElement("div");
   body.className = "lw-character-body";

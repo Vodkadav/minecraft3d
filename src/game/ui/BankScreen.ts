@@ -26,6 +26,7 @@ import type { Localizer } from "../application/i18n/Localizer";
 import { Button } from "./components/Button";
 import { InventoryGrid } from "./components/InventoryGrid";
 import { Panel } from "./components/Panel";
+import { createPanelEmblemEl } from "./icons/PanelEmblem";
 import { injectStyles } from "./styles";
 
 export interface BankScreenOptions {
@@ -101,7 +102,10 @@ export function mountBankScreen(opts: BankScreenOptions): BankScreenHandle {
 
   const header = doc.createElement("div");
   header.className = "lw-inv-header";
-  header.append(tabs, closeBtn);
+  const headerLead = doc.createElement("div");
+  headerLead.className = "lw-panel-title-wrap";
+  headerLead.append(createPanelEmblemEl(doc, "bank"), tabs);
+  header.append(headerLead, closeBtn);
 
   const playerGrid = InventoryGrid({
     registry: opts.registry,

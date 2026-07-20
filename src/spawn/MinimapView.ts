@@ -19,6 +19,7 @@ import {
   type MapMarker,
   type MinimapView,
 } from "../game/domain/map/MinimapModel";
+import { markerGlyphShape } from "../game/ui/icons/MarkerGlyphs";
 import { injectStyles } from "../game/ui/styles";
 
 const DEFAULT_VIEW_RADIUS_METERS = 60;
@@ -111,6 +112,7 @@ export function mountMinimapView(opts: MinimapViewOptions): MinimapViewHandle {
       const dot = doc.createElement("div");
       dot.className = "lw-map-icon";
       dot.dataset.kind = icon.kind;
+      dot.dataset.shape = markerGlyphShape(icon.kind);
       dot.style.left = `${icon.screenX}px`;
       dot.style.top = `${icon.screenY}px`;
       nodes.push(dot);
@@ -118,6 +120,7 @@ export function mountMinimapView(opts: MinimapViewOptions): MinimapViewHandle {
     const arrow = doc.createElement("div");
     arrow.className = "lw-map-icon";
     arrow.dataset.kind = "player";
+    arrow.dataset.shape = markerGlyphShape("player");
     arrow.style.left = `${widthPx / 2}px`;
     arrow.style.top = `${heightPx / 2}px`;
     arrow.style.transform = `rotate(${playerArrowRotationDegrees(player.yawRadians)}deg)`;

@@ -246,7 +246,7 @@ export function mountGameHud(opts: GameHudOptions): GameHudHandle {
   doc.body.appendChild(hotbar.el);
   hotbar.render(inventory);
 
-  const toasts = createToastHost(loc, { ariaLabel: loc.t("hud.notifications") });
+  const toasts = createToastHost(loc, { ariaLabel: loc.t("hud.notifications"), registry });
   doc.body.appendChild(toasts.el);
 
   const crosshair = opts.crosshair ?? Crosshair(doc);
@@ -444,7 +444,7 @@ export function mountGameHud(opts: GameHudOptions): GameHudHandle {
     bankScreen.setPlayerInventory(inventory);
     opts.audio?.play("eat");
     opts.feel?.trigger("eat");
-    toasts.push("hud.toast.ate", { name: def.value.displayName }, LOOT_TOAST_TTL_MS);
+    toasts.push("hud.toast.ate", { name: def.value.displayName }, LOOT_TOAST_TTL_MS, slot.itemId);
     opts.onEat?.(def.value.food);
     recordProgress("eat");
     return true;
@@ -483,7 +483,7 @@ export function mountGameHud(opts: GameHudOptions): GameHudHandle {
         const def = registry.get(stack.itemId);
         const name = isOk(def) ? def.value.displayName : stack.itemId;
         if (isOk(def) && def.value.food) gainedFood = true;
-        toasts.push("hud.toast.loot", { name, count: stack.count }, LOOT_TOAST_TTL_MS);
+        toasts.push("hud.toast.loot", { name, count: stack.count }, LOOT_TOAST_TTL_MS, stack.itemId);
       }
       hotbar.render(inventory);
       inventoryScreen.setInventory(inventory);
@@ -526,7 +526,7 @@ export function mountGameHud(opts: GameHudOptions): GameHudHandle {
       inventory = added.value;
       const def = registry.get(itemId);
       const name = isOk(def) ? def.value.displayName : itemId;
-      toasts.push("hud.toast.loot", { name, count }, LOOT_TOAST_TTL_MS);
+      toasts.push("hud.toast.loot", { name, count }, LOOT_TOAST_TTL_MS, itemId);
       hotbar.render(inventory);
       inventoryScreen.setInventory(inventory);
       if (isOk(def) && def.value.food) showKeyhint("eat", "H");
