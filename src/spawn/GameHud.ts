@@ -58,6 +58,19 @@
  * parallel one. Research is single-player/host-local only for now — see
  * `onResearchChange` and PROGRESS.md for the explicit multiplayer-sync
  * deferral (joiners don't broadcast research today).
+ *
+ * E8.7: this HUD is also the composition-root wiring for `ActionBar`
+ * ("N" toggles it, opt-in-off — no-flags boot stays identical) and
+ * `BuffStrip` (self-hiding, rendered `[]` — no buff source exists yet).
+ * The action bar's ability slots come straight from the E7.3
+ * `STARTER_ABILITIES` catalogue; its consumable slots are derived from the
+ * same `inventory` this HUD already owns, re-rendered at every site that
+ * already re-renders the hotbar. Activating a consumable slot reuses
+ * `eatSelected`'s exact body via the shared `eatItemById` helper — no
+ * duplicated eat/audio/feel/toast/recordProgress logic. Activating an
+ * ability slot is a no-op: no client-side cast path exists (E7.3 built
+ * host-authoritative cast resolution only), see docs/UX_PLAN.md's standing
+ * deferral.
  */
 
 import { isOk } from "../game/domain/Result";
@@ -87,6 +100,8 @@ import type { ItemRegistry } from "../game/domain/items/ItemRegistry";
 import type { FoodMetadata } from "../game/domain/items/ItemDefinition";
 import type { DeathPenalty } from "../game/domain/survival/Respawn";
 import { dropOnDeath } from "../game/domain/survival/Respawn";
+import { STARTER_ABILITIES } from "../game/domain/combat/AbilityRegistry";
+import { buildAbilitySlots, buildConsumableSlots } from "../game/domain/ui/ActionBarState";
 import { HOTBAR_SIZE } from "../game/domain/ui/HotbarSelection";
 import type { CrosshairState } from "../game/domain/ui/CrosshairState";
 import { Bank, type BankOptions } from "../game/domain/storage/Bank";
@@ -97,6 +112,8 @@ import type { FeelPort } from "../game/application/ports/FeelPort";
 import type { Localizer } from "../game/application/i18n/Localizer";
 import type { ItemFilterStore } from "../game/application/ports/ItemFilterStore";
 import { LocalStorageItemFilterStore } from "../game/infrastructure/persistence/LocalStorageItemFilterStore";
+import { ActionBar } from "../game/ui/components/ActionBar";
+import { BuffStrip } from "../game/ui/components/BuffStrip";
 import { Button } from "../game/ui/components/Button";
 import { Crosshair, type CrosshairHandle } from "../game/ui/components/Crosshair";
 import { Hotbar } from "../game/ui/components/Hotbar";
@@ -246,6 +263,28 @@ export function mountGameHud(opts: GameHudOptions): GameHudHandle {
   doc.body.appendChild(hotbar.el);
   hotbar.render(inventory);
 
+  // E8.7: ability slots reuse the E7.3 spell catalogue as-is (no per-ability
+  // cooldown clock exists client-side, see the module doc comment); consumable
+  // slots are re-derived from `inventory` at every render call below.
+  const actionBar = ActionBar({
+    loc,
+    registry,
+    doc,
+    onActivate: (slot) => {
+      if (slot.kind === "consumable" && slot.itemId) eatItemById(slot.itemId);
+      // Ability slots: no client-side cast path exists yet — no-op.
+    },
+  });
+  function renderActionBar(): void {
+    actionBar.render([...buildAbilitySlots(STARTER_ABILITIES), ...buildConsumableSlots(inventory, registry)]);
+  }
+  renderActionBar();
+
+  // E8.7: no buff/status-effect source exists yet — mounted so a real source
+  // later needs no wiring change; self-hides on an empty render.
+  const buffStrip = BuffStrip(loc, { doc });
+  buffStrip.render([]);
+
   const toasts = createToastHost(loc, { ariaLabel: loc.t("hud.notifications"), registry });
   doc.body.appendChild(toasts.el);
 
@@ -277,6 +316,7 @@ export function mountGameHud(opts: GameHudOptions): GameHudHandle {
     onInventoryChange: (next) => {
       inventory = next;
       hotbar.render(inventory);
+      renderActionBar();
     },
     onCraft: () => recordProgress("craft"),
   });
@@ -334,6 +374,7 @@ export function mountGameHud(opts: GameHudOptions): GameHudHandle {
       inventory = nextPlayer;
       bank = nextBank;
       hotbar.render(inventory);
+      renderActionBar();
       inventoryScreen.setInventory(inventory);
       opts.onBankChange?.(bank);
     },
@@ -431,23 +472,31 @@ export function mountGameHud(opts: GameHudOptions): GameHudHandle {
     activeKeyhintTimers.add(timer);
   }
 
-  function eatSelected(): boolean {
-    const slot = inventory.slots[hotbar.selected];
-    if (!slot) return false;
-    const def = registry.get(slot.itemId);
+  // E8.7: shared by the hotbar's `H`-to-eat flow and the action bar's
+  // consumable-slot activation — one eat path, no duplicated inventory/
+  // audio/feel/toast/recordProgress logic.
+  function eatItemById(itemId: string): boolean {
+    const def = registry.get(itemId);
     if (!isOk(def) || !def.value.food) return false;
-    const removed = inventory.remove(slot.itemId, 1);
+    const removed = inventory.remove(itemId, 1);
     if (!isOk(removed)) return false;
     inventory = removed.value;
     hotbar.render(inventory);
+    renderActionBar();
     inventoryScreen.setInventory(inventory);
     bankScreen.setPlayerInventory(inventory);
     opts.audio?.play("eat");
     opts.feel?.trigger("eat");
-    toasts.push("hud.toast.ate", { name: def.value.displayName }, LOOT_TOAST_TTL_MS, slot.itemId);
+    toasts.push("hud.toast.ate", { name: def.value.displayName }, LOOT_TOAST_TTL_MS, itemId);
     opts.onEat?.(def.value.food);
     recordProgress("eat");
     return true;
+  }
+
+  function eatSelected(): boolean {
+    const slot = inventory.slots[hotbar.selected];
+    if (!slot) return false;
+    return eatItemById(slot.itemId);
   }
 
   function isTextInputFocused(): boolean {
@@ -486,6 +535,7 @@ export function mountGameHud(opts: GameHudOptions): GameHudHandle {
         toasts.push("hud.toast.loot", { name, count: stack.count }, LOOT_TOAST_TTL_MS, stack.itemId);
       }
       hotbar.render(inventory);
+      renderActionBar();
       inventoryScreen.setInventory(inventory);
       bankScreen.setPlayerInventory(inventory);
       if (gainedFood) showKeyhint("eat", "H");
@@ -501,6 +551,7 @@ export function mountGameHud(opts: GameHudOptions): GameHudHandle {
       if (!isOk(rebuilt)) return;
       inventory = rebuilt.value;
       hotbar.render(inventory);
+      renderActionBar();
       inventoryScreen.setInventory(inventory);
       bankScreen.setPlayerInventory(inventory);
     },
@@ -517,6 +568,7 @@ export function mountGameHud(opts: GameHudOptions): GameHudHandle {
     setInventory(next: Inventory): void {
       inventory = next;
       hotbar.render(inventory);
+      renderActionBar();
       inventoryScreen.setInventory(inventory);
       bankScreen.setPlayerInventory(inventory);
     },
@@ -528,6 +580,7 @@ export function mountGameHud(opts: GameHudOptions): GameHudHandle {
       const name = isOk(def) ? def.value.displayName : itemId;
       toasts.push("hud.toast.loot", { name, count }, LOOT_TOAST_TTL_MS, itemId);
       hotbar.render(inventory);
+      renderActionBar();
       inventoryScreen.setInventory(inventory);
       if (isOk(def) && def.value.food) showKeyhint("eat", "H");
       return true;
@@ -544,6 +597,8 @@ export function mountGameHud(opts: GameHudOptions): GameHudHandle {
     dispose(): void {
       (doc.defaultView ?? window).removeEventListener("keydown", onEatKeyDown);
       hotbar.dispose();
+      actionBar.dispose();
+      buffStrip.dispose();
       toasts.dispose();
       tracker.dispose();
       inventoryScreen.dispose();
