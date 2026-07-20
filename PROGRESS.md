@@ -296,11 +296,20 @@ wire-touching slice).
   `InventoryGrid.ts` replacing the old split-only `contextmenu` handler — Split/Quick-Move/Drop
   fully functional; Eat/Equip are a recorded UI-only stub (see UX_PLAN.md's standing deferrals)
   pending E9 equipment / a generalized eat-from-inventory flow
-- [ ] E8.5 Inputs & chat polish: shared `Field.ts` input primitive; chat gains rarity-colored item
-  links, channel pills, unread badge, kid-safe canned emote palette — security-reviewed (wire-touching)
-- [ ] E8.6 Menus, lobby & settings overhaul: `MainMenuView`/`LobbyView`/`SettingsView`/
-  `CreditsScreen`/`LoadingScreen` restyle onto E8.1 chrome; Settings UI category; lobby becomes the
-  "play together" surface
+- [x] E8.5 Inputs & chat polish (security-reviewed — APPROVED, no findings): shared `components/Field.ts`
+  input primitive (label+input+hint/error, aria-describedby/invalid, 44px); chat gains rarity-colored
+  item-link chips (`domain/social/ChatItemLink.ts` — pure `[[item:<id>]]` parser that only promotes a
+  chip when the id resolves against the local registry, else inert text; chip label from trusted
+  registry data via `createTextNode`, not innerHTML), an accessible say/party channel `radiogroup` pill
+  switcher, an unread badge, and a fixed localized kid-safe emote palette (insert-only). No new wire
+  payload — a token is ordinary text in the existing chat `text` field through the UNMODIFIED host-side
+  profanity/PII filter. `ChatBoxHandle.insertItemLink(itemId)` is the ready hook; wiring an inventory
+  shift-click to it is deferred to the composition root (a `GameHud` follow-up, no new wire surface).
+  34+ tests
+- [~] E8.6 Menus, lobby & settings overhaul: menu/lobby/settings/credits shells moved onto the E8.1
+  panel surface language (warm elevation gradient + edge vignette + drop shadow). Remaining: Settings
+  UI category (hud style, tooltip verbosity, colorblind palette, reduce-flair — some gated on E8.8's
+  colorblind palette + a tooltip-verbosity consumer) and the lobby "play together" surface pass
 - [~] E8.7 HUD cohesion & action bar: hotbar slots/minimap/toasts moved onto the E8.1 surface-token +
   ornament-border + panel-shadow language (objective tracker/party/combat-meter already inherited it
   via `Panel()`) so all HUD chrome reads as one family; new `ActionBar.ts` (opt-in, "N"-toggled,
@@ -313,9 +322,11 @@ wire-touching slice).
   additive game-code work; per-ability client-side cooldown tracking (E7.3 never built one); and a
   real buff/status-effect source (none exists yet, per `AbilityRegistry.ts`'s own Frost Puff/Vine
   Snare deferral note) — `BuffStrip.render` takes a plain chip array ready for whenever one lands
-- [ ] E8.8 Accessibility, responsive & colorblind pass: wire `--lw-*` tokens under
-  `[data-high-contrast="true"]` (closes the recorded gap); ship colorblind rarity palette; full
-  keyboard nav + ARIA for chrome/tooltip/menu; mobile layouts
+- [~] E8.8 Accessibility, responsive & colorblind pass: high-contrast `--lw-*` wiring DONE (9d957e4 —
+  removed the dead legacy rule that rendered high-contrast panels white-on-white; remapped every
+  `--lw-*` token to a max-contrast white-on-black set on `[data-high-contrast="true"]`, browser-verified).
+  Remaining: ship the colorblind rarity palette toggle (E8.0 already defines `--lw-rarity-cb-*`), a
+  keyboard-nav/ARIA audit of the E8.1/E8.3/E8.4 chrome+tooltip+menu, and mobile/responsive layouts
 - [ ] UI/UX visual-QA pass (aerial/close screenshots scored against the cozy-tone + a11y checklist:
   rarity legible + colorblind-safe, no empty panels, AA contrast, shape-not-color-only,
   reduced-motion honored)

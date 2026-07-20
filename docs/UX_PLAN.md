@@ -45,10 +45,10 @@ the token/primitive level is low-risk and propagates automatically.
 | E8.2 Iconography v2 | Authored per-category glyph paths, rarity frame ring, overlay badges (equipped/new/qty); `PanelEmblem` grows into a per-screen emblem library + party/faction crest generator | ✅ Done (9e2b0c9; badge slot-wiring deferred — no state source) |
 | E8.3 Rich tooltip system | Pure `domain/ui/TooltipModel.ts` item-card model; `RichTooltip` component (hover/focus/long-press) replaces single-line hovers for items everywhere | ✅ Done (7dfed91) |
 | E8.4 Context menus | Pure `domain/ui/ItemActions.ts` action list; `ContextMenu` component (mouse/keyboard/touch), replacing the `InventoryGrid` split-only handler | ✅ Done (1c3c087) |
-| E8.5 Inputs & chat polish | Shared `Field.ts` input primitive; chat gains rarity-colored item links, channel pills, unread badge, kid-safe canned emote palette | Pending |
-| E8.6 Menus, lobby & settings overhaul | `MainMenuView`/`LobbyView`/`SettingsView`/`CreditsScreen`/`LoadingScreen` restyle onto E8.1 chrome; Settings UI category (hud style, tooltip verbosity, colorblind palette, reduce-flair); lobby becomes the "play together" surface | Pending |
+| E8.5 Inputs & chat polish | Shared `Field.ts` input primitive; chat gains rarity-colored item links, channel pills, unread badge, kid-safe canned emote palette | ✅ Done (cd85243; security APPROVED) |
+| E8.6 Menus, lobby & settings overhaul | `MainMenuView`/`LobbyView`/`SettingsView`/`CreditsScreen`/`LoadingScreen` restyle onto E8.1 chrome; Settings UI category (hud style, tooltip verbosity, colorblind palette, reduce-flair); lobby becomes the "play together" surface | 🟡 Partial — shells on E8.1 surface; Settings category + lobby pending |
 | E8.7 HUD cohesion & action bar | Unify hotbar/vitals/minimap/objective/party/combat-meter into one visual system; togglable ability/consumable action bar; gentle buff/effect strip; toasts restyled | 🟡 Partial — components built, composition-root wiring deferred (see below) |
-| E8.8 Accessibility, responsive & colorblind pass | Wire `--lw-*` tokens under `[data-high-contrast="true"]` (closes the recorded gap); ship colorblind rarity palette; full keyboard nav + ARIA for chrome/tooltip/menu; mobile layouts | Pending |
+| E8.8 Accessibility, responsive & colorblind pass | Wire `--lw-*` tokens under `[data-high-contrast="true"]` (closes the recorded gap); ship colorblind rarity palette; full keyboard nav + ARIA for chrome/tooltip/menu; mobile layouts | 🟡 Partial — high-contrast `--lw-*` wiring done (9d957e4); colorblind toggle + keyboard-nav audit + mobile pending |
 
 ## Dependency order
 
@@ -90,7 +90,15 @@ overlays sit over the lit world at ~45%, so a pure-black preview reads far darke
   just an item id the sender already owns (no new payload shape beyond what chat already carries);
   requires light validation that the linked id is a real, ownable item before it renders as a
   clickable chip, and a `claude-infra:security` review before merge. All other E8 phases are
-  local-only presentation/DOM work with no new wire surface.
+  local-only presentation/DOM work with no new wire surface. **Reviewed 2026-07-20 — APPROVED**, no
+  findings (chip text via `createTextNode` from trusted registry data, not innerHTML; host-side
+  profanity/PII filter unmodified; id charset `[A-Za-z0-9_-]{1,64}`).
+- **INVARIANT — a chat item-link conveys NO authority.** It asserts nothing about ownership and
+  grants nothing: any client may link any real item id, and a receiver trusts it only as "show this
+  item's public card." That is why forgery is benign. If a future change ever makes a chat link
+  convey ownership, drive a trade, or affect any rewardable/progression outcome, that becomes a
+  server-authoritative decision requiring a fresh security review — client-side `formatItemLinkToken`
+  must never be the authority for such a claim.
 
 ## Standing deferrals (recorded, not skipped)
 
