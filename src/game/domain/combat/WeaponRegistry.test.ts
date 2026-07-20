@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { isErr, isOk } from "../Result";
 import type { ItemDefinition, WeaponMetadata } from "../items/ItemDefinition";
-import { WeaponRegistry } from "./WeaponRegistry";
+import { WEAPON_REGISTRY, WeaponRegistry } from "./WeaponRegistry";
 
 function weaponMeta(overrides: Partial<WeaponMetadata> = {}): WeaponMetadata {
   return {
@@ -67,5 +67,31 @@ describe("WeaponRegistry", () => {
     ]);
     if (!isOk(created)) throw new Error("setup");
     expect(created.value.all().map(([id]) => id).sort()).toEqual(["a", "b"]);
+  });
+});
+
+describe("starter weapon table integrity (E7.1)", () => {
+  it("constructs without a fallible unwrap (no duplicate weapon item ids in STARTER_ITEMS)", () => {
+    expect(() => WEAPON_REGISTRY).not.toThrow();
+  });
+
+  it("has at least one melee weapon registered", () => {
+    expect(WEAPON_REGISTRY.all().length).toBeGreaterThan(0);
+    for (const [, meta] of WEAPON_REGISTRY.all()) {
+      expect(["melee", "ranged", "thrown", "spell", "deployable"]).toContain(meta.kind);
+    }
+  });
+
+  it("every entry has sane, positive combat parameters", () => {
+    for (const [id, meta] of WEAPON_REGISTRY.all()) {
+      expect(meta.damage, id).toBeGreaterThan(0);
+      expect(meta.attackSpeed, id).toBeGreaterThan(0);
+      if (meta.reach !== undefined) expect(meta.reach, id).toBeGreaterThan(0);
+      if (meta.coneDegrees !== undefined) {
+        expect(meta.coneDegrees, id).toBeGreaterThan(0);
+        expect(meta.coneDegrees, id).toBeLessThanOrEqual(180);
+      }
+      expect(meta.feelEvent.length, id).toBeGreaterThan(0);
+    }
   });
 });

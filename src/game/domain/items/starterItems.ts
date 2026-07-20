@@ -197,4 +197,77 @@ export const STARTER_ITEMS: readonly ItemDefinition[] = [
   { id: "gilded-sword", displayName: "Gilded Sword", maxStackSize: 1, tags: ["tool", "weapon", "crafted"], tier: 4 },
   { id: "gilded-pickaxe", displayName: "Gilded Pickaxe", maxStackSize: 1, tags: ["tool", "crafted"], tier: 4 },
   { id: "relic-charm", displayName: "Relic Charm", maxStackSize: 1, tags: ["crafted", "gear"], tier: 4 },
+
+  // --- E7.1 melee weapons ---
+  // Weapon variety exercising the E7.0 `combat: WeaponMetadata` block
+  // (WeaponRegistry.ts): a fast/weak starter club, a very quick dagger, a
+  // longer-reach precise spear, and a slow heavy hammer whose wide cone
+  // (>= MeleeResolve.SWEEP_CONE_DEGREES) sweeps every target in its arc
+  // instead of soft-locking just the nearest one. Pre-existing "weapon"-
+  // tagged items (iron-sword etc.) are untouched — they stay flavor-only
+  // until a later stream backfills their `combat` blocks.
+  {
+    id: "wooden-club",
+    displayName: "Wooden Club",
+    maxStackSize: 1,
+    tags: ["tool", "weapon", "crafted"],
+    tier: 0,
+    combat: {
+      kind: "melee",
+      damage: 6,
+      attackSpeed: 2,
+      reach: 3,
+      coneDegrees: 50,
+      damageType: "physical",
+      feelEvent: "meleeSwing",
+    },
+  },
+  {
+    id: "flint-dagger",
+    displayName: "Flint Dagger",
+    maxStackSize: 1,
+    tags: ["tool", "weapon", "crafted"],
+    tier: 1,
+    combat: {
+      kind: "melee",
+      damage: 5,
+      attackSpeed: 3,
+      reach: 2.5,
+      coneDegrees: 40,
+      damageType: "physical",
+      feelEvent: "meleeSwing",
+    },
+  },
+  {
+    id: "iron-spear",
+    displayName: "Iron Spear",
+    maxStackSize: 1,
+    tags: ["tool", "weapon", "crafted"],
+    tier: 2,
+    combat: {
+      kind: "melee",
+      damage: 11,
+      attackSpeed: 1.1,
+      reach: 4.5,
+      coneDegrees: 35,
+      damageType: "physical",
+      feelEvent: "meleeSwing",
+    },
+  },
+  {
+    id: "battle-hammer",
+    displayName: "Battle Hammer",
+    maxStackSize: 1,
+    tags: ["tool", "weapon", "crafted"],
+    tier: 3,
+    combat: {
+      kind: "melee",
+      damage: 18,
+      attackSpeed: 0.6,
+      reach: 3.2,
+      coneDegrees: 90,
+      damageType: "physical",
+      feelEvent: "meleeSwing",
+    },
+  },
 ];

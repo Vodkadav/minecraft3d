@@ -171,6 +171,10 @@ export const UI_STRINGS: Catalog = {
     "item.gilded-sword.name": "Gilded Sword",
     "item.gilded-pickaxe.name": "Gilded Pickaxe",
     "item.relic-charm.name": "Relic Charm",
+    "item.wooden-club.name": "Wooden Club",
+    "item.flint-dagger.name": "Flint Dagger",
+    "item.iron-spear.name": "Iron Spear",
+    "item.battle-hammer.name": "Battle Hammer",
 
     "creature.deer.name": "Deer",
     "creature.wolf.name": "Wolf",
@@ -313,6 +317,8 @@ export const UI_STRINGS: Catalog = {
     "combatLog.stat.dps": "DPS: {n}",
     "combatLog.stat.healed": "Healed: {n}",
     "combatLog.stat.kills": "Kills: {n}",
+
+    "combat.attackMeter.aria": "Attack strength",
 
     "party.title": "Party",
     "party.close": "Close",
@@ -659,6 +665,10 @@ export const UI_STRINGS: Catalog = {
     "item.gilded-sword.name": "Espada dorada",
     "item.gilded-pickaxe.name": "Pico dorado",
     "item.relic-charm.name": "Amuleto de reliquia",
+    "item.wooden-club.name": "Garrote de madera",
+    "item.flint-dagger.name": "Daga de pedernal",
+    "item.iron-spear.name": "Lanza de hierro",
+    "item.battle-hammer.name": "Martillo de guerra",
 
     "creature.deer.name": "Ciervo",
     "creature.wolf.name": "Lobo",
@@ -801,6 +811,8 @@ export const UI_STRINGS: Catalog = {
     "combatLog.stat.dps": "DPS: {n}",
     "combatLog.stat.healed": "Curado: {n}",
     "combatLog.stat.kills": "Derrotas: {n}",
+
+    "combat.attackMeter.aria": "Fuerza de ataque",
 
     "party.title": "Grupo",
     "party.close": "Cerrar",
@@ -1147,6 +1159,10 @@ export const UI_STRINGS: Catalog = {
     "item.gilded-sword.name": "Forgyldt sværd",
     "item.gilded-pickaxe.name": "Forgyldt hakke",
     "item.relic-charm.name": "Relikvieamulet",
+    "item.wooden-club.name": "Trækølle",
+    "item.flint-dagger.name": "Flintdolk",
+    "item.iron-spear.name": "Jernspyd",
+    "item.battle-hammer.name": "Kamphammer",
 
     "creature.deer.name": "Hjort",
     "creature.wolf.name": "Ulv",
@@ -1289,6 +1305,8 @@ export const UI_STRINGS: Catalog = {
     "combatLog.stat.dps": "DPS: {n}",
     "combatLog.stat.healed": "Helbredt: {n}",
     "combatLog.stat.kills": "Nedkæmpet: {n}",
+
+    "combat.attackMeter.aria": "Angrebsstyrke",
 
     "party.title": "Gruppe",
     "party.close": "Luk",

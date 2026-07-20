@@ -315,4 +315,41 @@ export const STARTER_RECIPES: readonly Recipe[] = [
     output: { itemId: "relic-charm", count: 1 },
     unlockTier: 4,
   },
+
+  // --- E7.1 melee weapons ---
+  {
+    id: "wooden-club",
+    ingredients: [{ itemId: "stick", count: 3 }],
+    output: { itemId: "wooden-club", count: 1 },
+    unlockTier: 0,
+  },
+  {
+    id: "flint-dagger",
+    ingredients: [
+      { itemId: "flint", count: 2 },
+      { itemId: "stick", count: 1 },
+    ],
+    output: { itemId: "flint-dagger", count: 1 },
+    unlockTier: 1,
+  },
+  {
+    id: "iron-spear",
+    ingredients: [
+      { itemId: "ingot", count: 2 },
+      { itemId: "stick", count: 3 },
+    ],
+    output: { itemId: "iron-spear", count: 1 },
+    unlockTier: 2,
+    station: "workbench",
+  },
+  {
+    id: "battle-hammer",
+    ingredients: [
+      { itemId: "steel-ingot", count: 3 },
+      { itemId: "stick", count: 2 },
+    ],
+    output: { itemId: "battle-hammer", count: 1 },
+    unlockTier: 3,
+    station: "workbench",
+  },
 ];
