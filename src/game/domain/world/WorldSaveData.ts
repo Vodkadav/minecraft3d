@@ -60,6 +60,13 @@ export interface WorldSaveData {
    *  `ExplorationPersistence` treats an absent record as "nothing explored
    *  yet" rather than corrupt data. */
   readonly exploration?: Readonly<Record<string, unknown>>;
+  /** Worldgen feature-version stamp (Phase E6.1) — optional, absent on every
+   *  save written before caves existed. `VoxelTerrain` only unions cave
+   *  carving into a world's baseline SDF when this is present and at least
+   *  `CAVES_WORLDGEN_VERSION`, so a pre-existing world's undug terrain keeps
+   *  regenerating byte-identical to before; only worlds stamped at (or after)
+   *  creation opt in. See `domain/voxel/CaveSeeding.ts`. */
+  readonly worldgenVersion?: number;
 }
 
 /** Lightweight index entry for the world-list / lobby, without the chunk blobs. */

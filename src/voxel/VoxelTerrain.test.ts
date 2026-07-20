@@ -9,6 +9,7 @@
 import { describe, expect, it } from "vitest";
 import type { PlayerState, WorldSaveData } from "../game/domain/world/WorldSaveData";
 import { InMemoryWorldSaveStore } from "../game/infrastructure/persistence/InMemoryWorldSaveStore";
+import { CAVES_WORLDGEN_VERSION, isCaveCarved } from "../game/domain/voxel/CaveSeeding";
 import { DigMask } from "./DigMask";
 import { VoxelTerrain, type VoxelSurface } from "./VoxelTerrain";
 
@@ -180,5 +181,78 @@ describe("VoxelTerrain.saveNow preservation", () => {
     const saved = await loadSave(store, "voxel-demo-7");
     expect(saved.playerState).toEqual({ position: [0, 0, 0], yaw: 0, pitch: 0 });
     expect(saved.inventories).toEqual({});
+  });
+});
+
+describe("VoxelTerrain cave-gen gating (E6.1 prime directive)", () => {
+  it("stamps a genuinely fresh (NotFound) world with the caves worldgen version", async () => {
+    const store = new InMemoryWorldSaveStore();
+    const voxels = new VoxelTerrain(SURFACE, new DigMask(), 7, store);
+    await voxels.init();
+    voxels.carveAt(0, 10, 0, 2);
+    await voxels.flushSave();
+    const saved = await loadSave(store, "voxel-demo-7");
+    expect(saved.worldgenVersion).toBe(CAVES_WORLDGEN_VERSION);
+  });
+
+  it("leaves a pre-existing (pre-caves) save unstamped after a normal save round-trip", async () => {
+    const store = new InMemoryWorldSaveStore();
+    await store.save(existingSave("w1", 42)); // no worldgenVersion — a save from before E6.1
+    const voxels = new VoxelTerrain(SURFACE, new DigMask(), 42, store, "voxel-demo", {
+      worldId: "w1",
+    });
+    await voxels.init();
+    voxels.carveAt(0, 10, 0, 2);
+    await voxels.flushSave();
+    const saved = await loadSave(store, "w1");
+    expect(saved.worldgenVersion).toBeUndefined();
+  });
+
+  it("preserves an already-stamped world's version across a save round-trip", async () => {
+    const store = new InMemoryWorldSaveStore();
+    await store.save({ ...existingSave("w2", 42), worldgenVersion: CAVES_WORLDGEN_VERSION });
+    const voxels = new VoxelTerrain(SURFACE, new DigMask(), 42, store, "voxel-demo", {
+      worldId: "w2",
+    });
+    await voxels.init();
+    voxels.carveAt(0, 10, 0, 2);
+    await voxels.flushSave();
+    const saved = await loadSave(store, "w2");
+    expect(saved.worldgenVersion).toBe(CAVES_WORLDGEN_VERSION);
+  });
+
+  // A tall surface gives caves room below the world's y=0 subterranean floor
+  // (see CaveSeeding.test.ts) — deep enough that CaveSeeding can actually
+  // carve, unlike the flat SURFACE (heightAt=10) the rest of this file uses.
+  const TALL_SURFACE: VoxelSurface = { heightAt: () => 120 };
+  const CAVE_SEED = 5;
+
+  function findCarvedPoint(): [number, number, number] {
+    const y = 120 - 60;
+    for (let x = 0; x < 80; x++) {
+      for (let z = 0; z < 80; z++) {
+        if (isCaveCarved(CAVE_SEED, x, y, z, 120)) return [x, y, z];
+      }
+    }
+    throw new Error("no carved point found in probe range — tune CaveSeeding or the probe range");
+  }
+
+  it("unions cave carving into the live SDF for a genuinely fresh world", async () => {
+    const [cx, cy, cz] = findCarvedPoint();
+    const store = new InMemoryWorldSaveStore();
+    const voxels = new VoxelTerrain(TALL_SURFACE, new DigMask(), CAVE_SEED, store);
+    await voxels.init(); // NotFound -> fresh -> caveGenEnabled
+    expect(voxels.sdfAtWorld(cx, cy, cz)).toBeGreaterThan(0); // air, not solid rock
+  });
+
+  it("does NOT union cave carving for a pre-existing (unstamped) world at the same point", async () => {
+    const [cx, cy, cz] = findCarvedPoint();
+    const store = new InMemoryWorldSaveStore();
+    await store.save(existingSave("w3", CAVE_SEED)); // no worldgenVersion
+    const voxels = new VoxelTerrain(TALL_SURFACE, new DigMask(), CAVE_SEED, store, "voxel-demo", {
+      worldId: "w3",
+    });
+    await voxels.init();
+    expect(voxels.sdfAtWorld(cx, cy, cz)).toBeLessThan(0); // still solid rock, byte-identical to pre-caves gen
   });
 });

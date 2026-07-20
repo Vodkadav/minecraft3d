@@ -15,6 +15,7 @@ describe("createNewWorldSave", () => {
       inventories: {},
       progression: {},
       playerState: { position: [0, 0, 0], yaw: 0, pitch: 0 },
+      worldgenVersion: 2,
     });
   });
 });

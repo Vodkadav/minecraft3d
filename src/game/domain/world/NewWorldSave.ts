@@ -5,6 +5,7 @@
  * two controllers.
  */
 
+import { CAVES_WORLDGEN_VERSION } from "../voxel/CaveSeeding";
 import type { WorldId, WorldSaveData } from "./WorldSaveData";
 
 export interface NewWorldParams {
@@ -26,5 +27,8 @@ export function createNewWorldSave(params: NewWorldParams): WorldSaveData {
     inventories: {},
     progression: {},
     playerState: { position: [0, 0, 0], yaw: 0, pitch: 0 },
+    // brand-new worlds opt into cave carving from creation (E6.1) — see
+    // WorldSaveData.worldgenVersion.
+    worldgenVersion: CAVES_WORLDGEN_VERSION,
   };
 }

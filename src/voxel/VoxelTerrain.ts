@@ -17,12 +17,18 @@ import { BufferAttribute, BufferGeometry, Group, Mesh } from 'three';
 import { MeshStandardNodeMaterial } from 'three/webgpu';
 import type { WorldEdit } from '../game/domain/net/Protocol';
 import type { ChunkKey, PlayerState, WorldSaveData } from '../game/domain/world/WorldSaveData';
-import { CHUNK_CELLS, parseVoxelChunkKey, worldToGrid } from '../game/domain/voxel/VoxelGrid';
+import {
+  CHUNK_CELLS,
+  gridToWorld,
+  parseVoxelChunkKey,
+  worldToGrid,
+} from '../game/domain/voxel/VoxelGrid';
 import { VoxelVolume } from '../game/domain/voxel/VoxelVolume';
 import type { WorldSaveStore } from '../game/application/ports/WorldSaveStore';
 import type { DigMask } from './DigMask';
 import { extractChunkMesh, type GridSampler } from './SurfaceExtractor';
 import { oreGemMaterialSampler } from '../game/domain/voxel/OreGemSeeding';
+import { CAVES_WORLDGEN_VERSION, isCaveCarved, withCaveCarving } from '../game/domain/voxel/CaveSeeding';
 import { VOXEL_MATERIAL_RGB } from './VoxelMaterials';
 
 /** Port: the surface the voxel baseline hangs off (heightfield or analytic). */
@@ -74,6 +80,15 @@ export class VoxelTerrain {
   private readonly extraEntities: Record<string, unknown> = {};
   private createdAt: number | null = null;
   private saveTimer: number | undefined;
+  /**
+   * Cave carving (E6.1) opt-in, resolved once `init()` knows the loaded
+   * save's `worldgenVersion` — false (off) until then, so any materialize
+   * that could conceivably happen before `init()` resolves stays exactly the
+   * pre-caves baseline. A brand-new world (no prior save under this id) is
+   * always safe to opt in, since there is no pre-existing content to change.
+   */
+  private caveGenEnabled = false;
+  private worldgenVersion: number | undefined;
 
   constructor(
     private readonly surface: VoxelSurface,
@@ -85,14 +100,34 @@ export class VoxelTerrain {
   ) {
     this.worldId = opts.worldId ?? `${worldIdPrefix}-${seed}`;
     this.poseProvider = opts.poseProvider ?? null;
+    const terrainSdfAt = (x: number, y: number, z: number) => y - surface.heightAt(x, z);
     this.volume = new VoxelVolume(
-      { sdfAt: (x, y, z) => y - surface.heightAt(x, z) },
+      {
+        sdfAt: (x, y, z) =>
+          this.caveGenEnabled
+            ? withCaveCarving(seed, surface, terrainSdfAt)(x, y, z)
+            : terrainSdfAt(x, y, z),
+      },
       oreGemMaterialSampler(seed, surface),
     );
     this.sampler = {
       sdf: (ix, iy, iz) => this.volume.sdfAtGrid(ix, iy, iz),
       material: (ix, iy, iz) => this.volume.materialAtGrid(ix, iy, iz),
-      edited: (ix, iy, iz) => this.volume.isSampleEdited(ix, iy, iz),
+      // Player edits mesh as before; a naturally cave-carved corner also
+      // meshes even though nobody dug it — the seam that turns a dig
+      // breaking into a cave wall into a fully-visible cavern rather than an
+      // invisible void (natural samples are never stored/persisted as
+      // edits, only evaluated live here).
+      edited: (ix, iy, iz) =>
+        this.volume.isSampleEdited(ix, iy, iz) ||
+        (this.caveGenEnabled &&
+          isCaveCarved(
+            seed,
+            gridToWorld(ix),
+            gridToWorld(iy),
+            gridToWorld(iz),
+            surface.heightAt(gridToWorld(ix), gridToWorld(iz)),
+          )),
     };
     this.material = new MeshStandardNodeMaterial();
     this.material.vertexColors = true;
@@ -106,8 +141,13 @@ export class VoxelTerrain {
     const loaded = await this.store.load(this.worldId);
     if (!loaded.ok) {
       if (loaded.error.kind !== 'NotFound') {
-         
+
         console.warn('[voxel] save load failed — starting fresh', loaded.error);
+      } else {
+        // genuinely fresh world under this id — nothing to regress, so cave
+        // carving is safe from the start; stamp the version for future loads.
+        this.caveGenEnabled = true;
+        this.worldgenVersion = CAVES_WORLDGEN_VERSION;
       }
       return;
     }
@@ -121,9 +161,15 @@ export class VoxelTerrain {
       progression: loaded.value.progression,
       playerState: loaded.value.playerState,
     };
+    // prime directive: a save written before caves existed (no stamp, or an
+    // older stamp) must regenerate its never-before-touched terrain exactly
+    // as it always has — caves only turn on for worlds stamped at creation.
+    this.worldgenVersion = loaded.value.worldgenVersion;
+    this.caveGenEnabled =
+      this.worldgenVersion !== undefined && this.worldgenVersion >= CAVES_WORLDGEN_VERSION;
     const restored = this.volume.loadFromDeltas(loaded.value.modifiedChunks);
     if (!restored.ok) {
-       
+
       console.warn('[voxel] corrupt chunk delta — starting fresh', restored.error);
       return;
     }
@@ -332,6 +378,9 @@ export class VoxelTerrain {
       playerState:
         this.poseProvider?.() ??
         this.preserved?.playerState ?? { position: [0, 0, 0], yaw: 0, pitch: 0 },
+      // preserve whatever this world was stamped with (undefined for a
+      // pre-caves world stays undefined — never upgraded silently on save).
+      ...(this.worldgenVersion !== undefined ? { worldgenVersion: this.worldgenVersion } : {}),
     };
     this.createdAt = save.createdAt;
     const result = await this.store.save(save);
