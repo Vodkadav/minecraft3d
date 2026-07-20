@@ -1005,7 +1005,7 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
     // MarkerSource array — wiring a future source (e.g. E0.5 ground loot)
     // is one more entry here, no change to MinimapModel/MapScreen.
     function liveMarkers(): readonly MapMarker[] {
-      return mergeMarkers([() => spawns.liveMarkers()]);
+      return mergeMarkers([() => spawns.liveMarkers(), () => groundItems.liveMarkers()]);
     }
     const minimap = mountMinimapView({
       heightAt: (x, z) => hf.heightAtCpu(x, z),

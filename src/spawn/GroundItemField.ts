@@ -33,6 +33,7 @@ import {
 import { decideAutoloot, type AutolootSettings } from "../game/domain/loot/Autoloot";
 import { groundItemId, isExpired, spawnGroundItem, type GroundItem } from "../game/domain/loot/GroundItem";
 import type { Inventory, ItemStack } from "../game/domain/inventory/Inventory";
+import type { MapMarker } from "../game/domain/map/MinimapModel";
 import type { GroundItemEntity } from "../game/domain/net/Protocol";
 
 /** Interaction reach (m) — matches SpawnFieldView's REACH_M. */
@@ -50,6 +51,12 @@ const AUTOLOOT_INTERVAL_S = 0.25;
 const SNAPSHOT_INTERVAL_S = 0.5;
 /** F/G/T/E/R/B are all taken by SpawnFieldView/PlacementTool — X is free. */
 export const PICKUP_KEY = "KeyX";
+/** Host cap on the active drop set, matching the wire validator's
+ *  MAX_WIRE_GROUND_ITEMS (Protocol.ts) — past it a `groundItems` snapshot
+ *  would be rejected wholesale by every joiner's parseMessage, silently
+ *  freezing loot sync. Oldest drop is evicted first (same loss a despawn
+ *  would cause, just earlier). */
+const MAX_ACTIVE_ITEMS = 256;
 
 export interface GroundItemGround {
   heightAt(x: number, z: number): number;
@@ -83,6 +90,8 @@ export interface GroundItemFieldHandle {
   readonly activeCount: number;
   /** A ground item is within pickup reach (crosshair/keyhint seam). */
   hasPickupTarget(): boolean;
+  /** E3 map source: every active drop as a `groundLoot` marker. */
+  liveMarkers(): readonly MapMarker[];
   /** Host/solo: drop a set of stacks at a world position (creature death,
    *  E0.5). Zero/negative-count stacks are skipped. `sourceId` seeds
    *  deterministic ids (defaults to an internal counter). */
@@ -268,6 +277,12 @@ export function attachGroundItemField(deps: GroundItemFieldDeps): GroundItemFiel
       const source = sourceId ?? `drop:${dropCounter++}`;
       stacks.forEach((stack, i) => {
         if (stack.count <= 0) return;
+        if (items.size >= MAX_ACTIVE_ITEMS) {
+          // host-only path (a joiner never calls spawnDrop), so insertion
+          // order == spawn order and the Map's first key is the oldest drop
+          const oldest = items.keys().next().value;
+          if (oldest !== undefined) removeLocal(oldest);
+        }
         add(
           spawnGroundItem({
             id: groundItemId(source, stack.itemId, i),
@@ -328,6 +343,15 @@ export function attachGroundItemField(deps: GroundItemFieldDeps): GroundItemFiel
 
     hasPickupTarget(): boolean {
       return pickNearest() !== null;
+    },
+
+    liveMarkers(): readonly MapMarker[] {
+      return [...items.values()].map(({ item }) => ({
+        id: item.id,
+        kind: "groundLoot" as const,
+        x: item.position[0],
+        z: item.position[2],
+      }));
     },
 
     get remote() {
