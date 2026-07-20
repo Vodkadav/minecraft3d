@@ -94,5 +94,13 @@ overlays sit over the lit world at ~45%, so a pure-black preview reads far darke
 
 ## Standing deferrals (recorded, not skipped)
 
-- None recorded yet — this doc is created ahead of E8.0 landing; deferrals get recorded here as
-  each phase's implementer finds them, matching `COMBAT_PLAN.md`'s discipline.
+- **E8.4 ContextMenu's Use/Equip actions are UI-only stubs.** `ItemActions.ts` offers "Eat" for
+  food-tagged items and "Equip" for weapon-tagged items (enabled whenever the tag applies), and
+  `InventoryGrid.ts` exposes `onUseItem`/`onEquipItem` extension hooks — but nothing wires them yet:
+  eating today is `GameHud`'s hotbar-only `eatSelected` (no eat-from-arbitrary-slot exists), and
+  there's no equip-slot system before E9's equipment work. Mirrors `onExternalDrop`'s existing
+  "unused until a second grid exists" pattern. Split/Quick-Move/Drop/Info are fully wired against
+  existing domain operations. Revisit once E9 (equipment) or a generalized eat-from-inventory flow
+  lands.
+- Otherwise none recorded — deferrals get recorded here as each phase's implementer finds them,
+  matching `COMBAT_PLAN.md`'s discipline.

@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { isOk } from "../../domain/Result";
 import { Inventory } from "../../domain/inventory/Inventory";
 import { ItemRegistry } from "../../domain/items/ItemRegistry";
@@ -22,6 +22,14 @@ function invWith(reg: ItemRegistry, entries: Array<[number, string, number]>, ca
 }
 
 describe("InventoryGrid", () => {
+  // ContextMenu (E8.4) appends its popup to document.body regardless of
+  // whether the anchor grid is itself mounted (same pattern Tooltip already
+  // uses) — clear it between tests so a leftover open menu from one test
+  // can't be picked up by a later test's global `document.querySelector`.
+  afterEach(() => {
+    document.body.replaceChildren();
+  });
+
   it("renders one gridcell per slot with item names and counts", () => {
     const reg = registry();
     const grid = InventoryGrid({ registry: reg, loc: createLocalizer("en"), ariaLabel: "Inventory" });
@@ -126,27 +134,58 @@ describe("InventoryGrid", () => {
     expect(next.slots[1]).toEqual({ itemId: "wood", count: 5 });
   });
 
-  it("right-click splits a stack in half", () => {
+  it("right-click opens the context menu; choosing Split halves the stack (E8.4)", () => {
     const reg = registry();
     const onChange = vi.fn();
     const grid = InventoryGrid({ registry: reg, loc: createLocalizer("en"), ariaLabel: "Inventory", onChange });
     grid.render(invWith(reg, [[0, "wood", 10]]));
     const cells = grid.el.querySelectorAll<HTMLElement>('[role="gridcell"]');
     cells[0]?.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
+    const splitItem = document.querySelector<HTMLElement>('[role="menuitem"][aria-disabled="false"]');
+    expect(splitItem?.textContent).toBe("Split Stack");
+    splitItem?.click();
     const next: Inventory = onChange.mock.calls[0][0];
     expect(next.slots[0]?.count).toBe(5);
     const otherSlot = next.slots.find((s, i) => i !== 0 && s?.itemId === "wood");
     expect(otherSlot?.count).toBe(5);
   });
 
-  it("right-click on a single-count stack does nothing", () => {
+  it("right-click on a single-count stack opens the menu with Split disabled", () => {
     const reg = registry();
     const onChange = vi.fn();
     const grid = InventoryGrid({ registry: reg, loc: createLocalizer("en"), ariaLabel: "Inventory", onChange });
     grid.render(invWith(reg, [[0, "wood", 1]]));
     const cells = grid.el.querySelectorAll<HTMLElement>('[role="gridcell"]');
     cells[0]?.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
+    const items = document.querySelectorAll<HTMLElement>('[role="menuitem"]');
+    const splitItem = [...items].find((el) => el.textContent === "Split Stack");
+    expect(splitItem?.getAttribute("aria-disabled")).toBe("true");
+    splitItem?.click();
     expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("right-click on an empty slot suppresses the native menu but opens nothing", () => {
+    const reg = registry();
+    const grid = InventoryGrid({ registry: reg, loc: createLocalizer("en"), ariaLabel: "Inventory" });
+    grid.render(Inventory.empty(reg, 27));
+    const cells = grid.el.querySelectorAll<HTMLElement>('[role="gridcell"]');
+    cells[0]?.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
+    expect(document.querySelector('[role="menu"]:not([hidden])')).toBeNull();
+  });
+
+  it("the context menu offers Drop, Quick Move, and Info alongside Split", () => {
+    const reg = registry();
+    const grid = InventoryGrid({
+      registry: reg,
+      loc: createLocalizer("en"),
+      ariaLabel: "Inventory",
+      hotbarSize: 9,
+    });
+    grid.render(invWith(reg, [[10, "wood", 3]])); // backpack zone -> quick move applies
+    const cells = grid.el.querySelectorAll<HTMLElement>('[role="gridcell"]');
+    cells[10]?.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
+    const labels = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].map((el) => el.textContent);
+    expect(labels).toEqual(["Split Stack", "Quick Move", "Drop", "Item Info"]);
   });
 
   it("double-click quick-moves between hotbar and backpack zones", () => {

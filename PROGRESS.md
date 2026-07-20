@@ -271,8 +271,13 @@ wire-touching slice).
   (equipped/new/qty); `PanelEmblem` grows into a per-screen emblem library + party/faction crest
 - [ ] E8.3 Rich tooltip system: pure `domain/ui/TooltipModel.ts` item-card model + `RichTooltip`
   component (hover/keyboard-focus/touch long-press), replacing single-line hovers for items
-- [ ] E8.4 Context menus: pure `domain/ui/ItemActions.ts` action list + `ContextMenu` component
-  (mouse right-click / keyboard / touch long-press), replacing the `InventoryGrid` split-only handler
+- [x] E8.4 Context menus: pure `domain/ui/ItemActions.ts` action list (Split/Quick-Move/Drop/Info
+  always available per slot state, Eat/Equip conditional on food/weapon tags) + `components/
+  ContextMenu.ts` (role="menu"/"menuitem", mouse right-click / keyboard `Shift+F10` / ~500ms touch
+  long-press, full roving-tabindex keyboard nav, focus returns to the opener), wired into
+  `InventoryGrid.ts` replacing the old split-only `contextmenu` handler — Split/Quick-Move/Drop
+  fully functional; Eat/Equip are a recorded UI-only stub (see UX_PLAN.md's standing deferrals)
+  pending E9 equipment / a generalized eat-from-inventory flow
 - [ ] E8.5 Inputs & chat polish: shared `Field.ts` input primitive; chat gains rarity-colored item
   links, channel pills, unread badge, kid-safe canned emote palette — security-reviewed (wire-touching)
 - [ ] E8.6 Menus, lobby & settings overhaul: `MainMenuView`/`LobbyView`/`SettingsView`/
