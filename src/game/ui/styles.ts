@@ -18,6 +18,14 @@ ${THEME_CSS_VARS}
   font-family: inherit;
 }
 
+/* The HTML hidden attribute must win over any display rule below.
+ * Overlays (.lw-inv-overlay et al.) set position:fixed; display:flex,
+ * whose equal specificity would otherwise override the UA [hidden]
+ * rule — leaving every mounted-but-closed overlay visible (and its Close
+ * button inert, since closing only toggles hidden). This guard keeps
+ * hidden authoritative for all current and future overlays. */
+[hidden] { display: none !important; }
+
 /* Panel */
 .lw-panel {
   background: var(--lw-bg-panel);
