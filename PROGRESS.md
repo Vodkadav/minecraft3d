@@ -212,10 +212,10 @@ melee-assist targeting, cozy-whimsical abilities (charter amended — see ADR 00
 projectile/deployable simulation. Mandatory `claude-infra:security` review on every wire-touching
 slice (E7.0 protocol growth, E7.2–E7.6).
 
-- [~] E7.0 Contracts: WeaponMetadata/DamageType on ItemDefinition, 5 combat registries
+- [x] E7.0 Contracts: WeaponMetadata/DamageType on ItemDefinition, 5 combat registries
   (weapon/projectile/ability/aoe/deployable, completeness-tested), wire intents
   equipItem/aimedAttack/castSpell/deployItem + host streams projectiles/deployables/effect,
-  FeelEvents combat ids
+  FeelEvents combat ids — security-reviewed, merged 9b746a5
 - [ ] E7.1 Melee variety: per-weapon damage/speed/reach/cone, attack-strength cooldown meter,
   forward-cone soft-lock assist, heavy-weapon sweep
 - [ ] E7.2 Ranged + ammo: draw-to-charge, host-simulated arcing projectiles, ammo consumption,

@@ -28,7 +28,7 @@ status: the `## Combat (E7)` checklist in [`PROGRESS.md`](../PROGRESS.md). Archi
 
 | Phase | Content | Status |
 |---|---|---|
-| E7.0 Contracts | WeaponMetadata/DamageType, weapon/projectile/ability/aoe/deployable registries, wire intents + host streams, FeelEvents combat ids | In progress |
+| E7.0 Contracts | WeaponMetadata/DamageType, weapon/projectile/ability/aoe/deployable registries, wire intents + host streams, FeelEvents combat ids | Done |
 | E7.1 Melee | Per-weapon stats, attack-strength cooldown meter, cone assist, heavy sweep | Pending |
 | E7.2 Ranged | Draw-to-charge, host-simulated projectiles, ammo items, quiver HUD | Pending |
 | E7.3 Spells | Sparkle Bolt / Frost Puff / Healing Bloom / Vine Snare, focus resource, cast bar | Pending |
