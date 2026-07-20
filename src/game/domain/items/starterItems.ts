@@ -148,4 +148,53 @@ export const STARTER_ITEMS: readonly ItemDefinition[] = [
   { id: "steel-sword", displayName: "Steel Sword", maxStackSize: 1, tags: ["tool", "weapon"], tier: 3 },
   { id: "steel-pickaxe", displayName: "Steel Pickaxe", maxStackSize: 1, tags: ["tool"], tier: 3 },
   { id: "glass", displayName: "Glass", maxStackSize: 64, tags: ["crafted"], tier: 3 },
+
+  // ---- E6.5 asset-library expansion ----
+  // Latent-gap fix: the treasure system (domain/treasure/HiddenTreasure.ts
+  // REWARD_TABLE) has always granted these three ids, but they were never
+  // registered here — an unregistered reward silently fails ItemRegistry
+  // lookups. Tagged "natural" (a found-not-crafted root, same convention as
+  // "sand"/"clay"/"flint") so RecipeGraph.test.ts's reachability walk treats
+  // them as roots without inventing a fake gather recipe for currency.
+  { id: "coin", displayName: "Coin", maxStackSize: 64, tags: ["natural", "treasure"], tier: 0 },
+  { id: "gem", displayName: "Gem", maxStackSize: 64, tags: ["natural", "treasure"], tier: 1 },
+  { id: "relic", displayName: "Relic", maxStackSize: 64, tags: ["natural", "treasure"], tier: 2 },
+
+  // Creature-tied drops (new species below)
+  { id: "bear-claw", displayName: "Bear Claw", maxStackSize: 64, tags: ["natural", "material"], tier: 2 },
+  {
+    id: "acorn",
+    displayName: "Acorn",
+    maxStackSize: 64,
+    tags: ["natural", "food"],
+    tier: 0,
+    food: { hungerRestore: 8, healthRestore: 0 },
+  },
+
+  // Beehive gatherable (SpawnField "beehive" node)
+  { id: "beeswax", displayName: "Beeswax", maxStackSize: 64, tags: ["natural", "material"], tier: 1 },
+  {
+    id: "honey",
+    displayName: "Honey",
+    maxStackSize: 64,
+    tags: ["natural", "food"],
+    tier: 0,
+    food: { hungerRestore: 18, healthRestore: 4 },
+  },
+
+  // Silver ore chain ("silver-vein" node, alpine)
+  { id: "silver-ore", displayName: "Silver Ore", maxStackSize: 64, tags: ["natural", "smeltable"], tier: 2 },
+  { id: "silver-ingot", displayName: "Silver Ingot", maxStackSize: 64, tags: ["crafted", "metal"], tier: 2 },
+  { id: "silver-ring", displayName: "Silver Ring", maxStackSize: 1, tags: ["crafted", "gear"], tier: 2 },
+
+  // Cozy trinkets/gear (no equip system yet — inventory items only)
+  { id: "claw-necklace", displayName: "Claw Necklace", maxStackSize: 1, tags: ["crafted", "gear"], tier: 2 },
+  { id: "wool-hat", displayName: "Wool Hat", maxStackSize: 1, tags: ["crafted", "gear"], tier: 1 },
+  { id: "fur-boots", displayName: "Fur Boots", maxStackSize: 1, tags: ["crafted", "gear"], tier: 1 },
+
+  // Gilded tier-4 progression — a use for found gems/relics beyond selling
+  { id: "gilded-ingot", displayName: "Gilded Ingot", maxStackSize: 64, tags: ["crafted", "metal"], tier: 4 },
+  { id: "gilded-sword", displayName: "Gilded Sword", maxStackSize: 1, tags: ["tool", "weapon", "crafted"], tier: 4 },
+  { id: "gilded-pickaxe", displayName: "Gilded Pickaxe", maxStackSize: 1, tags: ["tool", "crafted"], tier: 4 },
+  { id: "relic-charm", displayName: "Relic Charm", maxStackSize: 1, tags: ["crafted", "gear"], tier: 4 },
 ];

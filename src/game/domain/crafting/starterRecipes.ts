@@ -230,4 +230,89 @@ export const STARTER_RECIPES: readonly Recipe[] = [
     unlockTier: 3,
     station: "campfire",
   },
+
+  // ---- E6.5 asset-library expansion ----
+  {
+    id: "wool-hat",
+    ingredients: [
+      { itemId: "wool", count: 2 },
+      { itemId: "cloth", count: 1 },
+    ],
+    output: { itemId: "wool-hat", count: 1 },
+    unlockTier: 1,
+  },
+  {
+    id: "fur-boots",
+    ingredients: [
+      { itemId: "hide", count: 2 },
+      { itemId: "rope", count: 1 },
+    ],
+    output: { itemId: "fur-boots", count: 1 },
+    unlockTier: 1,
+  },
+  {
+    id: "claw-necklace",
+    ingredients: [
+      { itemId: "bear-claw", count: 1 },
+      { itemId: "rope", count: 1 },
+    ],
+    output: { itemId: "claw-necklace", count: 1 },
+    unlockTier: 2,
+  },
+  {
+    id: "silver-ingot",
+    ingredients: [{ itemId: "silver-ore", count: 1 }],
+    output: { itemId: "silver-ingot", count: 1 },
+    unlockTier: 2,
+  },
+  {
+    id: "silver-ring",
+    ingredients: [
+      { itemId: "silver-ingot", count: 1 },
+      { itemId: "coin", count: 2 },
+    ],
+    output: { itemId: "silver-ring", count: 1 },
+    unlockTier: 2,
+    station: "workbench",
+  },
+
+  // refined / tier4 — a use for found gems/relics beyond selling
+  {
+    id: "gilded-ingot",
+    ingredients: [
+      { itemId: "gold-ingot", count: 1 },
+      { itemId: "gem", count: 1 },
+    ],
+    output: { itemId: "gilded-ingot", count: 1 },
+    unlockTier: 4,
+  },
+  {
+    id: "gilded-sword",
+    ingredients: [
+      { itemId: "gilded-ingot", count: 2 },
+      { itemId: "stick", count: 1 },
+    ],
+    output: { itemId: "gilded-sword", count: 1 },
+    unlockTier: 4,
+    station: "workbench",
+  },
+  {
+    id: "gilded-pickaxe",
+    ingredients: [
+      { itemId: "gilded-ingot", count: 3 },
+      { itemId: "stick", count: 2 },
+    ],
+    output: { itemId: "gilded-pickaxe", count: 1 },
+    unlockTier: 4,
+    station: "workbench",
+  },
+  {
+    id: "relic-charm",
+    ingredients: [
+      { itemId: "relic", count: 1 },
+      { itemId: "rope", count: 1 },
+    ],
+    output: { itemId: "relic-charm", count: 1 },
+    unlockTier: 4,
+  },
 ];

@@ -55,6 +55,10 @@ const LATE_NODE_SPECIES: readonly SpawnSpecies[] = [
   { id: "carrot-patch", kind: "node", maxPerCell: 1, weight: 0.2 },
   { id: "potato-patch", kind: "node", maxPerCell: 1, weight: 0.2 },
   { id: "fishing-spot", kind: "node", maxPerCell: 1, weight: 0.2 },
+
+  // E6.5 asset-library expansion — one new gatherable per node
+  { id: "beehive", kind: "node", maxPerCell: 1, weight: 0.2 },
+  { id: "silver-vein", kind: "node", maxPerCell: 1, weight: 0.12 },
 ];
 
 /** MVP registry — placeholder visuals in the adapter; models arrive in M6. */
@@ -83,6 +87,13 @@ export const NODE_YIELD: Readonly<Record<string, readonly { itemId: string; coun
   "carrot-patch": [{ itemId: "carrot-seed", count: 2 }],
   "potato-patch": [{ itemId: "potato-seed", count: 2 }],
   "fishing-spot": [{ itemId: "fish", count: 2 }],
+
+  // E6.5 asset-library expansion
+  "beehive": [
+    { itemId: "beeswax", count: 2 },
+    { itemId: "honey", count: 1 },
+  ],
+  "silver-vein": [{ itemId: "silver-ore", count: 1 }],
 };
 
 export interface SpawnEntity {
