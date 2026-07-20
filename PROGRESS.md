@@ -301,8 +301,18 @@ wire-touching slice).
 - [ ] E8.6 Menus, lobby & settings overhaul: `MainMenuView`/`LobbyView`/`SettingsView`/
   `CreditsScreen`/`LoadingScreen` restyle onto E8.1 chrome; Settings UI category; lobby becomes the
   "play together" surface
-- [ ] E8.7 HUD cohesion & action bar: unify hotbar/vitals/minimap/objective/party/combat-meter;
-  togglable ability/consumable action bar; gentle buff/effect strip; toasts restyled
+- [~] E8.7 HUD cohesion & action bar: hotbar slots/minimap/toasts moved onto the E8.1 surface-token +
+  ornament-border + panel-shadow language (objective tracker/party/combat-meter already inherited it
+  via `Panel()`) so all HUD chrome reads as one family; new `ActionBar.ts` (opt-in, "N"-toggled,
+  Shift+1-9 activation, slot markup mirrors `Hotbar.ts`'s) + `BuffStrip.ts` (automatic, hidden while
+  empty, gentle chip row) components, backed by pure `domain/ui/ActionBarState.ts`/`BuffStripState.ts`
+  (TDD). Ability slots build from the real E7.3 `AbilityRegistry`; consumable slots from real
+  food-tagged `Inventory` stacks — reuse, no new ability/consumable system. Deferred (recorded in both
+  domain modules' doc comments): mounting either component into the live scene — the only composition
+  root that wires HUD panels together is `src/debug/TerrainScene.ts`, an engine dir off-limits to
+  additive game-code work; per-ability client-side cooldown tracking (E7.3 never built one); and a
+  real buff/status-effect source (none exists yet, per `AbilityRegistry.ts`'s own Frost Puff/Vine
+  Snare deferral note) — `BuffStrip.render` takes a plain chip array ready for whenever one lands
 - [ ] E8.8 Accessibility, responsive & colorblind pass: wire `--lw-*` tokens under
   `[data-high-contrast="true"]` (closes the recorded gap); ship colorblind rarity palette; full
   keyboard nav + ARIA for chrome/tooltip/menu; mobile layouts

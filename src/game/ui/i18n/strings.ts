@@ -572,6 +572,17 @@ export const UI_STRINGS: Catalog = {
     "contextMenu.action.quickMove": "Quick Move",
     "contextMenu.action.drop": "Drop",
     "contextMenu.action.info": "Item Info",
+
+    // ===== E8.7 HUD cohesion & action bar =====
+    "actionBar.title": "Action Bar",
+    "actionBar.aria": "Ability and consumable action bar",
+    "actionBar.close": "Close",
+    "actionBar.close.aria": "Close the action bar",
+    "actionBar.slot.ability.aria": "{name} ability",
+    "actionBar.slot.consumable.aria": "{name}, {n} in stock",
+    "buffStrip.aria": "Active effects",
+    "buffStrip.chip.buff.aria": "{name}, {time} remaining",
+    "buffStrip.chip.debuff.aria": "{name} (debuff), {time} remaining",
   },
   es: {
     "app.title": "Diggy World",
@@ -1136,6 +1147,17 @@ export const UI_STRINGS: Catalog = {
     "contextMenu.action.quickMove": "Mover rápido",
     "contextMenu.action.drop": "Soltar",
     "contextMenu.action.info": "Info del objeto",
+
+    // ===== E8.7 HUD cohesion & action bar =====
+    "actionBar.title": "Barra de acciones",
+    "actionBar.aria": "Barra de acciones de habilidades y consumibles",
+    "actionBar.close": "Cerrar",
+    "actionBar.close.aria": "Cerrar la barra de acciones",
+    "actionBar.slot.ability.aria": "Habilidad {name}",
+    "actionBar.slot.consumable.aria": "{name}, {n} disponibles",
+    "buffStrip.aria": "Efectos activos",
+    "buffStrip.chip.buff.aria": "{name}, quedan {time}",
+    "buffStrip.chip.debuff.aria": "{name} (penalización), quedan {time}",
   },
   da: {
     "app.title": "Diggy World",
@@ -1700,6 +1722,17 @@ export const UI_STRINGS: Catalog = {
     "contextMenu.action.quickMove": "Hurtig flytning",
     "contextMenu.action.drop": "Smid",
     "contextMenu.action.info": "Genstandsinfo",
+
+    // ===== E8.7 HUD cohesion & action bar =====
+    "actionBar.title": "Handlingslinje",
+    "actionBar.aria": "Handlingslinje for evner og forbrugsvarer",
+    "actionBar.close": "Luk",
+    "actionBar.close.aria": "Luk handlingslinjen",
+    "actionBar.slot.ability.aria": "Evnen {name}",
+    "actionBar.slot.consumable.aria": "{name}, {n} på lager",
+    "buffStrip.aria": "Aktive effekter",
+    "buffStrip.chip.buff.aria": "{name}, {time} tilbage",
+    "buffStrip.chip.debuff.aria": "{name} (svækkelse), {time} tilbage",
   },
 };
 

@@ -47,7 +47,7 @@ the token/primitive level is low-risk and propagates automatically.
 | E8.4 Context menus | Pure `domain/ui/ItemActions.ts` action list; `ContextMenu` component (mouse/keyboard/touch), replacing the `InventoryGrid` split-only handler | ✅ Done (1c3c087) |
 | E8.5 Inputs & chat polish | Shared `Field.ts` input primitive; chat gains rarity-colored item links, channel pills, unread badge, kid-safe canned emote palette | Pending |
 | E8.6 Menus, lobby & settings overhaul | `MainMenuView`/`LobbyView`/`SettingsView`/`CreditsScreen`/`LoadingScreen` restyle onto E8.1 chrome; Settings UI category (hud style, tooltip verbosity, colorblind palette, reduce-flair); lobby becomes the "play together" surface | Pending |
-| E8.7 HUD cohesion & action bar | Unify hotbar/vitals/minimap/objective/party/combat-meter into one visual system; togglable ability/consumable action bar; gentle buff/effect strip; toasts restyled | Pending |
+| E8.7 HUD cohesion & action bar | Unify hotbar/vitals/minimap/objective/party/combat-meter into one visual system; togglable ability/consumable action bar; gentle buff/effect strip; toasts restyled | 🟡 Partial — components built, composition-root wiring deferred (see below) |
 | E8.8 Accessibility, responsive & colorblind pass | Wire `--lw-*` tokens under `[data-high-contrast="true"]` (closes the recorded gap); ship colorblind rarity palette; full keyboard nav + ARIA for chrome/tooltip/menu; mobile layouts | Pending |
 
 ## Dependency order
@@ -105,6 +105,16 @@ overlays sit over the lit world at ~45%, so a pure-black preview reads far darke
   (`ItemIconElement` optional `rarityTier`; `ItemBadges.ts`); wiring them onto the actual inventory/
   hotbar slots was deferred to the E8 integration step because `InventoryGrid.ts`/`Hotbar.ts` were
   being edited in parallel by the E8.3/E8.4 slices — done at integration to avoid a three-way conflict.
+- **E8.7 HUD cohesion & action bar's composition-root wiring.** `ActionBar.ts`/`BuffStrip.ts` (+ the
+  pure `domain/ui/ActionBarState.ts`/`BuffStripState.ts` they're backed by) are built and tested but
+  not mounted anywhere live: the only place that composes the play HUD's panels together
+  (`mountCombatMeterPanel`/`mountPartyPanel`/`mountAttackMeter`, etc.) is `src/debug/TerrainScene.ts`,
+  an engine dir the prime directive puts off-limits to additive game-code slices. Also deferred:
+  per-ability client-side cooldown tracking (E7.3 built host-authoritative cast resolution only, no
+  client cooldown clock — `ActionBarState.buildAbilitySlots` accepts a `readyFractions` override ready
+  for one) and a real buff/status-effect source (none exists yet — `BuffStrip.render` takes a plain
+  chip array ready for whenever one lands). Revisit at the E8 integration step, same posture as E8.2's
+  badge slot-wiring deferral above.
 - **E8.4 ContextMenu's Use/Equip actions are UI-only stubs.** `ItemActions.ts` offers "Eat" for
   food-tagged items and "Equip" for weapon-tagged items (enabled whenever the tag applies), and
   `InventoryGrid.ts` exposes `onUseItem`/`onEquipItem` extension hooks — but nothing wires them yet:
