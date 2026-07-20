@@ -7,7 +7,14 @@ import type { WorldSeed } from '../core/Seed';
 import type { AudioPort } from '../game/application/ports/AudioPort';
 import type { WorldSaveStore } from '../game/application/ports/WorldSaveStore';
 import type { ItemRegistry } from '../game/domain/items/ItemRegistry';
-import type { SerializedInventoryWire } from '../game/domain/net/Protocol';
+import type {
+  PartyActionOp,
+  PartyInventoryStateMsg,
+  PartyInviteMsg,
+  PartyMsg,
+  SerializedInventoryWire,
+} from '../game/domain/net/Protocol';
+import type { PartyVitalsReport } from '../game/application/HostSession';
 import type { PlayerState } from '../game/domain/world/WorldSaveData';
 import type { GroundItemFieldHandle } from '../spawn/GroundItemField';
 import type { SpawnFieldHandle } from '../spawn/SpawnFieldView';
@@ -43,6 +50,24 @@ export interface WorldLaunchBinding {
    *  transfer (E0.4 wave-3). A joiner's inventory UI updates ONLY here, never
    *  from a local mutation. */
   applyInventoryState?(wire: SerializedInventoryWire): void;
+  /** Set by the scene once its HUD/party UI exists (E5.1/E5.2/E5.4) — the net
+   *  glue calls these with the host's resolved party roster / an incoming
+   *  invite / a resolved read-only inventory lookup. */
+  applyParty?(msg: PartyMsg): void;
+  applyPartyInvite?(msg: PartyInviteMsg): void;
+  applyPartyInventoryState?(msg: PartyInventoryStateMsg): void;
+  /** Set by main.ts once the host/join net session exists (the scene builds
+   *  BEFORE that session does — see `bootEngine`) — the scene's party UI
+   *  calls through these to send outgoing intents/reports. Absent (solo/no-
+   *  net boot) ⇒ every send is a no-op via the scene's own `?.()` guard. */
+  sendPartyAction?(action: PartyActionOp): void;
+  sendPartyVitals?(report: PartyVitalsReport): void;
+  sendPartyInventoryLookup?(targetPeerId: string): void;
+  /** Every OTHER currently-known peer's display name — the invite-target list. */
+  partyPeerNames?(): ReadonlyMap<string, string>;
+  /** This session's own party-roster peer id (`HostSession.HOST_PEER_ID` for
+   *  the host, the joiner's real transport id for a joiner). */
+  selfPeerId?: string;
 }
 
 export interface WorldContext {

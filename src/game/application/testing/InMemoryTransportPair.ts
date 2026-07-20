@@ -24,6 +24,12 @@ class InMemoryTransport implements NetTransport {
   private readonly leaveCbs: Array<(peerId: string) => void> = [];
   private closed = false;
 
+  constructor(private readonly id: string) {}
+
+  selfId(): string {
+    return this.id;
+  }
+
   send(peerId: string, msg: unknown): void {
     if (this.closed) return;
     const link = this.links.get(peerId);
@@ -89,19 +95,19 @@ export interface TransportNetwork {
 }
 
 export function makeTransportNetwork(): TransportNetwork {
-  const host = new InMemoryTransport();
+  const host = new InMemoryTransport(HOST_PEER_ID);
   const joiners = new Map<string, InMemoryTransport>();
   return {
     host,
     addPeer(peerId: string): NetTransport {
-      const joiner = new InMemoryTransport();
+      const joiner = new InMemoryTransport(peerId);
       joiners.set(peerId, joiner);
       joiner.link(HOST_PEER_ID, host, peerId);
       host.link(peerId, joiner, HOST_PEER_ID);
       return joiner;
     },
     addDetachedPeer(peerId: string) {
-      const joiner = new InMemoryTransport();
+      const joiner = new InMemoryTransport(peerId);
       joiners.set(peerId, joiner);
       return {
         transport: joiner as NetTransport,

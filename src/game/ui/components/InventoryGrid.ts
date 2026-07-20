@@ -67,6 +67,11 @@ export interface InventoryGridOptions {
    *  empty renders every slot normally. */
   readonly filterRules?: readonly FilterRule[];
   readonly doc?: Document;
+  /** Display-only (E5.4 party inventory lookup): renders every slot but
+   *  disables pick/move/split/quickmove/drag mutation. Tooltips and keyboard
+   *  cursor navigation still work — it's a real, inspectable grid, just not
+   *  an editable one. */
+  readonly readOnly?: boolean;
 }
 
 export interface InventoryGridHandle {
@@ -90,6 +95,7 @@ export function InventoryGrid(opts: InventoryGridOptions): InventoryGridHandle {
   el.className = "laas-ui lw-inv-grid";
   el.setAttribute("role", "grid");
   el.setAttribute("aria-label", opts.ariaLabel);
+  if (opts.readOnly) el.setAttribute("aria-readonly", "true");
 
   let inventory = Inventory.empty(opts.registry, 0);
   let ui: GridUiState = initialGridState(0);
@@ -163,7 +169,7 @@ export function InventoryGrid(opts: InventoryGridOptions): InventoryGridHandle {
       const countEl = cell.querySelector<HTMLElement>(".lw-inv-slot-count");
       cell.tabIndex = index === ui.cursor ? 0 : -1;
       cell.dataset.picked = String(ui.picked === index);
-      cell.draggable = slot !== null;
+      cell.draggable = slot !== null && !opts.readOnly;
 
       tooltips[index]?.dispose();
 
@@ -200,6 +206,7 @@ export function InventoryGrid(opts: InventoryGridOptions): InventoryGridHandle {
   }
 
   function onActivate(index: number): void {
+    if (opts.readOnly) return;
     const result = select(ui, index);
     ui = result.state;
     if (result.kind === "moved") {
@@ -256,19 +263,20 @@ export function InventoryGrid(opts: InventoryGridOptions): InventoryGridHandle {
 
   function onSplit(e: MouseEvent, index: number): void {
     e.preventDefault();
+    if (opts.readOnly) return;
     const slot = inventory.slots[index];
     if (!slot || slot.count < 2) return;
     applyChange(inventory.split(index, splitCount(slot.count)));
   }
 
   function onQuickMove(index: number): void {
-    if (hotbarSize <= 0) return;
+    if (opts.readOnly || hotbarSize <= 0) return;
     applyChange(quickMove(opts.registry, inventory, index, hotbarSize));
   }
 
   function onDragStart(e: DragEvent, index: number): void {
     const slot = inventory.slots[index];
-    if (!slot) {
+    if (opts.readOnly || !slot) {
       e.preventDefault();
       return;
     }
@@ -278,6 +286,7 @@ export function InventoryGrid(opts: InventoryGridOptions): InventoryGridHandle {
 
   function onDrop(e: DragEvent, targetIndex: number): void {
     e.preventDefault();
+    if (opts.readOnly) return;
     const drag = activeDrag;
     activeDrag = null;
     if (!drag) return;

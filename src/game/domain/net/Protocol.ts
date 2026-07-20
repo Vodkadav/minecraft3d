@@ -9,6 +9,7 @@
  */
 
 import { err, ok, type Result } from "../Result";
+import { PARTY_MAX_SIZE } from "../social/Party";
 import type { ChunkDelta, PlayerState } from "../world/WorldSaveData";
 
 // ---- Joiner → Host intents ----
@@ -125,6 +126,57 @@ export interface InventoryOpMsg {
   readonly inventoryOp: InventoryOp;
 }
 
+/**
+ * Party mutations (E5.1/E5.2) — every one is a joiner *intent*; the host
+ * resolves it against `domain/social/Party.ts` and rebroadcasts the roster
+ * (see `PartyMsg`). `invite`/`kick` are leader-only, enforced host-side.
+ */
+export type PartyActionOp =
+  | { readonly op: "invite"; readonly targetPeerId: string }
+  | { readonly op: "acceptInvite" }
+  | { readonly op: "declineInvite" }
+  | { readonly op: "leave" }
+  | { readonly op: "kick"; readonly targetPeerId: string }
+  /** Opt-in gate for E5.4's read-only inventory lookup — default OFF, a
+   *  privacy choice each member makes for themself. */
+  | { readonly op: "setInventoryShare"; readonly shared: boolean };
+
+export interface PartyActionMsg {
+  readonly kind: "partyAction";
+  readonly action: PartyActionOp;
+}
+
+/**
+ * A peer's self-reported vitals + this-encounter combat contribution (E5.1
+ * frames + E5.6 meter), sent on a low, non-`pose` cadence. The host never
+ * trusts these as authoritative game state (nothing is granted/debited from
+ * them) — they only drive the OTHER party members' read-only HUD, so a
+ * cheating peer can at most lie about its own displayed numbers, never
+ * anyone else's. Reused as the E5.6 tally carrier — no separate high-rate
+ * stream (plan constraint).
+ */
+export interface PartyVitalsMsg {
+  readonly kind: "partyVitals";
+  readonly health: number;
+  readonly maxHealth: number;
+  readonly energy: number;
+  readonly maxEnergy: number;
+  readonly level: number;
+  readonly damageDealt: number;
+  readonly dps: number;
+  readonly healing: number;
+  readonly kills: number;
+}
+
+/** A read-only lookup of a fellow party member's inventory (E5.4) — the host
+ *  gates it on same-party membership AND the target's own opt-in share flag;
+ *  a denied/invalid request gets no response at all (never a rejection
+ *  message that would leak "you're in a party" to a non-member). */
+export interface PartyInventoryLookupMsg {
+  readonly kind: "partyInventoryLookup";
+  readonly targetPeerId: string;
+}
+
 export type JoinerMessage =
   | JoinMsg
   | PoseMsg
@@ -132,7 +184,10 @@ export type JoinerMessage =
   | FillMsg
   | InteractMsg
   | PlaceableInteractMsg
-  | InventoryOpMsg;
+  | InventoryOpMsg
+  | PartyActionMsg
+  | PartyVitalsMsg
+  | PartyInventoryLookupMsg;
 
 // ---- Host → Joiner ----
 
@@ -250,6 +305,52 @@ export interface InventoryStateMsg {
   readonly slots: readonly (InventoryStackWire | null)[];
 }
 
+/** One party member's roster row (E5.1 frames + E5.6 meter) — the host's
+ *  merge of the member's last `partyVitals` report + its known display name.
+ *  A member who hasn't reported yet (just accepted) reads as all-zero. */
+export interface PartyMemberInfo {
+  readonly peerId: string;
+  readonly playerName: string;
+  readonly health: number;
+  readonly maxHealth: number;
+  readonly energy: number;
+  readonly maxEnergy: number;
+  readonly level: number;
+  readonly damageDealt: number;
+  readonly dps: number;
+  readonly healing: number;
+  readonly kills: number;
+}
+
+/** The host's resolved party roster (E5.1), sent PRIVATELY to every current
+ *  member (never broadcast — membership is nobody else's business) after any
+ *  mutation or vitals update. `partyId`/`leaderId` null + empty `members`
+ *  means "you are not in a party" — the one message a peer's UI needs to
+ *  clear its frames on `leave`/`kick`. */
+export interface PartyMsg {
+  readonly kind: "party";
+  readonly partyId: string | null;
+  readonly leaderId: string | null;
+  readonly members: readonly PartyMemberInfo[];
+}
+
+/** Sent privately to an invited peer so its UI can prompt accept/decline
+ *  (E5.2). */
+export interface PartyInviteMsg {
+  readonly kind: "partyInvite";
+  readonly fromPeerId: string;
+  readonly fromPlayerName: string;
+}
+
+/** The host's resolved answer to a `partyInventoryLookup` (E5.4) — sent only
+ *  on success; a denied/invalid lookup gets silence, never this message. */
+export interface PartyInventoryStateMsg {
+  readonly kind: "partyInventoryState";
+  readonly targetPeerId: string;
+  readonly capacity: number;
+  readonly slots: readonly (InventoryStackWire | null)[];
+}
+
 export type HostMessage =
   | WelcomeMsg
   | PeerPoseMsg
@@ -261,7 +362,10 @@ export type HostMessage =
   | HostClosingMsg
   | PlaceableStateMsg
   | InventoryStateMsg
-  | GroundItemsMsg;
+  | GroundItemsMsg
+  | PartyMsg
+  | PartyInviteMsg
+  | PartyInventoryStateMsg;
 
 export type NetMessage = JoinerMessage | HostMessage;
 
@@ -428,6 +532,60 @@ function isGroundItemEntity(v: unknown): v is GroundItemEntity {
   );
 }
 
+/** Trystero peer ids are short hex strings; this is a generous DoS-bound
+ *  ceiling (mirrors `MAX_PLAYER_NAME_LEN`'s posture), not a real-id length. */
+const MAX_WIRE_PEER_ID_LEN = 64;
+
+/** Ceilings for E5.1/E5.6's self-reported vitals/combat-tally numbers — a
+ *  hostile peer can only lie about ITS OWN displayed row (never granted/
+ *  debited anywhere), so these just stop an absurd/NaN/Infinity payload from
+ *  corrupting another player's HUD. */
+const MAX_WIRE_VITAL = 1_000_000;
+const MAX_WIRE_LEVEL = 9_999;
+const MAX_WIRE_COMBAT_STAT = 10_000_000;
+
+function isWirePeerId(v: unknown): v is string {
+  return isStr(v) && v.length > 0 && v.length <= MAX_WIRE_PEER_ID_LEN;
+}
+
+function isBoundedNonNegative(v: unknown, max: number): v is number {
+  return isNum(v) && Number.isFinite(v) && v >= 0 && v <= max;
+}
+
+function isPartyActionOp(v: unknown): v is PartyActionOp {
+  if (!isRecord(v)) return false;
+  switch (v.op) {
+    case "invite":
+    case "kick":
+      return isWirePeerId(v.targetPeerId);
+    case "acceptInvite":
+    case "declineInvite":
+    case "leave":
+      return true;
+    case "setInventoryShare":
+      return typeof v.shared === "boolean";
+    default:
+      return false;
+  }
+}
+
+function isPartyMemberInfo(v: unknown): v is PartyMemberInfo {
+  return (
+    isRecord(v) &&
+    isWirePeerId(v.peerId) &&
+    isPlayerName(v.playerName) &&
+    isBoundedNonNegative(v.health, MAX_WIRE_VITAL) &&
+    isBoundedNonNegative(v.maxHealth, MAX_WIRE_VITAL) &&
+    isBoundedNonNegative(v.energy, MAX_WIRE_VITAL) &&
+    isBoundedNonNegative(v.maxEnergy, MAX_WIRE_VITAL) &&
+    isBoundedNonNegative(v.level, MAX_WIRE_LEVEL) &&
+    isBoundedNonNegative(v.damageDealt, MAX_WIRE_COMBAT_STAT) &&
+    isBoundedNonNegative(v.dps, MAX_WIRE_COMBAT_STAT) &&
+    isBoundedNonNegative(v.healing, MAX_WIRE_COMBAT_STAT) &&
+    isBoundedNonNegative(v.kills, MAX_WIRE_COMBAT_STAT)
+  );
+}
+
 function isCreatureEntity(v: unknown): v is CreatureEntity {
   return (
     isRecord(v) &&
@@ -482,6 +640,27 @@ const VALIDATORS: Record<string, (m: Record<string, unknown>) => boolean> = {
   peerJoined: (m) => isStr(m.peerId) && isPlayerName(m.playerName),
   peerLeft: (m) => isStr(m.peerId),
   hostClosing: () => true,
+  partyAction: (m) => isPartyActionOp(m.action),
+  partyVitals: (m) =>
+    isBoundedNonNegative(m.health, MAX_WIRE_VITAL) &&
+    isBoundedNonNegative(m.maxHealth, MAX_WIRE_VITAL) &&
+    isBoundedNonNegative(m.energy, MAX_WIRE_VITAL) &&
+    isBoundedNonNegative(m.maxEnergy, MAX_WIRE_VITAL) &&
+    isBoundedNonNegative(m.level, MAX_WIRE_LEVEL) &&
+    isBoundedNonNegative(m.damageDealt, MAX_WIRE_COMBAT_STAT) &&
+    isBoundedNonNegative(m.dps, MAX_WIRE_COMBAT_STAT) &&
+    isBoundedNonNegative(m.healing, MAX_WIRE_COMBAT_STAT) &&
+    isBoundedNonNegative(m.kills, MAX_WIRE_COMBAT_STAT),
+  partyInventoryLookup: (m) => isWirePeerId(m.targetPeerId),
+  party: (m) =>
+    (m.partyId === null || isWirePeerId(m.partyId)) &&
+    (m.leaderId === null || isWirePeerId(m.leaderId)) &&
+    Array.isArray(m.members) &&
+    m.members.length <= PARTY_MAX_SIZE &&
+    m.members.every(isPartyMemberInfo),
+  partyInvite: (m) => isWirePeerId(m.fromPeerId) && isPlayerName(m.fromPlayerName),
+  partyInventoryState: (m) =>
+    isWirePeerId(m.targetPeerId) && isSerializedInventoryWire({ capacity: m.capacity, slots: m.slots }),
 };
 
 /** Validate an untrusted wire payload into a typed message, or an error value. */

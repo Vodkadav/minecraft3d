@@ -30,15 +30,50 @@ import {
   type FillMsg,
   type InteractAction,
   type InventoryOp,
+  type InventoryStackWire,
   type NetMessage,
+  type PartyActionOp,
+  type PartyInventoryStateMsg,
+  type PartyInviteMsg,
+  type PartyMemberInfo,
+  type PartyMsg,
   type PlaceableAction,
   type PlaceableInteractMsg,
   type PoseMsg,
   type SerializedInventoryWire,
   type WorldEdit,
 } from "../domain/net/Protocol";
+import {
+  acceptInvite as partyAccept,
+  createParty,
+  declineInvite as partyDecline,
+  invite as partyInviteFn,
+  kick as partyKick,
+  leave as partyLeave,
+  type PartyState,
+} from "../domain/social/Party";
 import type { ChunkDelta, PlayerState } from "../domain/world/WorldSaveData";
 import type { NetTransport } from "./ports/NetTransport";
+
+/** The host's own well-known "peer" id (E5.1) — lets the host play a full
+ *  party member (invite/kick/frames/meter) without being a real transport
+ *  peer. Matches the literal `NetSync.ts` already uses for the host's own
+ *  broadcast pose. */
+export const HOST_PEER_ID = "host";
+
+/** A peer's self-reported vitals + this-encounter combat tally (E5.1/E5.6) —
+ *  the wire shape minus its `kind` discriminant. */
+export type PartyVitalsReport = {
+  readonly health: number;
+  readonly maxHealth: number;
+  readonly energy: number;
+  readonly maxEnergy: number;
+  readonly level: number;
+  readonly damageDealt: number;
+  readonly dps: number;
+  readonly healing: number;
+  readonly kills: number;
+};
 
 /** What a joiner needs to boot the host's world (the `welcome` payload). */
 export interface WorldSnapshot {
@@ -92,6 +127,11 @@ export interface HostSessionHooks {
    *  withdraw/harvest. */
   onGroundItemPeek?(targetId: string): { itemId: string; count: number } | undefined;
   onGroundItemRemove?(targetId: string): void;
+  /** A party message ADDRESSED TO THE HOST ITSELF (E5.1/E5.2/E5.4) — the host
+   *  is `HOST_PEER_ID`, not a real transport peer, so it can't receive a
+   *  `transport.send`; this hook is the local-delivery path the composition
+   *  root's own party UI reads from instead. */
+  onHostPartyMessage?(msg: PartyMsg | PartyInviteMsg | PartyInventoryStateMsg): void;
 }
 
 export interface HostSessionDeps {
@@ -122,6 +162,13 @@ interface PeerRecord {
    *  joiner re-announces on a timer) must never re-seed the authoritative
    *  copy, or a peer could rewrite its own inventory at will. */
   inventorySeeded: boolean;
+  /** The display name this peer joined with (E5.1 party rosters). */
+  playerName: string;
+  /** Opt-in gate for E5.4's read-only party inventory lookup — default OFF. */
+  inventoryShared: boolean;
+  /** Last self-reported vitals/combat tally (E5.1/E5.6), or null before the
+   *  first `partyVitals` report. */
+  vitals: PartyVitalsReport | null;
 }
 
 export class HostSession {
@@ -129,6 +176,19 @@ export class HostSession {
   private readonly clock: () => number;
   private readonly registry: ItemRegistry;
   private readonly playerInventoryCapacity: number;
+
+  // ---- E5.1/E5.2 party state ----
+  private readonly parties = new Map<string, PartyState>();
+  private readonly partyIdByPeer = new Map<string, string>();
+  /** A peer can hold at most one pending invite at a time — a second invite
+   *  while one is pending simply replaces it (last-invite-wins; a deliberate
+   *  cozy-scale simplification, not a security boundary). */
+  private readonly invitedTo = new Map<string, string>();
+  private nextPartyId = 1;
+  /** The host's own party-member bookkeeping (it's never a real transport
+   *  peer, so it isn't in `this.peers`) — see `HOST_PEER_ID`. */
+  private hostPlayerName = "";
+  private hostVitals: PartyVitalsReport | null = null;
 
   constructor(
     private readonly transport: NetTransport,
@@ -144,11 +204,15 @@ export class HostSession {
         lastPose: null,
         inventory: Inventory.empty(this.registry, this.playerInventoryCapacity),
         inventorySeeded: false,
+        playerName: "",
+        inventoryShared: false,
+        vitals: null,
       }),
     );
     transport.onPeerLeave((peerId) => {
       this.peers.delete(peerId);
       transport.broadcast({ kind: "peerLeft", peerId });
+      this.removeFromParty(peerId);
       this.hooks.onPeerLeft?.(peerId);
     });
     transport.onMessage((peerId, raw) => this.handle(peerId, raw));
@@ -212,6 +276,25 @@ export class HostSession {
       case "inventoryOp":
         this.handleInventoryOp(peerId, msg.inventoryOp);
         return;
+      case "partyAction":
+        this.applyPartyAction(peerId, msg.action);
+        return;
+      case "partyVitals":
+        this.handlePartyVitals(peerId, {
+          health: msg.health,
+          maxHealth: msg.maxHealth,
+          energy: msg.energy,
+          maxEnergy: msg.maxEnergy,
+          level: msg.level,
+          damageDealt: msg.damageDealt,
+          dps: msg.dps,
+          healing: msg.healing,
+          kills: msg.kills,
+        });
+        return;
+      case "partyInventoryLookup":
+        this.handlePartyInventoryLookup(peerId, msg.targetPeerId);
+        return;
       default:
         // host->joiner kinds echoed back at the host: no-op.
         return;
@@ -228,6 +311,7 @@ export class HostSession {
 
     const peer = this.peers.get(peerId);
     if (peer) {
+      peer.playerName = playerName;
       // Never trust a joiner's claimed starting stack at face value: only
       // accept it if it matches the expected slot count AND every item is
       // real and in-bounds per the live registry (Inventory.fromSlots
@@ -422,5 +506,250 @@ export class HostSession {
     for (const peerId of this.peers.keys()) {
       if (peerId !== exceptPeerId) this.transport.send(peerId, msg);
     }
+  }
+
+  // ---- E5.1/E5.2/E5.4/E5.6: party ----
+
+  /** True for a real connected peer OR the host itself — the only ids a
+   *  party mutation may reference (never invite/kick a ghost id). */
+  private isKnownParticipant(peerId: string): boolean {
+    return peerId === HOST_PEER_ID || this.peers.has(peerId);
+  }
+
+  private partyMemberName(peerId: string): string {
+    if (peerId === HOST_PEER_ID) return this.hostPlayerName;
+    return this.peers.get(peerId)?.playerName ?? "";
+  }
+
+  private partyMemberVitals(peerId: string): PartyVitalsReport | null {
+    if (peerId === HOST_PEER_ID) return this.hostVitals;
+    return this.peers.get(peerId)?.vitals ?? null;
+  }
+
+  /** Deliver a party message to a member — the host isn't a transport peer,
+   *  so its own messages route through the local hook instead of the wire. */
+  private sendPartyMessageTo(
+    peerId: string,
+    msg: PartyMsg | PartyInviteMsg | PartyInventoryStateMsg,
+  ): void {
+    if (peerId === HOST_PEER_ID) {
+      this.hooks.onHostPartyMessage?.(msg);
+      return;
+    }
+    this.transport.send(peerId, msg);
+  }
+
+  private buildRoster(partyId: string): readonly PartyMemberInfo[] {
+    const party = this.parties.get(partyId);
+    if (!party) return [];
+    return party.memberIds.map((peerId): PartyMemberInfo => {
+      const v = this.partyMemberVitals(peerId);
+      return {
+        peerId,
+        playerName: this.partyMemberName(peerId),
+        health: v?.health ?? 0,
+        maxHealth: v?.maxHealth ?? 0,
+        energy: v?.energy ?? 0,
+        maxEnergy: v?.maxEnergy ?? 0,
+        level: v?.level ?? 0,
+        damageDealt: v?.damageDealt ?? 0,
+        dps: v?.dps ?? 0,
+        healing: v?.healing ?? 0,
+        kills: v?.kills ?? 0,
+      };
+    });
+  }
+
+  /** Push the current roster to every current member of a party. */
+  private broadcastRoster(partyId: string): void {
+    const party = this.parties.get(partyId);
+    if (!party) return;
+    const members = this.buildRoster(partyId);
+    const msg: PartyMsg = { kind: "party", partyId: party.id, leaderId: party.leaderId, members };
+    for (const memberId of party.memberIds) this.sendPartyMessageTo(memberId, msg);
+  }
+
+  /** Tell a peer it is no longer in any party (left/kicked/disbanded) — the
+   *  one signal its UI needs to clear the frames. */
+  private sendNoParty(peerId: string): void {
+    this.sendPartyMessageTo(peerId, { kind: "party", partyId: null, leaderId: null, members: [] });
+  }
+
+  private removeFromParty(peerId: string): void {
+    const partyId = this.partyIdByPeer.get(peerId);
+    this.invitedTo.delete(peerId);
+    if (!partyId) return;
+    const party = this.parties.get(partyId);
+    if (!party) return;
+    const result = partyLeave(party, peerId);
+    if (!isOk(result)) return;
+    this.partyIdByPeer.delete(peerId);
+    if (result.value === null) {
+      this.parties.delete(partyId);
+      return;
+    }
+    this.parties.set(partyId, result.value);
+    this.broadcastRoster(partyId);
+  }
+
+  /** Resolve a validated party intent from `actorPeerId` (a real peer, or
+   *  `HOST_PEER_ID` for the host's own local UI — see `applyHostPartyAction`).
+   *  Every branch drops silently on a business-rule rejection (unknown
+   *  target, not-leader, party-full, ...) — same posture as every other
+   *  intent in this file; a hostile/confused peer never crashes the host. */
+  private applyPartyAction(actorPeerId: string, action: PartyActionOp): void {
+    switch (action.op) {
+      case "invite": {
+        if (!this.isKnownParticipant(action.targetPeerId)) return;
+        const existingId = this.partyIdByPeer.get(actorPeerId);
+        const party = existingId
+          ? this.parties.get(existingId)
+          : createParty(`party-${this.nextPartyId++}`, actorPeerId);
+        if (!party) return;
+        if (this.partyIdByPeer.get(action.targetPeerId) === party.id) return; // already a member
+        if (
+          this.partyIdByPeer.has(action.targetPeerId) &&
+          this.partyIdByPeer.get(action.targetPeerId) !== party.id
+        ) {
+          return; // already in a different party
+        }
+        const result = partyInviteFn(party, actorPeerId, action.targetPeerId);
+        if (isErr(result)) return;
+        this.parties.set(party.id, result.value);
+        if (!existingId) this.partyIdByPeer.set(actorPeerId, party.id);
+        this.invitedTo.set(action.targetPeerId, party.id);
+        this.sendPartyMessageTo(action.targetPeerId, {
+          kind: "partyInvite",
+          fromPeerId: actorPeerId,
+          fromPlayerName: this.partyMemberName(actorPeerId),
+        });
+        return;
+      }
+      case "acceptInvite": {
+        const partyId = this.invitedTo.get(actorPeerId);
+        if (!partyId) return;
+        const party = this.parties.get(partyId);
+        if (!party) return;
+        const result = partyAccept(party, actorPeerId);
+        if (isErr(result)) return;
+        this.parties.set(partyId, result.value);
+        this.partyIdByPeer.set(actorPeerId, partyId);
+        this.invitedTo.delete(actorPeerId);
+        this.broadcastRoster(partyId);
+        return;
+      }
+      case "declineInvite": {
+        const partyId = this.invitedTo.get(actorPeerId);
+        if (!partyId) return;
+        const party = this.parties.get(partyId);
+        if (!party) return;
+        const result = partyDecline(party, actorPeerId);
+        if (isErr(result)) return;
+        this.parties.set(partyId, result.value);
+        this.invitedTo.delete(actorPeerId);
+        return;
+      }
+      case "leave": {
+        const partyId = this.partyIdByPeer.get(actorPeerId);
+        if (!partyId) return;
+        const party = this.parties.get(partyId);
+        if (!party) return;
+        const result = partyLeave(party, actorPeerId);
+        if (isErr(result)) return;
+        this.partyIdByPeer.delete(actorPeerId);
+        this.sendNoParty(actorPeerId);
+        if (result.value === null) {
+          this.parties.delete(partyId);
+        } else {
+          this.parties.set(partyId, result.value);
+          this.broadcastRoster(partyId);
+        }
+        return;
+      }
+      case "kick": {
+        const partyId = this.partyIdByPeer.get(actorPeerId);
+        if (!partyId) return;
+        const party = this.parties.get(partyId);
+        if (!party) return;
+        const result = partyKick(party, actorPeerId, action.targetPeerId);
+        if (isErr(result)) return;
+        this.partyIdByPeer.delete(action.targetPeerId);
+        this.sendNoParty(action.targetPeerId);
+        if (result.value === null) {
+          this.parties.delete(partyId);
+        } else {
+          this.parties.set(partyId, result.value);
+          this.broadcastRoster(partyId);
+        }
+        return;
+      }
+      case "setInventoryShare": {
+        // No-op for the host itself: HostSession never tracks the host's OWN
+        // inventory (it plays through local game state, not a PeerRecord) —
+        // see the same deferral note on `handlePartyInventoryLookup`.
+        const peer = this.peers.get(actorPeerId);
+        if (peer) peer.inventoryShared = action.shared;
+        return;
+      }
+    }
+  }
+
+  private handlePartyVitals(peerId: string, report: PartyVitalsReport): void {
+    const peer = this.peers.get(peerId);
+    if (!peer) return;
+    peer.vitals = report;
+    const partyId = this.partyIdByPeer.get(peerId);
+    if (partyId) this.broadcastRoster(partyId);
+  }
+
+  private handlePartyInventoryLookup(actorPeerId: string, targetPeerId: string): void {
+    const actorPartyId = this.partyIdByPeer.get(actorPeerId);
+    if (!actorPartyId) return;
+    if (this.partyIdByPeer.get(targetPeerId) !== actorPartyId) return;
+    // Deferred: the host's own inventory isn't tracked by HostSession (the
+    // host plays through its own local game state, not a PeerRecord) — a
+    // lookup targeting HOST_PEER_ID fails closed rather than serving stale
+    // or fabricated data.
+    if (targetPeerId === HOST_PEER_ID) return;
+    const target = this.peers.get(targetPeerId);
+    if (!target || !target.inventoryShared) return;
+    this.sendPartyMessageTo(actorPeerId, {
+      kind: "partyInventoryState",
+      targetPeerId,
+      capacity: target.inventory.capacity,
+      slots: target.inventory.slots.map(
+        (s): InventoryStackWire | null => (s ? { itemId: s.itemId, count: s.count } : null),
+      ),
+    });
+  }
+
+  // ---- host-local party API (the host is HOST_PEER_ID, not a wire peer) ----
+
+  /** The host's own UI performing a party action (invite/accept/leave/kick/
+   *  share-toggle) locally, without a wire round-trip. */
+  applyHostPartyAction(action: PartyActionOp): void {
+    this.applyPartyAction(HOST_PEER_ID, action);
+  }
+
+  /** The host's own periodic vitals/combat-tally report (mirrors what a
+   *  joiner sends via `partyVitals`). */
+  reportHostVitals(playerName: string, report: PartyVitalsReport): void {
+    this.hostPlayerName = playerName;
+    this.hostVitals = report;
+    const partyId = this.partyIdByPeer.get(HOST_PEER_ID);
+    if (partyId) this.broadcastRoster(partyId);
+  }
+
+  /** The host's own party-inventory-lookup request (E5.4). */
+  requestHostPartyInventoryLookup(targetPeerId: string): void {
+    this.handlePartyInventoryLookup(HOST_PEER_ID, targetPeerId);
+  }
+
+  /** Every currently-connected peer's display name — the host UI's invite
+   *  target list (E5.2). Excludes the host itself (already known locally). */
+  connectedPeerNames(): ReadonlyMap<string, string> {
+    const names = new Map<string, string>();
+    for (const [peerId, peer] of this.peers) names.set(peerId, peer.playerName);
+    return names;
   }
 }
