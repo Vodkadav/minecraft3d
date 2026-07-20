@@ -26,6 +26,7 @@ import {
 import { buildTooltipModel } from "../../domain/ui/TooltipModel";
 import type { Localizer } from "../../application/i18n/Localizer";
 import { createItemIconEl } from "../icons/ItemIconElement";
+import { rarityTierForItemTier } from "../icons/ItemRarity";
 import { RichTooltip, type RichTooltipHandle } from "./RichTooltip";
 import { injectStyles } from "../styles";
 
@@ -143,6 +144,7 @@ export function Hotbar(opts: HotbarOptions): HotbarHandle {
         }
         const def = opts.registry.get(slot.itemId);
         const displayName = isOk(def) ? def.value.displayName : slot.itemId;
+        const rarityTier = isOk(def) ? rarityTierForItemTier(def.value.tier) : "common";
         let nameEl = slotEl.querySelector<HTMLSpanElement>(".lw-hotbar-slot-name");
         if (!nameEl) {
           nameEl = doc.createElement("span");
@@ -152,7 +154,7 @@ export function Hotbar(opts: HotbarOptions): HotbarHandle {
         nameEl.textContent = displayName;
         slotEl.querySelector(".lw-item-icon")?.remove();
         slotEl.insertBefore(
-          createItemIconEl(doc, slot.itemId, displayName, isOk(def) ? def.value.tags : []),
+          createItemIconEl(doc, slot.itemId, displayName, isOk(def) ? def.value.tags : [], { rarityTier }),
           nameEl,
         );
         slotEl.setAttribute("aria-label", opts.slotAriaLabel(i));
@@ -163,6 +165,7 @@ export function Hotbar(opts: HotbarOptions): HotbarHandle {
           registry: opts.registry,
           t: (k, params) => opts.loc.t(k, params),
           quantity: slot.count,
+          rarityTier,
         });
         if (isOk(model)) {
           tooltips[i] = RichTooltip({ doc, anchor: slotEl, model: model.value });

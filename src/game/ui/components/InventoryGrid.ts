@@ -45,6 +45,7 @@ import { buildTooltipModel } from "../../domain/ui/TooltipModel";
 import type { Localizer } from "../../application/i18n/Localizer";
 import { itemDisplayName } from "../i18n/itemNames";
 import { createItemIconEl } from "../icons/ItemIconElement";
+import { rarityTierForItemTier } from "../icons/ItemRarity";
 import { attachContextMenu, type ContextMenuHandle } from "./ContextMenu";
 import { RichTooltip, type RichTooltipHandle } from "./RichTooltip";
 import { injectStyles } from "../styles";
@@ -217,7 +218,8 @@ export function InventoryGrid(opts: InventoryGridOptions): InventoryGridHandle {
         displayName = nameFor(slot.itemId);
         const defResult = opts.registry.get(slot.itemId);
         tags = isOk(defResult) ? defResult.value.tags : [];
-        iconWrap?.replaceChildren(createItemIconEl(doc, slot.itemId, displayName, tags));
+        const rarityTier = isOk(defResult) ? rarityTierForItemTier(defResult.value.tier) : "common";
+        iconWrap?.replaceChildren(createItemIconEl(doc, slot.itemId, displayName, tags, { rarityTier }));
         if (nameEl) nameEl.textContent = displayName;
         if (countEl) countEl.textContent = slot.count > 1 ? String(slot.count) : "";
         cell.setAttribute(
@@ -232,6 +234,7 @@ export function InventoryGrid(opts: InventoryGridOptions): InventoryGridHandle {
           registry: opts.registry,
           t: (key, params) => opts.loc.t(key, params),
           quantity: slot.count,
+          rarityTier,
           keyhints: keyhints.length > 0 ? keyhints : undefined,
         });
         if (isOk(model)) {
