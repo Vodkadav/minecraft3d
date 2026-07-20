@@ -36,6 +36,7 @@ import {
 } from "../../domain/ui/InventoryGridState";
 import type { Localizer } from "../../application/i18n/Localizer";
 import { itemDisplayName } from "../i18n/itemNames";
+import { createItemIconEl } from "../icons/ItemIconElement";
 import { attachTooltip, type TooltipHandle } from "./Tooltip";
 import { injectStyles } from "../styles";
 
@@ -129,11 +130,13 @@ export function InventoryGrid(opts: InventoryGridOptions): InventoryGridHandle {
         cell.tabIndex = index === ui.cursor ? 0 : -1;
         cell.draggable = false;
 
+        const iconSlot = doc.createElement("span");
+        iconSlot.className = "lw-inv-slot-icon-wrap";
         const name = doc.createElement("span");
         name.className = "lw-inv-slot-name";
         const count = doc.createElement("span");
         count.className = "lw-inv-slot-count";
-        cell.append(name, count);
+        cell.append(iconSlot, name, count);
 
         if (hotbarSize > 0 && index === hotbarSize) {
           rowEl.classList.add("lw-inv-row-divider");
@@ -159,6 +162,7 @@ export function InventoryGrid(opts: InventoryGridOptions): InventoryGridHandle {
 
     slotEls.forEach((cell, index) => {
       const slot = inventory.slots[index];
+      const iconWrap = cell.querySelector<HTMLElement>(".lw-inv-slot-icon-wrap");
       const nameEl = cell.querySelector<HTMLElement>(".lw-inv-slot-name");
       const countEl = cell.querySelector<HTMLElement>(".lw-inv-slot-count");
       cell.tabIndex = index === ui.cursor ? 0 : -1;
@@ -168,6 +172,7 @@ export function InventoryGrid(opts: InventoryGridOptions): InventoryGridHandle {
       tooltips[index]?.dispose();
 
       if (!slot) {
+        iconWrap?.replaceChildren();
         if (nameEl) nameEl.textContent = "";
         if (countEl) countEl.textContent = "";
         cell.removeAttribute("data-filter-action");
@@ -182,6 +187,15 @@ export function InventoryGrid(opts: InventoryGridOptions): InventoryGridHandle {
       if (filterAction) cell.dataset.filterAction = filterAction;
       else cell.removeAttribute("data-filter-action");
       const displayName = nameFor(slot.itemId);
+      const defResult = opts.registry.get(slot.itemId);
+      iconWrap?.replaceChildren(
+        createItemIconEl(
+          doc,
+          slot.itemId,
+          displayName,
+          isOk(defResult) ? defResult.value.tags : [],
+        ),
+      );
       if (nameEl) nameEl.textContent = displayName;
       if (countEl) countEl.textContent = slot.count > 1 ? String(slot.count) : "";
       cell.setAttribute(

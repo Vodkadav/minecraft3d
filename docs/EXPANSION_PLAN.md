@@ -61,3 +61,14 @@ E0.5 GroundLoot ┘                       E4 Inv/Storage ─► E5 Social ┘
 - Joiner cache prune path shares the OPFS root with world saves — move to a dedicated KV write.
 - Waypoint persistence; full-map extreme-zoom mobile budget test; XP floating number (fires once XP
   events emit it); nameplate-policy filtering of map icons; peer/party map markers (E5).
+- E6.7 achievements for the new expansion systems (party/trade/chat/bank/research/etc.) — the
+  achievement registry pattern (`Achievement.predicate(counts, state)`) only reads
+  `ProgressionCounts`/`ProgressionState`, and none of those new systems emit a
+  `ProgressionEventId` yet; a pure-data addition isn't possible without first extending
+  `PROGRESSION_EVENT_IDS` and wiring new call sites (level-up, bank use, party join, etc.) — out
+  of a UI-iconography slice's scope. Revisit once those event ids exist.
+- E6.7 high-contrast icon/emblem colors: icons/emblems use the same `var(--lw-*)` tokens as every
+  other themed component; `data-high-contrast="true"` today only overrides `--laas-fg`/`--laas-bg`
+  on the `.laas-ui` root (pre-existing, not wired into per-component `--lw-*` custom properties),
+  so icons behave identically to bars/buttons/etc. under that toggle — a systemic gap, not
+  introduced or fixed by this slice.

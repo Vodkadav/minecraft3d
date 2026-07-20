@@ -26,6 +26,8 @@ import type { ExplorationState } from "../domain/map/Exploration";
 import type { Localizer } from "../application/i18n/Localizer";
 import { Button } from "./components/Button";
 import { Panel } from "./components/Panel";
+import { markerGlyphShape } from "./icons/MarkerGlyphs";
+import { createPanelEmblemEl } from "./icons/PanelEmblem";
 import { injectStyles } from "./styles";
 
 export interface MapPlayer {
@@ -116,11 +118,14 @@ export function mountMapScreen(opts: MapScreenOptions): MapScreenHandle {
 
   const header = doc.createElement("div");
   header.className = "lw-inv-header";
+  const titleWrap = doc.createElement("div");
+  titleWrap.className = "lw-panel-title-wrap";
   const title = doc.createElement("h2");
   title.textContent = opts.loc.t("map.title");
+  titleWrap.append(createPanelEmblemEl(doc, "map"), title);
   const actions = doc.createElement("div");
   actions.append(recenterBtn, closeBtn);
-  header.append(title, actions);
+  header.append(titleWrap, actions);
 
   const canvasWrap = doc.createElement("div");
   canvasWrap.className = "lw-map-canvas-wrap";
@@ -169,6 +174,7 @@ export function mountMapScreen(opts: MapScreenOptions): MapScreenHandle {
       const dot = doc.createElement("div");
       dot.className = "lw-map-icon";
       dot.dataset.kind = icon.kind;
+      dot.dataset.shape = markerGlyphShape(icon.kind);
       dot.style.left = `${icon.screenX}px`;
       dot.style.top = `${icon.screenY}px`;
       nodes.push(dot);
@@ -180,6 +186,7 @@ export function mountMapScreen(opts: MapScreenOptions): MapScreenHandle {
         const pin = doc.createElement("div");
         pin.className = "lw-map-icon";
         pin.dataset.kind = "waypoint";
+        pin.dataset.shape = markerGlyphShape("waypoint");
         pin.style.left = `${wp.screenX}px`;
         pin.style.top = `${wp.screenY}px`;
         nodes.push(pin);
@@ -194,6 +201,7 @@ export function mountMapScreen(opts: MapScreenOptions): MapScreenHandle {
       const arrow = doc.createElement("div");
       arrow.className = "lw-map-icon";
       arrow.dataset.kind = "player";
+      arrow.dataset.shape = markerGlyphShape("player");
       arrow.style.left = `${playerIcon.screenX}px`;
       arrow.style.top = `${playerIcon.screenY}px`;
       arrow.style.transform = `rotate(${playerArrowRotationDegrees(player.yawRadians)}deg)`;

@@ -189,8 +189,12 @@ inspection per merge; mandatory `claude-infra:security` review on every networki
   account-wide bank (K, IndexedDB) — multiplayer bank path deferred behind seed-trust revisit
 - [~] E5 Social (in flight): party/frames/invite/kick/lookup/party-meter, trade escrow, kid-safe
   chat — all host-authoritative intents; security reviews mandatory before merge
-- [~] E6 World content (in flight): caves, research tree dispatched; structures, biome/time
-  spawning, asset library growth, iconography pending
+- [~] E6 World content (in flight): caves, research tree dispatched; E6.7 iconography DONE
+  (procedural item icons keyed by kind/tags, distinct map-marker glyph shapes, panel-header
+  emblems — all inline SVG, AA-contrast-checked, aria-hidden decorative pairing with existing
+  text labels); structures, biome/time spawning, asset library growth pending. Achievements for
+  the new systems deferred — not expressible as a pure-data registry addition (see
+  `docs/EXPANSION_PLAN.md` deferrals)
 - [ ] Expansion playtest gate (structured session — owner schedules)
 
 ## Notes

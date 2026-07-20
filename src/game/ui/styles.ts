@@ -77,6 +77,9 @@ ${THEME_CSS_VARS}
   pointer-events: none;
 }
 .lw-toast {
+  display: flex;
+  align-items: center;
+  gap: var(--lw-space-2);
   background: var(--lw-bg-panel);
   color: var(--lw-fg);
   border: 1px solid var(--lw-border);
@@ -86,6 +89,41 @@ ${THEME_CSS_VARS}
   font-size: var(--lw-font-sm);
   min-width: 200px;
   animation: lw-toast-in var(--lw-motion-base) ease-out;
+}
+.lw-toast .lw-item-icon {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+}
+
+/* Procedural item icons (Phase E6.7) — SVG-in-code, cached per item id. */
+.lw-item-icon {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.lw-item-icon-svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* Panel header emblem + title wrapper (Phase E6.7) */
+.lw-panel-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: var(--lw-space-2);
+}
+.lw-panel-emblem {
+  display: inline-flex;
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+}
+.lw-panel-emblem-svg {
+  width: 100%;
+  height: 100%;
+  display: block;
 }
 @keyframes lw-toast-in {
   from { opacity: 0; transform: translateY(-6px); }
@@ -256,6 +294,23 @@ ${THEME_CSS_VARS}
   color: var(--lw-fg);
   text-shadow: 0 1px 1px #000;
 }
+.lw-hotbar-slot .lw-item-icon {
+  position: absolute;
+  inset: 8px 6px 12px 6px;
+  pointer-events: none;
+}
+.lw-hotbar-slot-name {
+  position: absolute;
+  left: 3px;
+  bottom: 1px;
+  max-width: calc(100% - 20px);
+  font-size: 0.55rem;
+  color: var(--lw-fg-muted);
+  text-shadow: 0 1px 1px #000;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 /* Crosshair */
 .lw-crosshair {
@@ -355,9 +410,27 @@ ${THEME_CSS_VARS}
   outline: 3px solid var(--lw-focus);
   outline-offset: 2px;
 }
+.lw-inv-slot-icon-wrap {
+  position: absolute;
+  inset: 6px 6px 14px 6px;
+  pointer-events: none;
+}
+.lw-inv-slot-icon-wrap .lw-item-icon {
+  width: 100%;
+  height: 100%;
+}
 .lw-inv-slot-name {
-  font-size: 0.65rem;
+  position: absolute;
+  left: 3px;
+  bottom: 1px;
+  max-width: calc(100% - 20px);
+  font-size: 0.55rem;
   line-height: 1.1;
+  color: var(--lw-fg-muted);
+  text-shadow: 0 1px 1px #000;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .lw-inv-slot-count {
   position: absolute;
@@ -987,33 +1060,54 @@ ${THEME_CSS_VARS}
   position: absolute;
   inset: 0;
 }
+/* Marker glyphs (Phase E6.7): shape (data-shape) is the primary,
+   non-color-only distinguishing channel -- color (data-kind) is secondary.
+   Shapes come from ui/icons/MarkerGlyphs.ts, kept exhaustive by a test. */
 .lw-map-icon {
   position: absolute;
-  width: 10px;
-  height: 10px;
-  margin-left: -5px;
-  margin-top: -5px;
-  border-radius: var(--lw-radius-pill);
+  width: 11px;
+  height: 11px;
+  margin-left: -5.5px;
+  margin-top: -5.5px;
   border: 1px solid rgba(0, 0, 0, 0.6);
+  border-radius: var(--lw-radius-pill); /* fallback if data-shape is ever missing */
 }
-.lw-map-icon[data-kind="player"] {
-  background: var(--lw-accent);
-  width: 12px;
-  height: 12px;
-  margin-left: -6px;
-  margin-top: -6px;
+.lw-map-icon[data-shape="circle"] {
+  border-radius: 50%;
+}
+.lw-map-icon[data-shape="diamond"] {
+  clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
+}
+.lw-map-icon[data-shape="hexagon"] {
+  clip-path: polygon(25% 3%, 75% 3%, 100% 50%, 75% 97%, 25% 97%, 0% 50%);
+}
+.lw-map-icon[data-shape="star"] {
+  clip-path: polygon(
+    50% 0%, 63% 35%, 100% 38%, 72% 60%, 82% 96%, 50% 76%, 18% 96%, 28% 60%, 0% 38%, 37% 35%
+  );
+}
+.lw-map-icon[data-shape="flag"] {
+  clip-path: polygon(15% 0%, 15% 100%, 5% 100%, 5% 0%, 100% 20%, 15% 40%);
+}
+.lw-map-icon[data-shape="pin"] {
   border-radius: 2px;
+  transform: rotate(45deg);
 }
+.lw-map-icon[data-shape="arrow"] {
+  width: 13px;
+  height: 13px;
+  margin-left: -6.5px;
+  margin-top: -6.5px;
+  border-radius: 2px;
+  clip-path: polygon(50% 0%, 100% 100%, 50% 78%, 0% 100%);
+}
+.lw-map-icon[data-kind="player"] { background: var(--lw-accent); }
 .lw-map-icon[data-kind="creature"] { background: var(--lw-danger); }
 .lw-map-icon[data-kind="peer"] { background: var(--lw-accent-hover); }
 .lw-map-icon[data-kind="resourceNode"] { background: var(--lw-success); }
 .lw-map-icon[data-kind="groundLoot"] { background: var(--lw-warning); }
 .lw-map-icon[data-kind="poi"] { background: var(--lw-focus); }
-.lw-map-icon[data-kind="waypoint"] {
-  background: var(--lw-fg);
-  border-radius: 2px;
-  transform: rotate(45deg);
-}
+.lw-map-icon[data-kind="waypoint"] { background: var(--lw-fg); }
 
 /* Full map overlay (Phase E3.3) */
 .lw-map-overlay {

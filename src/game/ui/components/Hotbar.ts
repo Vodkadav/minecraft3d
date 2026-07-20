@@ -18,6 +18,7 @@ import {
   selectHotbarSlot,
   type HotbarState,
 } from "../../domain/ui/HotbarSelection";
+import { createItemIconEl } from "../icons/ItemIconElement";
 import { injectStyles } from "../styles";
 
 export interface HotbarOptions {
@@ -125,6 +126,7 @@ export function Hotbar(opts: HotbarOptions): HotbarHandle {
           if (count) count.textContent = "";
           const nameEl = slotEl.querySelector(".lw-hotbar-slot-name");
           nameEl?.remove();
+          slotEl.querySelector(".lw-item-icon")?.remove();
           return;
         }
         const def = opts.registry.get(slot.itemId);
@@ -136,6 +138,11 @@ export function Hotbar(opts: HotbarOptions): HotbarHandle {
           slotEl.insertBefore(nameEl, key);
         }
         nameEl.textContent = displayName;
+        slotEl.querySelector(".lw-item-icon")?.remove();
+        slotEl.insertBefore(
+          createItemIconEl(doc, slot.itemId, displayName, isOk(def) ? def.value.tags : []),
+          nameEl,
+        );
         slotEl.setAttribute("aria-label", opts.slotAriaLabel(i));
         slotEl.title = `${displayName} x${slot.count}`;
         if (count) count.textContent = slot.count > 1 ? String(slot.count) : "";

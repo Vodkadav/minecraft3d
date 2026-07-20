@@ -18,6 +18,9 @@ export interface ToastItem {
   readonly dedupeKey?: string;
   readonly createdAt: number;
   readonly ttlMs: number;
+  /** Present iff this toast is about a specific item (loot/eat) — the UI
+   *  layer renders a small procedural item icon beside the text (Phase E6.7). */
+  readonly iconItemId?: string;
 }
 
 export interface ToastQueueState {

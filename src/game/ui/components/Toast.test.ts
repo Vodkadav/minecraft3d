@@ -1,7 +1,16 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, vi } from "vitest";
+import { isOk } from "../../domain/Result";
+import { ItemRegistry } from "../../domain/items/ItemRegistry";
+import { STARTER_ITEMS } from "../../domain/items/starterItems";
 import { createLocalizer } from "../i18n/strings";
 import { createToastHost } from "./Toast";
+
+function registry(): ItemRegistry {
+  const r = ItemRegistry.create(STARTER_ITEMS);
+  if (!isOk(r)) throw new Error("bad registry");
+  return r.value;
+}
 
 describe("createToastHost", () => {
   it("mounts a labelled, live-region host", () => {
@@ -52,5 +61,24 @@ describe("createToastHost", () => {
 
     host.dispose();
     vi.useRealTimers();
+  });
+
+  it("renders an item icon when pushed with an iconItemId and a registry", () => {
+    const host = createToastHost(createLocalizer("en"), {
+      ariaLabel: "Notifications",
+      registry: registry(),
+    });
+    host.push("hud.toast.loot", { name: "Wood", count: 1 }, undefined, "wood");
+    expect(host.el.querySelector(".lw-item-icon")).not.toBeNull();
+    expect(host.el.querySelector(".lw-toast-text")?.textContent).toContain("Wood");
+    host.dispose();
+  });
+
+  it("omits the icon when no registry is configured, without breaking the text", () => {
+    const host = createToastHost(createLocalizer("en"), { ariaLabel: "Notifications" });
+    host.push("hud.toast.loot", { name: "Wood", count: 1 }, undefined, "wood");
+    expect(host.el.querySelector(".lw-item-icon")).toBeNull();
+    expect(host.el.querySelector(".lw-toast-text")?.textContent).toContain("Wood");
+    host.dispose();
   });
 });
