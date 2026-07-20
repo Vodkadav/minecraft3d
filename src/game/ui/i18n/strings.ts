@@ -171,6 +171,7 @@ export const UI_STRINGS: Catalog = {
     "item.gilded-sword.name": "Gilded Sword",
     "item.gilded-pickaxe.name": "Gilded Pickaxe",
     "item.relic-charm.name": "Relic Charm",
+    "item.bomb.name": "Bomb",
 
     "creature.deer.name": "Deer",
     "creature.wolf.name": "Wolf",
@@ -659,6 +660,7 @@ export const UI_STRINGS: Catalog = {
     "item.gilded-sword.name": "Espada dorada",
     "item.gilded-pickaxe.name": "Pico dorado",
     "item.relic-charm.name": "Amuleto de reliquia",
+    "item.bomb.name": "Bomba",
 
     "creature.deer.name": "Ciervo",
     "creature.wolf.name": "Lobo",
@@ -1147,6 +1149,7 @@ export const UI_STRINGS: Catalog = {
     "item.gilded-sword.name": "Forgyldt sværd",
     "item.gilded-pickaxe.name": "Forgyldt hakke",
     "item.relic-charm.name": "Relikvieamulet",
+    "item.bomb.name": "Bombe",
 
     "creature.deer.name": "Hjort",
     "creature.wolf.name": "Ulv",

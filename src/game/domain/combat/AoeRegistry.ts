@@ -54,6 +54,10 @@ export class AoeRegistry {
  *  (see `ProjectileRegistry.ts`'s doc comment for the append convention). */
 export const STARTER_AOES: readonly AoeSpec[] = [
   // ---- E7.4 AoE / explosives (bombs, celebratory booms) ----
+  // The one starter blast — a thrown bomb's boom (see starterItems.ts's
+  // "bomb" item). blockSafe stays true (cozy default, plan §9); flipping it
+  // is the deferred block-destroying-explosions follow-up, not this slice.
+  { id: "bomb-boom", radius: 4, falloff: "linear", blockSafe: true, vfx: "vfx.boom.bomb" },
   // ---- E7.3 Spellcasting (Healing Bloom) ----
   // ---- E7.5 Deployables (traps/mines/grenades) ----
   // ---- E7.6 Monster abilities (AoE stomp) ----

@@ -197,4 +197,25 @@ export const STARTER_ITEMS: readonly ItemDefinition[] = [
   { id: "gilded-sword", displayName: "Gilded Sword", maxStackSize: 1, tags: ["tool", "weapon", "crafted"], tier: 4 },
   { id: "gilded-pickaxe", displayName: "Gilded Pickaxe", maxStackSize: 1, tags: ["tool", "crafted"], tier: 4 },
   { id: "relic-charm", displayName: "Relic Charm", maxStackSize: 1, tags: ["crafted", "gear"], tier: 4 },
+
+  // --- E7.4 explosives ---
+  // The starter thrown weapon exercising the shared AoeRegistry resolver
+  // (Aoe.ts) — `combat.aoe` points at the "bomb-boom" AoeSpec. No `projectile`
+  // yet: the arc/throw simulation is E7.2's host-projectile stream to wire;
+  // this item just carries the data a future intent handler will consume.
+  {
+    id: "bomb",
+    displayName: "Bomb",
+    maxStackSize: 16,
+    tags: ["weapon", "thrown", "crafted"],
+    tier: 1,
+    combat: {
+      kind: "thrown",
+      damage: 30,
+      attackSpeed: 0.8,
+      aoe: "bomb-boom",
+      damageType: "boom",
+      feelEvent: "boom",
+    },
+  },
 ];
