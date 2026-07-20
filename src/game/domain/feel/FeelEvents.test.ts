@@ -72,4 +72,31 @@ describe("FeelEvents registry", () => {
     const critLevelUp = resolveFeedback("levelUp", { crit: true });
     expect(critLevelUp.numberKind).toBe("xp");
   });
+
+  it("E7.0: every combat-contract event id is declared and legal to trigger", () => {
+    const combatIds = [
+      "meleeSwing",
+      "arrowHit",
+      "spellSpark",
+      "spellFrost",
+      "spellNature",
+      "boom",
+      "trapArm",
+      "trapTrigger",
+      "monsterCast",
+      "monsterTelegraph",
+      "defeatPoof",
+      "playerDown",
+    ] as const;
+    for (const id of combatIds) {
+      expect(FEEL_EVENT_IDS).toContain(id);
+      expect(() => resolveFeedback(id)).not.toThrow();
+      expect(() => resolveFeedback(id, { crit: true })).not.toThrow();
+    }
+  });
+
+  it("playerDown is gentle (no shake, no gore-adjacent numbers) per the cozy tone gate", () => {
+    expect(FEEL_EVENTS.playerDown.shakeTrauma).toBe(0);
+    expect(FEEL_EVENTS.playerDown.numberKind).toBeNull();
+  });
 });

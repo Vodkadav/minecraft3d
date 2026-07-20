@@ -229,6 +229,66 @@ export interface PartyInventoryLookupMsg {
   readonly targetPeerId: string;
 }
 
+/**
+ * Combat wire growth (E7.0 — plan §3.3/§6). Types/registries only land here;
+ * no gameplay logic. Host stays the single source of truth: these intents
+ * carry only WHAT the player did (an equip choice, an aim direction, a
+ * cast/deploy target) — never a damage number or an outcome. The host
+ * resolves damage from its OWN authoritative equipped-item record
+ * (`equipItem`) plus its own raytrace/simulation, matching every other
+ * intent in this file.
+ */
+
+/** Which equip slot an `equipItem`/`aimedAttack` targets. No equip *system*
+ *  ships yet (E7.0 is contracts-only) — this is the closed vocabulary future
+ *  streams equip logic will validate item kind against. */
+export type EquipSlot = "weapon" | "spell";
+
+/** The host records the sender's claimed equipped item for `slot`; deeper
+ *  validation (does the sender actually own this item, is it weapon-kind)
+ *  is a later stream's `HostSession` job — E7.0 only carries the shape. */
+export interface EquipItemMsg {
+  readonly kind: "equipItem";
+  readonly slot: EquipSlot;
+  readonly itemId: string;
+}
+
+/** A 3-component world-space vector on the wire — position or direction,
+ *  disambiguated by field name/usage at each call site. */
+export type Vec3Wire = readonly [number, number, number];
+
+/** Melee-cone, ranged, and thrown attacks all share this shape (plan §3.3):
+ *  the host raytraces/simulates from `origin`+`dir` against ITS OWN
+ *  authoritative equipped-item record for `weaponSlot` — the client never
+ *  claims a hit or a damage number. */
+export interface AimedAttackMsg {
+  readonly kind: "aimedAttack";
+  readonly origin: Vec3Wire;
+  readonly dir: Vec3Wire;
+  readonly weaponSlot: EquipSlot;
+}
+
+/** Cast a spell (E7.3) — aimed either at a direction (projectile/cone) or a
+ *  ground point (groundTarget), never both. `abilityId` is an
+ *  `AbilityRegistry` id; the host resolves the spell's real cost/cooldown/
+ *  effect from its own registry lookup, never a claimed value. */
+export interface CastSpellMsg {
+  readonly kind: "castSpell";
+  readonly abilityId: string;
+  readonly origin: Vec3Wire;
+  readonly dir?: Vec3Wire;
+  readonly groundPoint?: Vec3Wire;
+}
+
+/** Place a mine/trap/grenade (E7.5) — `deployableId` is a
+ *  `DeployableRegistry` id; the host owns the resulting arm-timer/trigger
+ *  state machine and streams it back via `deployables`. */
+export interface DeployItemMsg {
+  readonly kind: "deployItem";
+  readonly deployableId: string;
+  readonly position: Vec3Wire;
+}
+
 export type JoinerMessage =
   | JoinMsg
   | PoseMsg
@@ -244,7 +304,11 @@ export type JoinerMessage =
   | TradeCancelMsg
   | PartyActionMsg
   | PartyVitalsMsg
-  | PartyInventoryLookupMsg;
+  | PartyInventoryLookupMsg
+  | EquipItemMsg
+  | AimedAttackMsg
+  | CastSpellMsg
+  | DeployItemMsg;
 
 // ---- Host → Joiner ----
 
@@ -442,6 +506,61 @@ export interface PartyInventoryStateMsg {
   readonly slots: readonly (InventoryStackWire | null)[];
 }
 
+/** One streamed active projectile (E7.2) — mirrors `CreatureEntity`'s
+ *  streaming contract: the host owns the whole simulation, joiners mirror it
+ *  for a cosmetic tracer keyed by `projectileId` (a `ProjectileRegistry`
+ *  id). `ownerId` is the firing peer's id (never trusted for damage — the
+ *  host already resolved any hit before this ever streams). */
+export interface ProjectileEntity {
+  readonly id: string;
+  readonly projectileId: string;
+  readonly ownerId: string;
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
+  readonly dirX: number;
+  readonly dirY: number;
+  readonly dirZ: number;
+}
+
+/** The host's full active projectile set, streamed like `creatures`. */
+export interface ProjectilesMsg {
+  readonly kind: "projectiles";
+  readonly entities: readonly ProjectileEntity[];
+}
+
+/** One streamed armed/arming deployable (E7.5) — same streaming contract as
+ *  `ProjectileEntity`. `deployableId` is a `DeployableRegistry` id;
+ *  `armed` distinguishes the telegraph window from a live trigger-ready
+ *  state for the joiner's VFX. */
+export interface DeployableEntity {
+  readonly id: string;
+  readonly deployableId: string;
+  readonly ownerId: string;
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
+  readonly armed: boolean;
+}
+
+/** The host's full active deployable set, streamed like `creatures`. */
+export interface DeployablesMsg {
+  readonly kind: "deployables";
+  readonly entities: readonly DeployableEntity[];
+}
+
+/** A one-shot VFX cue (AoE resolve or a telegraph marker, plan §5) so every
+ *  peer plays the same boom/ring at the same place — `effectId` is an
+ *  `AoeRegistry` id or a telegraph vfx id, resolved by the presentation
+ *  layer, never semantically parsed here. */
+export interface EffectMsg {
+  readonly kind: "effect";
+  readonly effectId: string;
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
+}
+
 export type HostMessage =
   | WelcomeMsg
   | PeerPoseMsg
@@ -458,7 +577,10 @@ export type HostMessage =
   | TradeStateMsg
   | PartyMsg
   | PartyInviteMsg
-  | PartyInventoryStateMsg;
+  | PartyInventoryStateMsg
+  | ProjectilesMsg
+  | DeployablesMsg
+  | EffectMsg;
 
 export type NetMessage = JoinerMessage | HostMessage;
 
@@ -709,6 +831,73 @@ function isPartyMemberInfo(v: unknown): v is PartyMemberInfo {
   );
 }
 
+/** Ceilings for E7.0's combat wire arrays (plan §6 DoS bound) — generous
+ *  over any realistic active count, bounded so a hostile peer can't DoS
+ *  `parseMessage` with a huge payload (mirrors `MAX_WIRE_GROUND_ITEMS`). */
+const MAX_WIRE_PROJECTILES = 256;
+const MAX_WIRE_DEPLOYABLES = 128;
+
+const EQUIP_SLOTS: readonly string[] = ["weapon", "spell"];
+
+function isEquipSlot(v: unknown): v is EquipSlot {
+  return isStr(v) && EQUIP_SLOTS.includes(v);
+}
+
+function isVec3(v: unknown): v is Vec3Wire {
+  return Array.isArray(v) && v.length === 3 && v.every((n) => isNum(n) && Number.isFinite(n));
+}
+
+/** Tolerance around unit length — an aim direction should be normalized, but
+ *  float error from client-side math shouldn't flip a legitimate aim into a
+ *  rejected one. Deeper/exact re-derivation (e.g. from the sender's own pose)
+ *  is `IntentRules`'/`HostSession`'s job, not this shape boundary. */
+const DIR_MAGNITUDE_TOLERANCE = 0.05;
+
+/** A direction vector: finite, each component in [-1, 1], and
+ *  (approximately) unit length — rejects a hostile peer's out-of-range or
+ *  degenerate claimed aim at the parse boundary. */
+function isDirVec3(v: unknown): v is Vec3Wire {
+  if (!isVec3(v)) return false;
+  if (v.some((n) => n < -1 - 1e-6 || n > 1 + 1e-6)) return false;
+  const mag = Math.hypot(v[0], v[1], v[2]);
+  return mag > 1 - DIR_MAGNITUDE_TOLERANCE && mag < 1 + DIR_MAGNITUDE_TOLERANCE;
+}
+
+/** Finite-only numeric guard for stream coordinates (security review E7.0-sec
+ *  finding #2): a malformed/compromised host stream must not smuggle
+ *  NaN/Infinity into joiner-side rendering. */
+function isFiniteNum(v: unknown): v is number {
+  return isNum(v) && Number.isFinite(v);
+}
+
+function isProjectileEntity(v: unknown): v is ProjectileEntity {
+  return (
+    isRecord(v) &&
+    isBoundedId(v.id, MAX_WIRE_ID_LEN) &&
+    isBoundedId(v.projectileId, MAX_WIRE_ID_LEN) &&
+    isWirePeerId(v.ownerId) &&
+    isFiniteNum(v.x) &&
+    isFiniteNum(v.y) &&
+    isFiniteNum(v.z) &&
+    isFiniteNum(v.dirX) &&
+    isFiniteNum(v.dirY) &&
+    isFiniteNum(v.dirZ)
+  );
+}
+
+function isDeployableEntity(v: unknown): v is DeployableEntity {
+  return (
+    isRecord(v) &&
+    isBoundedId(v.id, MAX_WIRE_ID_LEN) &&
+    isBoundedId(v.deployableId, MAX_WIRE_ID_LEN) &&
+    isWirePeerId(v.ownerId) &&
+    isFiniteNum(v.x) &&
+    isFiniteNum(v.y) &&
+    isFiniteNum(v.z) &&
+    typeof v.armed === "boolean"
+  );
+}
+
 function isCreatureEntity(v: unknown): v is CreatureEntity {
   return (
     isRecord(v) &&
@@ -804,6 +993,28 @@ const VALIDATORS: Record<string, (m: Record<string, unknown>) => boolean> = {
   partyInvite: (m) => isWirePeerId(m.fromPeerId) && isPlayerName(m.fromPlayerName),
   partyInventoryState: (m) =>
     isWirePeerId(m.targetPeerId) && isSerializedInventoryWire({ capacity: m.capacity, slots: m.slots }),
+  equipItem: (m) => isEquipSlot(m.slot) && isWireItemId(m.itemId),
+  aimedAttack: (m) => isVec3(m.origin) && isDirVec3(m.dir) && isEquipSlot(m.weaponSlot),
+  castSpell: (m) =>
+    isBoundedId(m.abilityId, MAX_WIRE_ID_LEN) &&
+    isVec3(m.origin) &&
+    (m.dir !== undefined) !== (m.groundPoint !== undefined) &&
+    (m.dir === undefined || isDirVec3(m.dir)) &&
+    (m.groundPoint === undefined || isVec3(m.groundPoint)),
+  deployItem: (m) => isBoundedId(m.deployableId, MAX_WIRE_ID_LEN) && isVec3(m.position),
+  projectiles: (m) =>
+    Array.isArray(m.entities) &&
+    m.entities.length <= MAX_WIRE_PROJECTILES &&
+    m.entities.every(isProjectileEntity),
+  deployables: (m) =>
+    Array.isArray(m.entities) &&
+    m.entities.length <= MAX_WIRE_DEPLOYABLES &&
+    m.entities.every(isDeployableEntity),
+  effect: (m) =>
+    isBoundedId(m.effectId, MAX_WIRE_ID_LEN) &&
+    isFiniteNum(m.x) &&
+    isFiniteNum(m.y) &&
+    isFiniteNum(m.z),
 };
 
 /** Validate an untrusted wire payload into a typed message, or an error value. */

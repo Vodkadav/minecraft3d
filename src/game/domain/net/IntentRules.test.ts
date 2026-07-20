@@ -3,6 +3,10 @@ import type { InventoryOp, PlaceableInteractMsg } from "./Protocol";
 import type { PlayerState } from "../world/WorldSaveData";
 import {
   remoteAllowedPlaceableAction,
+  tryConsumeToken,
+  validateAimedAttack,
+  validateCastSpell,
+  validateDeployItem,
   validateDig,
   validateInventoryOp,
   validatePlaceableInteract,
@@ -192,5 +196,97 @@ describe("validateTradePropose", () => {
 
   it("rejects an empty target", () => {
     expect(validateTradePropose("alice", "")).toBe(false);
+  });
+});
+
+describe("E7.0 combat contracts: origin-near-pose bound", () => {
+  const lastPose = pose(0, 0, 0);
+
+  it("accepts the first intent when no pose is on record yet", () => {
+    expect(validateAimedAttack(null, { kind: "aimedAttack", origin: [500, 0, 0], dir: [1, 0, 0], weaponSlot: "weapon" })).toBe(true);
+  });
+
+  it("validateAimedAttack accepts an origin near the sender's last pose", () => {
+    expect(
+      validateAimedAttack(lastPose, {
+        kind: "aimedAttack",
+        origin: [1, 0, 0],
+        dir: [1, 0, 0],
+        weaponSlot: "weapon",
+      }),
+    ).toBe(true);
+  });
+
+  it("validateAimedAttack rejects an origin far from the sender's last pose", () => {
+    expect(
+      validateAimedAttack(lastPose, {
+        kind: "aimedAttack",
+        origin: [500, 0, 0],
+        dir: [1, 0, 0],
+        weaponSlot: "weapon",
+      }),
+    ).toBe(false);
+  });
+
+  it("validateCastSpell accepts an origin near the sender's last pose", () => {
+    expect(
+      validateCastSpell(lastPose, {
+        kind: "castSpell",
+        abilityId: "sparkle-bolt",
+        origin: [2, 0, 0],
+        dir: [1, 0, 0],
+      }),
+    ).toBe(true);
+  });
+
+  it("validateCastSpell rejects an origin far from the sender's last pose", () => {
+    expect(
+      validateCastSpell(lastPose, {
+        kind: "castSpell",
+        abilityId: "sparkle-bolt",
+        origin: [200, 0, 0],
+        dir: [1, 0, 0],
+      }),
+    ).toBe(false);
+  });
+
+  it("validateDeployItem accepts a position near the sender's last pose", () => {
+    expect(
+      validateDeployItem(lastPose, { kind: "deployItem", deployableId: "bumble-trap", position: [3, 0, 0] }),
+    ).toBe(true);
+  });
+
+  it("validateDeployItem rejects a position far from the sender's last pose", () => {
+    expect(
+      validateDeployItem(lastPose, {
+        kind: "deployItem",
+        deployableId: "bumble-trap",
+        position: [300, 0, 0],
+      }),
+    ).toBe(false);
+  });
+});
+
+describe("E7.0 combat contracts: tryConsumeToken (rate-limit seam)", () => {
+  const config = { capacity: 3, refillPerSecond: 1 };
+
+  it("consumes a token when the bucket has capacity", () => {
+    const state = { tokens: 3, lastRefillMs: 0 };
+    const outcome = tryConsumeToken(state, config, 0);
+    expect(outcome.allowed).toBe(true);
+    expect(outcome.next.tokens).toBeCloseTo(2);
+  });
+
+  it("rejects when the bucket is empty and not enough time has elapsed to refill", () => {
+    const state = { tokens: 0, lastRefillMs: 0 };
+    const outcome = tryConsumeToken(state, config, 100);
+    expect(outcome.allowed).toBe(false);
+  });
+
+  it("refills over elapsed time, capped at capacity", () => {
+    const state = { tokens: 0, lastRefillMs: 0 };
+    const outcome = tryConsumeToken(state, config, 10_000); // 10s elapsed, refill 1/s
+    expect(outcome.allowed).toBe(true);
+    expect(outcome.next.tokens).toBeCloseTo(config.capacity - 1);
   });
 });

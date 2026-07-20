@@ -6,7 +6,15 @@
  * trivially testable.
  */
 
-import type { InventoryOp, PlaceableAction, PlaceableInteractMsg } from "./Protocol";
+import type {
+  AimedAttackMsg,
+  CastSpellMsg,
+  DeployItemMsg,
+  InventoryOp,
+  PlaceableAction,
+  PlaceableInteractMsg,
+  Vec3Wire,
+} from "./Protocol";
 import type { PlayerState } from "../world/WorldSaveData";
 
 /** Generous sprint+knockback ceiling; anything faster is a teleport. */
@@ -110,6 +118,70 @@ export function remoteAllowedPlaceableAction(action: PlaceableAction): boolean {
  *  means `HostSession` never even allocates the escrow. */
 export function validateTradePropose(senderPeerId: string, targetPeerId: string): boolean {
   return targetPeerId.length > 0 && targetPeerId !== senderPeerId;
+}
+
+/**
+ * E7.0 combat contracts (plan §3.3/§6) — bounds-checking for the new aimed
+ * intents. `Protocol.parseMessage` already rejected malformed shapes/units;
+ * this layer adds the domain-level bound a shape check can't know: the
+ * claimed origin must sit near the sender's own last-validated position
+ * (reused pattern, `validatePose`'s speed gate) — a hostile peer can't claim
+ * to attack/cast/deploy from across the map. Deeper checks (does the sender
+ * actually have this weapon/ability equipped, is the target in range) are
+ * `HostSession`'s job against its own authoritative records, not this file's.
+ */
+const MAX_ORIGIN_POSE_DISTANCE_M = 5;
+
+function originNearPose(lastPose: PlayerState | null, origin: Vec3Wire): boolean {
+  if (lastPose === null) return true; // no pose on record yet; nothing to compare against
+  const dx = origin[0] - lastPose.position[0];
+  const dy = origin[1] - lastPose.position[1];
+  const dz = origin[2] - lastPose.position[2];
+  return Math.hypot(dx, dy, dz) <= MAX_ORIGIN_POSE_DISTANCE_M;
+}
+
+export function validateAimedAttack(lastPose: PlayerState | null, msg: AimedAttackMsg): boolean {
+  return originNearPose(lastPose, msg.origin);
+}
+
+export function validateCastSpell(lastPose: PlayerState | null, msg: CastSpellMsg): boolean {
+  return originNearPose(lastPose, msg.origin);
+}
+
+export function validateDeployItem(lastPose: PlayerState | null, msg: DeployItemMsg): boolean {
+  return originNearPose(lastPose, msg.position);
+}
+
+/**
+ * Token-bucket rate-limit seam (plan §6 — "typed now, enforcement can be a
+ * later stream"). Pure so a combat stream can wire per-peer/per-action
+ * budgets (casts/throws/deploys) straight into `HostSession` without
+ * inventing its own bucket math; nothing calls this yet.
+ */
+export interface RateLimitState {
+  readonly tokens: number;
+  readonly lastRefillMs: number;
+}
+
+export interface RateLimitConfig {
+  readonly capacity: number;
+  readonly refillPerSecond: number;
+}
+
+export interface RateLimitOutcome {
+  readonly allowed: boolean;
+  readonly next: RateLimitState;
+}
+
+export function tryConsumeToken(
+  state: RateLimitState,
+  config: RateLimitConfig,
+  nowMs: number,
+): RateLimitOutcome {
+  const elapsedSec = Math.max(0, (nowMs - state.lastRefillMs) / 1000);
+  const refilled = Math.min(config.capacity, state.tokens + elapsedSec * config.refillPerSecond);
+  if (refilled < 1) return { allowed: false, next: { tokens: refilled, lastRefillMs: nowMs } };
+  return { allowed: true, next: { tokens: refilled - 1, lastRefillMs: nowMs } };
 }
 
 export function validateInventoryOp(op: InventoryOp, capacity: number): boolean {
