@@ -29,6 +29,8 @@ import type {
   GroundItemEntity,
   InventoryOp,
   SerializedInventoryWire,
+  TradeStackWire,
+  TradeStateMsg,
   WelcomeMsg,
   WorldEdit,
 } from "../game/domain/net/Protocol";
@@ -246,6 +248,11 @@ export interface JoinWorldDeps {
   /** The scene's chat UI (E5.5) — receives every host-relayed chat message;
    *  its `onSubmit` is wired here to send a `chat` intent. */
   readonly chat?: ChatUiPort | null;
+  /** The host's resolved trade escrow (E5.3) — only arrives when this joiner
+   *  is one of the two participants (peer<->peer only; the room host itself
+   *  never holds a `HostSession` peer record for its own inventory, so
+   *  host<->joiner trading isn't wired — a follow-up, not this slice). */
+  onTradeState?(state: TradeStateMsg): void;
 }
 
 export interface JoinWorldHandle {
@@ -262,6 +269,12 @@ export interface JoinNetHandle {
   sendFill(x: number, y: number, z: number, radius: number, materialId: number): void;
   /** Direct manipulation of the joiner's own authoritative inventory (E0.4). */
   sendInventoryOp(op: InventoryOp): void;
+  /** E5.3 trading — every mutation is an intent; `onTradeState` (via
+   *  `attachWorld`) is the only path a trade UI ever updates from. */
+  sendTradePropose(targetPeerId: string): void;
+  sendTradeOffer(tradeId: string, offer: readonly TradeStackWire[]): void;
+  sendTradeConfirm(tradeId: string): void;
+  sendTradeCancel(tradeId: string): void;
   dispose(): void;
 }
 
@@ -303,6 +316,7 @@ export function createJoinNet(code: string, opts: JoinNetOptions = {}): JoinNetH
     readonly onHostReturned?: () => void;
     readonly onInventoryState?: (wire: SerializedInventoryWire) => void;
     readonly chat?: ChatUiPort | null;
+    readonly onTradeState?: (state: TradeStateMsg) => void;
   } | null = null;
   let applyingRemote = false;
   // an inventoryState can arrive before attachWorld (right after join, while
@@ -372,6 +386,7 @@ export function createJoinNet(code: string, opts: JoinNetOptions = {}): JoinNetH
     // E5.5: a host-resolved, already-filtered chat message — the ONLY path
     // this joiner's chat UI ever receives text from.
     onChatMessage: (msg: ChatMessage): void => world?.chat?.receiveMessage(msg),
+    onTradeState: (state: TradeStateMsg): void => world?.onTradeState?.(state),
   };
 
   // trystero peers appear seconds after joinRoom, in no particular order in a
@@ -429,6 +444,7 @@ export function createJoinNet(code: string, opts: JoinNetOptions = {}): JoinNetH
         ...(deps.onHostReturned ? { onHostReturned: deps.onHostReturned } : {}),
         ...(deps.onInventoryState ? { onInventoryState: deps.onInventoryState } : {}),
         ...(deps.chat ? { chat: deps.chat } : {}),
+        ...(deps.onTradeState ? { onTradeState: deps.onTradeState } : {}),
       };
       world = attached;
       // joiner: chat submissions become `chat` intents (E5.5) — the host is
@@ -504,6 +520,18 @@ export function createJoinNet(code: string, opts: JoinNetOptions = {}): JoinNetH
     },
     sendInventoryOp(op): void {
       session?.sendInventoryOp(op);
+    },
+    sendTradePropose(targetPeerId): void {
+      session?.sendTradePropose(targetPeerId);
+    },
+    sendTradeOffer(tradeId, offer): void {
+      session?.sendTradeOffer(tradeId, offer);
+    },
+    sendTradeConfirm(tradeId): void {
+      session?.sendTradeConfirm(tradeId);
+    },
+    sendTradeCancel(tradeId): void {
+      session?.sendTradeCancel(tradeId);
     },
 
     dispose(): void {

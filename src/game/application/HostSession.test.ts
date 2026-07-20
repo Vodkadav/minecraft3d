@@ -1038,4 +1038,210 @@ describe("HostSession", () => {
       expect(carolInbox.filter((m) => (m as { kind: string }).kind === "chatMessage")).toEqual([]);
     });
   });
+
+  describe("E5.3 trading", () => {
+    function tradeSession(): { net: ReturnType<typeof makeTransportNetwork>; session: HostSession } {
+      const net2 = makeTransportNetwork();
+      const session2 = new HostSession(net2.host, () => SNAPSHOT, { onWorldEdit: () => {} }, { registry: REGISTRY });
+      return { net: net2, session: session2 };
+    }
+
+    function joinWith(
+      peer: NetTransport,
+      name: string,
+      stock: Array<{ itemId: string; count: number }>,
+    ): void {
+      const slots = Array(27).fill(null);
+      stock.forEach((s, i) => (slots[i] = s));
+      peer.broadcast({ kind: "join", playerName: name, inventory: { capacity: 27, slots } });
+    }
+
+    function tradeStateOf(inbox: unknown[]): Record<string, unknown> | undefined {
+      const msgs = inbox.filter((m) => (m as { kind: string }).kind === "tradeState");
+      return msgs.at(-1) as Record<string, unknown> | undefined;
+    }
+
+    it("propose sends tradeState to BOTH participants only, never a third peer", () => {
+      const { net: net2 } = tradeSession();
+      const alice = net2.addPeer("alice");
+      const bob = net2.addPeer("bob");
+      const carol = net2.addPeer("carol");
+      joinWith(alice, "Alice", []);
+      joinWith(bob, "Bob", []);
+      joinWith(carol, "Carol", []);
+      const aliceInbox = collect(alice);
+      const bobInbox = collect(bob);
+      const carolInbox = collect(carol);
+
+      alice.broadcast({ kind: "tradeProposeIntent", targetPeerId: "bob" });
+
+      expect(tradeStateOf(aliceInbox)).toMatchObject({ peerA: "alice", peerB: "bob", status: "negotiating" });
+      expect(tradeStateOf(bobInbox)).toMatchObject({ peerA: "alice", peerB: "bob", status: "negotiating" });
+      expect(carolInbox.filter((m) => (m as { kind: string }).kind === "tradeState")).toEqual([]);
+    });
+
+    it("rejects proposing a trade with yourself", () => {
+      const { net: net2 } = tradeSession();
+      const alice = net2.addPeer("alice");
+      joinWith(alice, "Alice", []);
+      const inbox = collect(alice);
+      alice.broadcast({ kind: "tradeProposeIntent", targetPeerId: "alice" });
+      expect(inbox.filter((m) => (m as { kind: string }).kind === "tradeState")).toEqual([]);
+    });
+
+    it("rejects a second proposal while either side already has an active trade", () => {
+      const { net: net2 } = tradeSession();
+      const alice = net2.addPeer("alice");
+      const bob = net2.addPeer("bob");
+      const carol = net2.addPeer("carol");
+      joinWith(alice, "Alice", []);
+      joinWith(bob, "Bob", []);
+      joinWith(carol, "Carol", []);
+      alice.broadcast({ kind: "tradeProposeIntent", targetPeerId: "bob" });
+      const carolInbox = collect(carol);
+      carol.broadcast({ kind: "tradeProposeIntent", targetPeerId: "bob" });
+      expect(carolInbox.filter((m) => (m as { kind: string }).kind === "tradeState")).toEqual([]);
+    });
+
+    it("offering resets confirms and echoes tradeState to both", () => {
+      const { net: net2 } = tradeSession();
+      const alice = net2.addPeer("alice");
+      const bob = net2.addPeer("bob");
+      joinWith(alice, "Alice", [{ itemId: "wood", count: 10 }]);
+      joinWith(bob, "Bob", [{ itemId: "stone", count: 5 }]);
+      alice.broadcast({ kind: "tradeProposeIntent", targetPeerId: "bob" });
+      const bobInbox = collect(bob);
+
+      alice.broadcast({
+        kind: "tradeOfferIntent",
+        tradeId: "trade:1",
+        offer: [{ itemId: "wood", count: 3 }],
+      });
+
+      expect(tradeStateOf(bobInbox)).toMatchObject({
+        offerA: [{ itemId: "wood", count: 3 }],
+        confirmedA: false,
+        confirmedB: false,
+      });
+    });
+
+    it("a confirm is rejected if the confirming peer doesn't actually have the offered stack (revalidated at confirm time)", () => {
+      const { net: net2 } = tradeSession();
+      const alice = net2.addPeer("alice");
+      const bob = net2.addPeer("bob");
+      joinWith(alice, "Alice", []); // alice has NOTHING despite offering wood below
+      joinWith(bob, "Bob", []);
+      alice.broadcast({ kind: "tradeProposeIntent", targetPeerId: "bob" });
+      alice.broadcast({
+        kind: "tradeOfferIntent",
+        tradeId: "trade:1",
+        offer: [{ itemId: "wood", count: 3 }],
+      });
+      const bobInbox = collect(bob);
+
+      alice.broadcast({ kind: "tradeConfirmIntent", tradeId: "trade:1" });
+
+      expect(tradeStateOf(bobInbox)).toBeUndefined(); // rejected silently, no state change sent
+    });
+
+    it("atomically swaps both sides' authoritative inventories once both confirm, and marks the trade completed", () => {
+      const { net: net2 } = tradeSession();
+      const alice = net2.addPeer("alice");
+      const bob = net2.addPeer("bob");
+      joinWith(alice, "Alice", [{ itemId: "wood", count: 10 }]);
+      joinWith(bob, "Bob", [{ itemId: "stone", count: 5 }]);
+      alice.broadcast({ kind: "tradeProposeIntent", targetPeerId: "bob" });
+      alice.broadcast({
+        kind: "tradeOfferIntent",
+        tradeId: "trade:1",
+        offer: [{ itemId: "wood", count: 4 }],
+      });
+      bob.broadcast({
+        kind: "tradeOfferIntent",
+        tradeId: "trade:1",
+        offer: [{ itemId: "stone", count: 2 }],
+      });
+      const aliceInbox = collect(alice);
+      const bobInbox = collect(bob);
+
+      alice.broadcast({ kind: "tradeConfirmIntent", tradeId: "trade:1" });
+      bob.broadcast({ kind: "tradeConfirmIntent", tradeId: "trade:1" });
+
+      expect(tradeStateOf(aliceInbox)).toMatchObject({ status: "completed" });
+      expect(tradeStateOf(bobInbox)).toMatchObject({ status: "completed" });
+      expect(inventoryStateOf(aliceInbox)?.slots).toContainEqual({ itemId: "wood", count: 6 });
+      expect(inventoryStateOf(aliceInbox)?.slots).toContainEqual({ itemId: "stone", count: 2 });
+      expect(inventoryStateOf(bobInbox)?.slots).toContainEqual({ itemId: "stone", count: 3 });
+      expect(inventoryStateOf(bobInbox)?.slots).toContainEqual({ itemId: "wood", count: 4 });
+    });
+
+    it("either side cancelling rolls back cleanly — nothing moved, tradeState reflects cancelled", () => {
+      const { net: net2 } = tradeSession();
+      const alice = net2.addPeer("alice");
+      const bob = net2.addPeer("bob");
+      joinWith(alice, "Alice", [{ itemId: "wood", count: 10 }]);
+      joinWith(bob, "Bob", [{ itemId: "stone", count: 5 }]);
+      alice.broadcast({ kind: "tradeProposeIntent", targetPeerId: "bob" });
+      alice.broadcast({
+        kind: "tradeOfferIntent",
+        tradeId: "trade:1",
+        offer: [{ itemId: "wood", count: 4 }],
+      });
+      const bobInbox = collect(bob);
+
+      bob.broadcast({ kind: "tradeCancelIntent", tradeId: "trade:1" });
+
+      expect(tradeStateOf(bobInbox)).toMatchObject({ status: "cancelled" });
+      // nothing debited — a fresh confirm attempt on the dead trade is a no-op
+      const bobInbox2 = collect(bob);
+      alice.broadcast({ kind: "tradeConfirmIntent", tradeId: "trade:1" });
+      expect(bobInbox2.filter((m) => (m as { kind: string }).kind === "tradeState")).toEqual([]);
+    });
+
+    it("a disconnect mid-trade cancels it and notifies the remaining peer only", () => {
+      const { net: net2 } = tradeSession();
+      const alice = net2.addPeer("alice");
+      const bob = net2.addPeer("bob");
+      joinWith(alice, "Alice", [{ itemId: "wood", count: 10 }]);
+      joinWith(bob, "Bob", [{ itemId: "stone", count: 5 }]);
+      alice.broadcast({ kind: "tradeProposeIntent", targetPeerId: "bob" });
+      const bobInbox = collect(bob);
+
+      net2.removePeer("alice");
+
+      expect(tradeStateOf(bobInbox)).toMatchObject({ status: "cancelled" });
+    });
+
+    it("frees both peers to start a new trade after cancellation", () => {
+      const { net: net2 } = tradeSession();
+      const alice = net2.addPeer("alice");
+      const bob = net2.addPeer("bob");
+      const carol = net2.addPeer("carol");
+      joinWith(alice, "Alice", []);
+      joinWith(bob, "Bob", []);
+      joinWith(carol, "Carol", []);
+      alice.broadcast({ kind: "tradeProposeIntent", targetPeerId: "bob" });
+      alice.broadcast({ kind: "tradeCancelIntent", tradeId: "trade:1" });
+
+      const carolInbox = collect(carol);
+      carol.broadcast({ kind: "tradeProposeIntent", targetPeerId: "bob" });
+      expect(tradeStateOf(carolInbox)).toMatchObject({ peerA: "carol", peerB: "bob", status: "negotiating" });
+    });
+
+    it("ignores a trade intent from a non-participant peer", () => {
+      const { net: net2 } = tradeSession();
+      const alice = net2.addPeer("alice");
+      const bob = net2.addPeer("bob");
+      const carol = net2.addPeer("carol");
+      joinWith(alice, "Alice", []);
+      joinWith(bob, "Bob", []);
+      joinWith(carol, "Carol", []);
+      alice.broadcast({ kind: "tradeProposeIntent", targetPeerId: "bob" });
+      const bobInbox = collect(bob);
+
+      carol.broadcast({ kind: "tradeConfirmIntent", tradeId: "trade:1" });
+
+      expect(bobInbox.filter((m) => (m as { kind: string }).kind === "tradeState")).toEqual([]);
+    });
+  });
 });

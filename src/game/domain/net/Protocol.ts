@@ -140,6 +140,43 @@ export interface ChatMsg {
   readonly text: string;
 }
 
+/** A claimed stack on the wire for a trade offer (E5.3) — same shape as
+ *  `InventoryStackWire`, named separately so `Trade.ts`'s own `TradeStack`
+ *  (domain) and this wire shape can evolve independently (parity with the
+ *  rest of Protocol staying decoupled from its domain modules). */
+export interface TradeStackWire {
+  readonly itemId: string;
+  readonly count: number;
+}
+
+/** Propose a trade with another connected peer — the host opens (or no-ops
+ *  if either side is already trading) a new escrow and streams `tradeState`
+ *  to both. No accept step: either side can `tradeCancelIntent` at any time,
+ *  which serves as decline (cozy: no pressure, no timers). */
+export interface TradeProposeMsg {
+  readonly kind: "tradeProposeIntent";
+  readonly targetPeerId: string;
+}
+
+/** Replace the sender's offered stacks in an active trade. Shape-checked
+ *  here; the host revalidates against the sender's REAL inventory at
+ *  confirm time, never at offer time (never trust a claimed stack). */
+export interface TradeOfferMsg {
+  readonly kind: "tradeOfferIntent";
+  readonly tradeId: string;
+  readonly offer: readonly TradeStackWire[];
+}
+
+export interface TradeConfirmMsg {
+  readonly kind: "tradeConfirmIntent";
+  readonly tradeId: string;
+}
+
+export interface TradeCancelMsg {
+  readonly kind: "tradeCancelIntent";
+  readonly tradeId: string;
+}
+
 export type JoinerMessage =
   | JoinMsg
   | PoseMsg
@@ -148,7 +185,11 @@ export type JoinerMessage =
   | InteractMsg
   | PlaceableInteractMsg
   | InventoryOpMsg
-  | ChatMsg;
+  | ChatMsg
+  | TradeProposeMsg
+  | TradeOfferMsg
+  | TradeConfirmMsg
+  | TradeCancelMsg;
 
 // ---- Host → Joiner ----
 
@@ -283,6 +324,23 @@ export interface ChatMessageMsg {
   readonly timestamp: number;
 }
 
+/** The host's resolved trade escrow (E5.3), sent — never broadcast — to
+ *  BOTH participants only (an offer is as private as an inventory). Every
+ *  `tradeProposeIntent`/`tradeOfferIntent`/`tradeConfirmIntent`/
+ *  `tradeCancelIntent`, plus the atomic-swap completion and a disconnect
+ *  rollback, all resolve to one of these. */
+export interface TradeStateMsg {
+  readonly kind: "tradeState";
+  readonly tradeId: string;
+  readonly peerA: string;
+  readonly peerB: string;
+  readonly offerA: readonly TradeStackWire[];
+  readonly offerB: readonly TradeStackWire[];
+  readonly confirmedA: boolean;
+  readonly confirmedB: boolean;
+  readonly status: "negotiating" | "completed" | "cancelled";
+}
+
 export type HostMessage =
   | WelcomeMsg
   | PeerPoseMsg
@@ -295,7 +353,8 @@ export type HostMessage =
   | PlaceableStateMsg
   | InventoryStateMsg
   | GroundItemsMsg
-  | ChatMessageMsg;
+  | ChatMessageMsg
+  | TradeStateMsg;
 
 export type NetMessage = JoinerMessage | HostMessage;
 
@@ -471,6 +530,27 @@ function isGroundItemEntity(v: unknown): v is GroundItemEntity {
   );
 }
 
+/** Small cap on offered stacks per side (E5.3) — mirrors `Trade.ts`'s own
+ *  `MAX_TRADE_OFFER_STACKS`, kept a literal here (not imported) so `Protocol`
+ *  stays decoupled from the domain module it validates for, matching every
+ *  other wire cap in this file. */
+const MAX_WIRE_TRADE_OFFER_STACKS = 8;
+/** Generous cap on a peerId/tradeId string — bounded so a hostile peer can't
+ *  pad a trade intent, never a real-world ceiling. */
+const MAX_WIRE_ID_LEN = 64;
+
+function isBoundedId(v: unknown, maxLen: number): v is string {
+  return isStr(v) && v.length > 0 && v.length <= maxLen;
+}
+
+function isTradeStackWire(v: unknown): v is { itemId: string; count: number } {
+  return isRecord(v) && isWireItemId(v.itemId) && isWireCount(v.count);
+}
+
+function isTradeOffer(v: unknown): v is readonly { itemId: string; count: number }[] {
+  return Array.isArray(v) && v.length <= MAX_WIRE_TRADE_OFFER_STACKS && v.every(isTradeStackWire);
+}
+
 function isCreatureEntity(v: unknown): v is CreatureEntity {
   return (
     isRecord(v) &&
@@ -507,6 +587,19 @@ const VALIDATORS: Record<string, (m: Record<string, unknown>) => boolean> = {
   placeableState: (m) => isStr(m.placeableId) && "state" in m,
   inventoryOp: (m) => isInventoryOp(m.inventoryOp),
   inventoryState: (m) => isSerializedInventoryWire(m),
+  tradeProposeIntent: (m) => isBoundedId(m.targetPeerId, MAX_WIRE_ID_LEN),
+  tradeOfferIntent: (m) => isBoundedId(m.tradeId, MAX_WIRE_ID_LEN) && isTradeOffer(m.offer),
+  tradeConfirmIntent: (m) => isBoundedId(m.tradeId, MAX_WIRE_ID_LEN),
+  tradeCancelIntent: (m) => isBoundedId(m.tradeId, MAX_WIRE_ID_LEN),
+  tradeState: (m) =>
+    isBoundedId(m.tradeId, MAX_WIRE_ID_LEN) &&
+    isBoundedId(m.peerA, MAX_WIRE_ID_LEN) &&
+    isBoundedId(m.peerB, MAX_WIRE_ID_LEN) &&
+    isTradeOffer(m.offerA) &&
+    isTradeOffer(m.offerB) &&
+    typeof m.confirmedA === "boolean" &&
+    typeof m.confirmedB === "boolean" &&
+    (m.status === "negotiating" || m.status === "completed" || m.status === "cancelled"),
   welcome: (m) =>
     isNum(m.seed) &&
     isStr(m.worldId) &&

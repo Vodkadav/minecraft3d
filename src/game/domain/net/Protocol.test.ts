@@ -113,6 +113,22 @@ const HAPPY: NetMessage[] = [
     channel: "say",
     timestamp: 1000,
   },
+  { kind: "tradeProposeIntent", targetPeerId: "bob" },
+  { kind: "tradeOfferIntent", tradeId: "trade:1", offer: [{ itemId: "wood", count: 4 }] },
+  { kind: "tradeOfferIntent", tradeId: "trade:1", offer: [] },
+  { kind: "tradeConfirmIntent", tradeId: "trade:1" },
+  { kind: "tradeCancelIntent", tradeId: "trade:1" },
+  {
+    kind: "tradeState",
+    tradeId: "trade:1",
+    peerA: "alice",
+    peerB: "bob",
+    offerA: [{ itemId: "wood", count: 4 }],
+    offerB: [],
+    confirmedA: true,
+    confirmedB: false,
+    status: "negotiating",
+  },
 ];
 
 describe("parseMessage — happy paths", () => {
@@ -273,6 +289,37 @@ describe("parseMessage — malformed input is an error value", () => {
       channel: "say",
       timestamp: 1,
     }, // over the wire cap
+    { kind: "tradeProposeIntent" }, // missing targetPeerId
+    { kind: "tradeProposeIntent", targetPeerId: "" }, // empty
+    { kind: "tradeProposeIntent", targetPeerId: 7 }, // wrong type
+    { kind: "tradeOfferIntent", tradeId: "t:1" }, // missing offer
+    { kind: "tradeOfferIntent", tradeId: "", offer: [] }, // empty tradeId
+    {
+      kind: "tradeOfferIntent",
+      tradeId: "t:1",
+      offer: [{ itemId: "wood", count: 0 }],
+    }, // non-positive count
+    {
+      kind: "tradeOfferIntent",
+      tradeId: "t:1",
+      offer: Array.from({ length: 9 }, (_, i) => ({ itemId: `item${i}`, count: 1 })),
+    }, // over the 8-stack cap
+    { kind: "tradeConfirmIntent" }, // missing tradeId
+    { kind: "tradeConfirmIntent", tradeId: "" }, // empty
+    { kind: "tradeCancelIntent" }, // missing tradeId
+    { kind: "tradeCancelIntent", tradeId: 7 }, // wrong type
+    { kind: "tradeState", tradeId: "t:1" }, // missing everything else
+    {
+      kind: "tradeState",
+      tradeId: "t:1",
+      peerA: "alice",
+      peerB: "bob",
+      offerA: [],
+      offerB: [],
+      confirmedA: true,
+      confirmedB: false,
+      status: "exploding", // unknown status
+    },
   ];
 
   it.each(BAD.map((m) => [JSON.stringify(m) ?? String(m), m] as const))(

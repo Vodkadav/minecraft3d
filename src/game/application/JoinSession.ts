@@ -14,6 +14,8 @@ import type {
   InventoryOp,
   PlaceableAction,
   SerializedInventoryWire,
+  TradeStackWire,
+  TradeStateMsg,
   WelcomeMsg,
   WorldEdit,
 } from "../domain/net/Protocol";
@@ -47,6 +49,11 @@ export interface JoinSessionHooks {
    *  this joiner's chat UI ever receives text from; it is never mutated or
    *  displayed from anything else. NEVER logged. */
   onChatMessage?(msg: ChatMessage): void;
+  /** The host's resolved trade escrow (E5.3) — sent only when THIS joiner is
+   *  one of the two participants. A joiner NEVER mutates a trade locally
+   *  (offer/confirm/cancel are intents); this is the only path its trade UI
+   *  updates from. */
+  onTradeState?(state: TradeStateMsg): void;
 }
 
 export class JoinSession {
@@ -120,6 +127,9 @@ export class JoinSession {
             timestamp: msg.timestamp,
           });
           return;
+        case "tradeState":
+          hooks.onTradeState?.(msg);
+          return;
         default:
           // Joiner-intent kinds arriving at a joiner: not ours to handle.
           return;
@@ -167,5 +177,23 @@ export class JoinSession {
    *  leaves the process). */
   sendChat(text: string, channel: ChatChannel): void {
     this.transport.broadcast({ kind: "chat", channel, text });
+  }
+
+  /** E5.3 trading — every mutation is an intent the host resolves; this
+   *  session never mutates a trade locally, only `onTradeState` does. */
+  sendTradePropose(targetPeerId: string): void {
+    this.transport.broadcast({ kind: "tradeProposeIntent", targetPeerId });
+  }
+
+  sendTradeOffer(tradeId: string, offer: readonly TradeStackWire[]): void {
+    this.transport.broadcast({ kind: "tradeOfferIntent", tradeId, offer });
+  }
+
+  sendTradeConfirm(tradeId: string): void {
+    this.transport.broadcast({ kind: "tradeConfirmIntent", tradeId });
+  }
+
+  sendTradeCancel(tradeId: string): void {
+    this.transport.broadcast({ kind: "tradeCancelIntent", tradeId });
   }
 }
