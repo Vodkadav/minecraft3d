@@ -39,6 +39,10 @@ export const HUD_STYLES: readonly HudStyle[] = ["bars", "orbs"];
 export const TEXT_SCALE_MIN = 0.8;
 export const TEXT_SCALE_MAX = 2.0;
 
+// ---- E4.3: autoloot radius bounds (metres) ----
+export const AUTOLOOT_RADIUS_MIN_M = 1;
+export const AUTOLOOT_RADIUS_MAX_M = 15;
+
 export interface Settings {
   readonly graphicsPreset: GraphicsPreset;
   /** Normalized 0..1; feeds M5 spawn density. */
@@ -68,6 +72,10 @@ export interface Settings {
   readonly nameplatePlayers: boolean;
   /** Vitals HUD presentation (E2.1); defaults to "bars". */
   readonly hudStyle: HudStyle;
+  // ---- E4.3: autoloot ----
+  readonly autolootEnabled: boolean;
+  /** Metres; AUTOLOOT_RADIUS_MIN..MAX_M. */
+  readonly autolootRadiusM: number;
 }
 
 /** Mutable/plain shape accepted by the factory before validation. */
@@ -92,6 +100,8 @@ export type SettingsInput = {
   readonly nameplateTamed: boolean;
   readonly nameplatePlayers: boolean;
   readonly hudStyle: HudStyle;
+  readonly autolootEnabled: boolean;
+  readonly autolootRadiusM: number;
 };
 
 export type SettingsError =
@@ -103,7 +113,8 @@ export type SettingsError =
   | { readonly kind: "UnknownDifficulty"; readonly value: string }
   | { readonly kind: "DayLengthOutOfRange"; readonly value: number }
   | { readonly kind: "UnknownNameplateMode"; readonly value: string }
-  | { readonly kind: "UnknownHudStyle"; readonly value: string };
+  | { readonly kind: "UnknownHudStyle"; readonly value: string }
+  | { readonly kind: "AutolootRadiusOutOfRange"; readonly value: number };
 
 function isGraphicsPreset(value: string): value is GraphicsPreset {
   return (GRAPHICS_PRESETS as readonly string[]).includes(value);
@@ -169,6 +180,13 @@ export function makeSettings(input: SettingsInput): Result<Settings, SettingsErr
   if (!isHudStyle(input.hudStyle)) {
     return err({ kind: "UnknownHudStyle", value: String(input.hudStyle) });
   }
+  if (
+    !Number.isFinite(input.autolootRadiusM) ||
+    input.autolootRadiusM < AUTOLOOT_RADIUS_MIN_M ||
+    input.autolootRadiusM > AUTOLOOT_RADIUS_MAX_M
+  ) {
+    return err({ kind: "AutolootRadiusOutOfRange", value: input.autolootRadiusM });
+  }
   return ok({
     graphicsPreset: input.graphicsPreset,
     animalDensity: input.animalDensity,
@@ -190,6 +208,8 @@ export function makeSettings(input: SettingsInput): Result<Settings, SettingsErr
     nameplateTamed: input.nameplateTamed,
     nameplatePlayers: input.nameplatePlayers,
     hudStyle: input.hudStyle,
+    autolootEnabled: input.autolootEnabled,
+    autolootRadiusM: input.autolootRadiusM,
   });
 }
 
@@ -219,6 +239,10 @@ export function defaultSettings(): Settings {
     nameplateTamed: true,
     nameplatePlayers: true,
     hudStyle: "bars",
+    // Cozy default: autoloot ON with a comfortable walk-up radius — kids
+    // shouldn't need to discover a toggle to get the "walk over it" feel.
+    autolootEnabled: true,
+    autolootRadiusM: 3,
   };
 }
 

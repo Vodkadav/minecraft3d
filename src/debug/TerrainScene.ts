@@ -39,6 +39,7 @@ import {
 } from '../voxel/placement/PlaceableInteractionTool';
 import { attachTreasureField } from '../voxel/treasure/TreasureField';
 import { attachSpawnField } from '../spawn/SpawnFieldView';
+import { attachGroundItemField } from '../spawn/GroundItemField';
 import { DEFAULT_BANK_OPTIONS, mountGameHud } from '../spawn/GameHud';
 import { BankPersistence } from '../game/application/BankPersistence';
 import { IndexedDbAccountStore } from '../game/infrastructure/persistence/IndexedDbAccountStore';
@@ -866,6 +867,10 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
       onPlayerHit: (amount) => applyPlayerDamage(amount),
       setMoveSpeedScale: (s) => ctx.hooks.setMoveSpeedScale?.(s),
       onLoot: (stacks) => hud.addLoot(stacks),
+      // E0.5: a creature kill's loot drops on the ground instead of an
+      // instant grant — `groundItems` is declared just below, but this
+      // closure only runs from a later frame update, well after that.
+      onDropLoot: (stacks, position) => groundItems.spawnDrop(stacks, position),
       onProgress: (event) => hud.recordProgress(event),
       onCombatEvent: (kind, amount) => recordCombatEvent(kind, amount),
       canAttack: () => canAttackSurvival(survival),
@@ -917,6 +922,23 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
       isHovered: (id) => spawns.hoveredCreatureId === id,
       isInCombat: () => spawns.inCombat,
     });
+    // E0.5/E4.3: ground-drop loot field — host-owned (streamed like spawns),
+    // manual pickup (X) + autoloot both credit the local HUD inventory
+    // directly here (host/solo) or become intents for the net glue (joiner).
+    const groundItems = attachGroundItemField({
+      parent: engine.scene,
+      ground: { heightAt: (x, z) => hf.heightAtCpu(x, z) },
+      getPlayerXZ: () => [engine.camera.position.x, engine.camera.position.z],
+      dom: engine.renderer.domElement,
+      tryLocalPickup: (itemId, count) => hud.tryPickup(itemId, count),
+      getAutolootSettings: () => ({
+        enabled: settings.settings.autolootEnabled,
+        radiusM: settings.settings.autolootRadiusM,
+      }),
+      getInventory: () => hud.inventory,
+      onBagFull: () => hud.toast('hud.toast.bagFull'),
+    });
+    if (ctx.world) ctx.world.groundItems = groundItems; // M7.x net glue streams drops here
     // creature-sync probe seam (tools/net-probe.ts)
     (window as unknown as { __laasDbg?: Record<string, unknown> }).__laasDbg = Object.assign(
       (window as unknown as { __laasDbg?: Record<string, unknown> }).__laasDbg ?? {},
@@ -938,6 +960,7 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
     let meterRenderAcc = 0;
     engine.onUpdate((dt) => {
       spawns.update(dt);
+      groundItems.update(dt);
       if (meterPanel.visible) {
         meterRenderAcc += dt;
         if (meterRenderAcc >= METER_RENDER_INTERVAL_S) {

@@ -174,6 +174,11 @@ export interface GameHudHandle {
    *  deposit/withdraw and cook/harvest grants go through this, not addLoot,
    *  when the composition root already owns the resulting Inventory. */
   setInventory(next: Inventory): void;
+  /** Ground-item pickup (E0.5/E4.3) — unlike `addLoot`'s silent-cap grant,
+   *  this is all-or-nothing: returns false WITHOUT mutating anything when the
+   *  stack doesn't fully fit, so the caller (host/solo's local pickup path)
+   *  leaves the drop on the ground instead of losing it. */
+  tryPickup(itemId: string, count: number): boolean;
   /** The item id in the currently-selected hotbar slot, or null if empty
    *  (S7b: farming plant reads the selected seed from here). */
   selectedHotbarItemId(): string | null;
@@ -456,6 +461,18 @@ export function mountGameHud(opts: GameHudOptions): GameHudHandle {
       hotbar.render(inventory);
       inventoryScreen.setInventory(inventory);
       bankScreen.setPlayerInventory(inventory);
+    },
+    tryPickup(itemId: string, count: number): boolean {
+      const added = inventory.add(itemId, count);
+      if (!isOk(added)) return false;
+      inventory = added.value;
+      const def = registry.get(itemId);
+      const name = isOk(def) ? def.value.displayName : itemId;
+      toasts.push("hud.toast.loot", { name, count }, LOOT_TOAST_TTL_MS);
+      hotbar.render(inventory);
+      inventoryScreen.setInventory(inventory);
+      if (isOk(def) && def.value.food) showKeyhint("eat", "H");
+      return true;
     },
     selectedHotbarItemId(): string | null {
       return inventory.slots[hotbar.selected]?.itemId ?? null;

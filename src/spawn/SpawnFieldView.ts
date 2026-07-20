@@ -121,8 +121,16 @@ export interface SpawnFieldDeps {
    *  audio/feel/progress; never routed through the intent path, this is
    *  local presentation state only). */
   onCombatEvent?(kind: "hitDealt" | "hitTaken" | "kill", amount: number): void;
-  /** Called with the stacks gained from a kill/harvest (HUD hook). */
+  /** Called with the stacks gained from a harvest (HUD hook — instant grant,
+   *  unchanged). A creature kill's loot goes through `onDropLoot` instead
+   *  (E0.5: ground drops, not an instant grant — see its doc comment). */
   onLoot?(stacks: readonly ItemStack[]): void;
+  /** E0.5: a creature death's loot roll, to be dropped on the ground at the
+   *  kill position rather than granted directly — fixes a pre-E0.5 gap where
+   *  the HOST resolving a JOINER's kill (via `applyInteract`) credited the
+   *  HOST's own `onLoot`, not the joiner's. A ground drop is actor-agnostic:
+   *  whoever interacts with it picks it up, host-authoritatively. */
+  onDropLoot?(stacks: readonly ItemStack[], position: readonly [number, number, number]): void;
   /** An aggressive creature bit the player (M6 player health). */
   onPlayerHit?(amount: number): void;
   /** Set the player's walk-speed multiplier (mount boost; 1 = on foot). */
@@ -562,7 +570,8 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
     if (!r.died) return false;
     deps.feel?.trigger("kill", { worldPos: pos, numberValue: attackDamage, crit });
     const roll = hashUnitFloat(deps.seed, clockMs | 0, 0x6f00);
-    grantLoot(scaleStacks(lootFor(target.entity.species, roll), deps.lootMult?.() ?? 1));
+    const drop = scaleStacks(lootFor(target.entity.species, roll), deps.lootMult?.() ?? 1);
+    if (drop.length > 0) deps.onDropLoot?.(drop, pos);
     persistRemoved(target.entity.id);
     if (tamed.delete(target.entity.id)) deps.save?.setEntity("taming.tamed", [...tamed]);
     if (ridingId === target.entity.id) setRiding(null);

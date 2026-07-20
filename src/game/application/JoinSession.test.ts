@@ -87,6 +87,18 @@ describe("JoinSession", () => {
     expect(onCreatures).toHaveBeenCalledExactlyOnceWith(entities);
   });
 
+  it("surfaces a host groundItems snapshot via onGroundItems", () => {
+    const net = makeTransportNetwork();
+    new HostSession(net.host, () => SNAPSHOT, { onWorldEdit: () => {} });
+    const onGroundItems = vi.fn();
+    new JoinSession(net.addPeer("alice"), "Alice", { onGroundItems });
+
+    const entities = [{ id: "loot:1", itemId: "wood", count: 3, x: 1, y: 0, z: 2 }];
+    net.host.send("alice", { kind: "groundItems", entities });
+
+    expect(onGroundItems).toHaveBeenCalledExactlyOnceWith(entities);
+  });
+
   it("sendInteract reaches the host's onInteract hook, tagged with the sender", () => {
     const net = makeTransportNetwork();
     const interacts: Array<[string, string, string]> = [];

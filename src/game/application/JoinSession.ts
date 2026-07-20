@@ -9,6 +9,7 @@
 import { isErr } from "../domain/Result";
 import type {
   CreatureEntity,
+  GroundItemEntity,
   InteractAction,
   InventoryOp,
   PlaceableAction,
@@ -26,6 +27,9 @@ export interface JoinSessionHooks {
   onWorldEdit?(edit: WorldEdit): void;
   onEntityRemoved?(id: string): void;
   onCreatures?(entities: readonly CreatureEntity[]): void;
+  /** The host's full active ground-drop set (E0.5) — same full-set-stream
+   *  contract as `onCreatures`. */
+  onGroundItems?(entities: readonly GroundItemEntity[]): void;
   onPeerJoined?(peerId: string, playerName: string): void;
   onPeerLeft?(peerId: string): void;
   onHostClosing?(): void;
@@ -83,6 +87,9 @@ export class JoinSession {
           return;
         case "creatures":
           hooks.onCreatures?.(msg.entities);
+          return;
+        case "groundItems":
+          hooks.onGroundItems?.(msg.entities);
           return;
         case "peerJoined":
           hooks.onPeerJoined?.(msg.peerId, msg.playerName);

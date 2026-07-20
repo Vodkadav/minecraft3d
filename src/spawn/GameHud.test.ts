@@ -40,6 +40,26 @@ describe("mountGameHud", () => {
     hud.dispose();
   });
 
+  it("tryPickup adds the stack, toasts it, and returns true (E0.5)", () => {
+    const hud = mountGameHud({ loc: createLocalizer("en"), registry: registry() });
+    const applied = hud.tryPickup("wood", 3);
+    expect(applied).toBe(true);
+    expect(hud.inventory.count("wood")).toBe(3);
+    expect(document.querySelector(".lw-toast-region")?.textContent).toContain("Wood");
+    hud.dispose();
+  });
+
+  it("tryPickup returns false and mutates nothing when the bag is completely full", () => {
+    const hud = mountGameHud({ loc: createLocalizer("en"), registry: registry() });
+    hud.addLoot([{ itemId: "stone", count: 27 * 64 }]); // fills every one of the 27 slots
+    const before = hud.inventory;
+    const applied = hud.tryPickup("wood", 1);
+    expect(applied).toBe(false);
+    expect(hud.inventory).toBe(before);
+    expect(hud.inventory.count("wood")).toBe(0);
+    hud.dispose();
+  });
+
   it("setCrosshairState reflects onto the mounted crosshair", () => {
     const hud = mountGameHud({ loc: createLocalizer("en"), registry: registry() });
     hud.setCrosshairState("mine");

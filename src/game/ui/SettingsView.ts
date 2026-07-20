@@ -11,6 +11,8 @@ import type { Localizer } from "../application/i18n/Localizer";
 import type { SettingsController } from "../application/SettingsController";
 import type { AudioPort } from "../application/ports/AudioPort";
 import {
+  AUTOLOOT_RADIUS_MAX_M,
+  AUTOLOOT_RADIUS_MIN_M,
   GRAPHICS_PRESETS,
   HUD_STYLES,
   TEXT_SCALE_MAX,
@@ -274,6 +276,25 @@ export function SettingsView(
     s.nameplatePlayers,
     (v) => apply({ nameplatePlayers: v }),
   );
+
+  // ---- E4.3: autoloot (self-contained block — keep additions here scoped
+  // to avoid merge friction with concurrent settings work) ----
+  const autoloot = doc.createElement("input");
+  autoloot.type = "checkbox";
+  autoloot.checked = s.autolootEnabled;
+  autoloot.addEventListener("change", () => apply({ autolootEnabled: autoloot.checked }));
+  field(doc, root, "laas-autoloot", loc.t("settings.autoloot"), autoloot);
+
+  const autolootRadius = doc.createElement("input");
+  autolootRadius.type = "number";
+  autolootRadius.min = String(AUTOLOOT_RADIUS_MIN_M);
+  autolootRadius.max = String(AUTOLOOT_RADIUS_MAX_M);
+  autolootRadius.step = "1";
+  autolootRadius.value = String(s.autolootRadiusM);
+  autolootRadius.addEventListener("change", () =>
+    apply({ autolootRadiusM: Number(autolootRadius.value) }),
+  );
+  field(doc, root, "laas-autoloot-radius", loc.t("settings.autolootRadius"), autolootRadius);
 
   // Back
   const back = doc.createElement("button");
