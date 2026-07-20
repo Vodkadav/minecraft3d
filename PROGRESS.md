@@ -241,6 +241,41 @@ slice (E7.0 protocol growth, E7.2–E7.6).
   single-roll (domain/loot/LootTable.ts + CreatureLootPools.ts, reward items) — merged 7879ab4
 - [ ] Combat playtest gate (structured session — owner schedules)
 
+## UI/UX (E8)
+
+UI/UX overhaul wave (plan: [`docs/UX_PLAN.md`](docs/UX_PLAN.md)): window chrome + procedural
+backgrounds, richer iconography, rich item tooltips, context menus, input/chat polish, menus/lobby/
+settings restyle, HUD cohesion, accessibility/colorblind pass. Reuse-first: upgrades the existing
+token layer + shared components so all ~18 existing screens inherit the new look. Architecture
+decision: ADR 0005. Mandatory `claude-infra:security` review for E8.5's chat item-links (the one
+wire-touching slice).
+
+- [ ] E8.0 Visual-language contract: rarity color scale + surface elevation tokens, window-chrome
+  spec, panel-background recipe, colorblind rarity alt palette (`ui/theme/tokens.ts`, types/tokens
+  only, no behavior change)
+- [ ] E8.1 Window chrome & procedural backgrounds: `WindowFrame` shared overlay shell; every overlay
+  screen migrates onto it; layered-gradient + SVG-noise panel backgrounds replace flat rectangles
+- [ ] E8.2 Iconography v2: authored per-category glyph paths, rarity frame ring, overlay badges
+  (equipped/new/qty); `PanelEmblem` grows into a per-screen emblem library + party/faction crest
+- [ ] E8.3 Rich tooltip system: pure `domain/ui/TooltipModel.ts` item-card model + `RichTooltip`
+  component (hover/keyboard-focus/touch long-press), replacing single-line hovers for items
+- [ ] E8.4 Context menus: pure `domain/ui/ItemActions.ts` action list + `ContextMenu` component
+  (mouse right-click / keyboard / touch long-press), replacing the `InventoryGrid` split-only handler
+- [ ] E8.5 Inputs & chat polish: shared `Field.ts` input primitive; chat gains rarity-colored item
+  links, channel pills, unread badge, kid-safe canned emote palette — security-reviewed (wire-touching)
+- [ ] E8.6 Menus, lobby & settings overhaul: `MainMenuView`/`LobbyView`/`SettingsView`/
+  `CreditsScreen`/`LoadingScreen` restyle onto E8.1 chrome; Settings UI category; lobby becomes the
+  "play together" surface
+- [ ] E8.7 HUD cohesion & action bar: unify hotbar/vitals/minimap/objective/party/combat-meter;
+  togglable ability/consumable action bar; gentle buff/effect strip; toasts restyled
+- [ ] E8.8 Accessibility, responsive & colorblind pass: wire `--lw-*` tokens under
+  `[data-high-contrast="true"]` (closes the recorded gap); ship colorblind rarity palette; full
+  keyboard nav + ARIA for chrome/tooltip/menu; mobile layouts
+- [ ] UI/UX visual-QA pass (aerial/close screenshots scored against the cozy-tone + a11y checklist:
+  rarity legible + colorblind-safe, no empty panels, AA contrast, shape-not-color-only,
+  reduced-motion honored)
+- [ ] UI/UX playtest gate (structured session — owner schedules)
+
 ## Notes
 
 - Prime directive: never regress the finished desktop LAAS render — all new work is additive and

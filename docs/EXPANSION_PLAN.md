@@ -20,6 +20,12 @@ status: the `## Expansion` checklist in [`PROGRESS.md`](../PROGRESS.md).
 - **Amended 2026-07-20 (owner decision, ADR 0004):** cozy whimsical abilities are allowed — the
   E7 combat wave adds spells/AoE/traps under the same charter: additive-only power, no debuff
   builds, celebratory VFX, no gore. See [`COMBAT_PLAN.md`](COMBAT_PLAN.md).
+- **Amended 2026-07-20 (owner decision, program E8–E11):** RPG depth is bounded cozy rarity +
+  affixes — rarity tiers with color frames, an equip system, additive-only affixes, **no
+  durability, no item loss, no debuff webs, no gambling framing**. Charter-compatible, recorded
+  here as the single source of truth; the fuller item-instance/rarity/affix/equipment ADR is
+  **0006** (forthcoming, lands with the E9 itemization wave). See [`UX_PLAN.md`](UX_PLAN.md) (E8)
+  for the visual-language groundwork this depends on.
 
 ## Phases
 
