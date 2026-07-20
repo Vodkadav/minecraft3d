@@ -151,11 +151,15 @@ ${THEME_CSS_VARS}
   display: flex;
   align-items: center;
   gap: var(--lw-space-2);
-  background: var(--lw-bg-panel);
+  /* E8.7 cohesion: surface-2 + ornament border + a panel-family shadow (was
+     flat bg-panel/border), matching .lw-hotbar-slot/.lw-minimap; the accent
+     left-border stays as the toast's own severity/kind signal. */
+  background: var(--lw-surface-2);
   color: var(--lw-fg);
-  border: 1px solid var(--lw-border);
+  border: 1px solid var(--lw-ornament);
   border-left: 4px solid var(--lw-accent);
   border-radius: var(--lw-radius-md);
+  box-shadow: 0 1px 0 rgba(255,255,255,0.05) inset, 0 10px 24px -12px rgba(0,0,0,0.6);
   padding: var(--lw-space-2) var(--lw-space-3);
   font-size: var(--lw-font-sm);
   min-width: 200px;
@@ -384,9 +388,13 @@ ${THEME_CSS_VARS}
   height: 48px;
   min-width: 48px;
   min-height: 48px;
-  background: var(--lw-bg-panel);
-  border: 2px solid var(--lw-border);
+  /* E8.7 cohesion: surface-2 + ornament border (was flat bg-panel/border) so
+     hotbar slots read as the same elevated-panel family as .lw-panel/.lw-toast/
+     the new .lw-action-slot, instead of a separate flat look. */
+  background: var(--lw-surface-2);
+  border: 2px solid var(--lw-ornament);
   border-radius: var(--lw-radius-md);
+  box-shadow: 0 1px 0 rgba(255,255,255,0.05) inset, 0 4px 10px -6px rgba(0,0,0,0.6);
   color: var(--lw-fg);
   font-size: var(--lw-font-xs);
   display: flex;
@@ -1292,7 +1300,10 @@ ${THEME_CSS_VARS}
   width: 160px;
   height: 160px;
   border-radius: var(--lw-radius-lg);
-  border: 2px solid var(--lw-border);
+  /* E8.7 cohesion: ornament border (was --lw-border) + a panel-family shadow,
+     matching .lw-hotbar-slot/.lw-toast/.lw-objective-tracker's frame language. */
+  border: 2px solid var(--lw-ornament);
+  box-shadow: 0 1px 0 rgba(255,255,255,0.05) inset, 0 4px 10px -6px rgba(0,0,0,0.6);
   background: var(--lw-bg-track);
   overflow: hidden;
   z-index: 20;
@@ -1641,6 +1652,155 @@ ${THEME_CSS_VARS}
 }
 .lw-context-menu-item[aria-disabled="true"]:hover {
   background: transparent;
+}
+
+/* ===== E8.7 HUD cohesion ===== */
+
+/* ActionBar (E8.7) — opt-in, N-toggled, OFF by default; a second row that
+   sits directly above the hotbar and deliberately echoes its slot language
+   (same size/radius/surface tokens as .lw-hotbar-slot) so the two read as
+   one family. The outer .lw-panel gives it the same E8.1 procedural
+   background/shadow every other chrome-bearing HUD panel already has. */
+.lw-action-bar {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--lw-space-6) + 64px);
+  transform: translateX(-50%);
+  z-index: 20;
+  padding: var(--lw-space-2) var(--lw-space-3);
+}
+.lw-action-bar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--lw-space-2);
+  margin-bottom: var(--lw-space-1);
+}
+.lw-action-bar-title {
+  font-size: var(--lw-font-xs);
+  font-weight: 700;
+  color: var(--lw-fg-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.lw-action-bar-slots {
+  display: flex;
+  gap: var(--lw-space-1);
+}
+.lw-action-slot {
+  position: relative;
+  width: 48px;
+  height: 48px;
+  min-width: 48px;
+  min-height: 48px;
+  background: var(--lw-surface-2);
+  border: 2px solid var(--lw-ornament);
+  border-radius: var(--lw-radius-md);
+  box-shadow: 0 1px 0 rgba(255,255,255,0.05) inset, 0 4px 10px -6px rgba(0,0,0,0.6);
+  color: var(--lw-fg);
+  font-size: var(--lw-font-xs);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  overflow: hidden;
+  padding: var(--lw-space-1);
+  cursor: pointer;
+}
+.lw-action-slot[data-kind="ability"] {
+  border-color: var(--lw-accent);
+}
+.lw-action-slot-key {
+  position: absolute;
+  top: 1px;
+  left: 3px;
+  font-size: 0.6rem;
+  color: var(--lw-fg-muted);
+  z-index: 1;
+}
+.lw-action-slot-name {
+  font-size: 0.55rem;
+  line-height: 1.15;
+  color: var(--lw-fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+}
+.lw-action-slot .lw-item-icon {
+  position: absolute;
+  inset: 8px 6px 12px 6px;
+  pointer-events: none;
+}
+.lw-action-slot-count {
+  position: absolute;
+  bottom: 1px;
+  right: 3px;
+  font-size: 0.65rem;
+  color: var(--lw-fg);
+  text-shadow: 0 1px 1px #000;
+  z-index: 1;
+}
+/* Cooldown curtain: wipes down from full coverage to nothing as the ability
+   recharges (scaleY set inline from readyFraction). transform-origin: top so
+   it "empties" upward, matching AttackMeter/CastBar's fill direction sense.
+   Reduced-motion-safe for free: no transition/animation is declared here, so
+   there's nothing for the global prefers-reduced-motion rule to need to
+   suppress — the curtain only ever jumps between render() calls. */
+.lw-action-slot-cooldown {
+  position: absolute;
+  inset: 0;
+  transform-origin: top;
+  background: rgba(10, 7, 4, 0.72);
+  pointer-events: none;
+}
+
+/* BuffStrip (E8.7) — automatic (no manual toggle), hidden while empty. A
+   gentle row of small chips: muted surface tokens, no shaming/urgent color,
+   no motion beyond the theme's own reduced-motion-safe defaults. */
+.lw-buff-strip {
+  position: fixed;
+  top: var(--lw-space-4);
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: var(--lw-space-1);
+  z-index: 20;
+  pointer-events: none;
+}
+.lw-buff-chip {
+  position: relative;
+  min-width: 34px;
+  height: 30px;
+  padding: 0 var(--lw-space-1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--lw-surface-2);
+  border: 1px solid var(--lw-ornament);
+  border-radius: var(--lw-radius-sm);
+  box-shadow: 0 1px 0 rgba(255,255,255,0.05) inset, 0 4px 10px -6px rgba(0,0,0,0.6);
+  overflow: hidden;
+  pointer-events: auto;
+}
+.lw-buff-chip[data-kind="debuff"] {
+  border-color: var(--lw-danger);
+}
+.lw-buff-chip-timer {
+  position: relative;
+  z-index: 1;
+  font-size: var(--lw-font-xs);
+  font-weight: 600;
+  color: var(--lw-fg);
+  text-shadow: 0 1px 1px rgba(0,0,0,0.5);
+}
+.lw-buff-chip-fraction {
+  position: absolute;
+  inset: 0;
+  transform-origin: left;
+  background: rgba(255,255,255,0.08);
+  pointer-events: none;
 }
 `;
 
