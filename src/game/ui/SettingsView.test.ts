@@ -60,6 +60,8 @@ describe("SettingsView", () => {
       "laas-hudstyle",
       "laas-autoloot",
       "laas-autoloot-radius",
+      "laas-creature-spawn-rate",
+      "laas-resource-spawn-rate",
     ]) {
       const label = el.querySelector(`label[for="${id}"]`);
       expect(label, `label for ${id}`).toBeTruthy();
@@ -176,6 +178,30 @@ describe("SettingsView", () => {
     if (isOk(reloaded)) {
       expect(reloaded.value.autolootEnabled).toBe(false);
       expect(reloaded.value.autolootRadiusM).toBe(6);
+    }
+  });
+
+  it("defaults both spawn-rate sliders to 1 and flows changes through the controller and store (E6.6)", async () => {
+    const { el, controller, store } = await build();
+    const creatureRate = control<HTMLInputElement>(el, "laas-creature-spawn-rate");
+    const resourceRate = control<HTMLInputElement>(el, "laas-resource-spawn-rate");
+    expect(creatureRate.value).toBe("1");
+    expect(resourceRate.value).toBe("1");
+
+    creatureRate.value = "2";
+    creatureRate.dispatchEvent(new Event("change"));
+    await flush();
+    expect(controller.settings.creatureSpawnRate).toBeCloseTo(2);
+
+    resourceRate.value = "0.5";
+    resourceRate.dispatchEvent(new Event("change"));
+    await flush();
+    expect(controller.settings.resourceSpawnRate).toBeCloseTo(0.5);
+
+    const reloaded = await store.load();
+    if (isOk(reloaded)) {
+      expect(reloaded.value.creatureSpawnRate).toBeCloseTo(2);
+      expect(reloaded.value.resourceSpawnRate).toBeCloseTo(0.5);
     }
   });
 

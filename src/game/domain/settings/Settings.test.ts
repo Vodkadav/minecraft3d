@@ -33,6 +33,8 @@ function validInput(overrides: Partial<SettingsInput> = {}): SettingsInput {
     hudStyle: "bars",
     autolootEnabled: true,
     autolootRadiusM: 3,
+    creatureSpawnRate: 1,
+    resourceSpawnRate: 1,
     ...overrides,
   };
 }
@@ -257,6 +259,55 @@ describe("Settings", () => {
     if (isOk(r)) {
       expect(r.value.autolootEnabled).toBe(false);
       expect(r.value.autolootRadiusM).toBe(8);
+    }
+  });
+
+  it("defaults both spawn-rate multipliers to 1 (E6.6: no-op)", () => {
+    expect(defaultSettings().creatureSpawnRate).toBe(1);
+    expect(defaultSettings().resourceSpawnRate).toBe(1);
+  });
+
+  it("rejects a creature spawn rate below the minimum", () => {
+    const r = makeSettings(validInput({ creatureSpawnRate: 0.1 }));
+    expect(isErr(r)).toBe(true);
+    if (isErr(r)) expect(r.error.kind).toBe("CreatureSpawnRateOutOfRange");
+  });
+
+  it("rejects a creature spawn rate above the maximum", () => {
+    const r = makeSettings(validInput({ creatureSpawnRate: 5 }));
+    expect(isErr(r)).toBe(true);
+    if (isErr(r)) expect(r.error.kind).toBe("CreatureSpawnRateOutOfRange");
+  });
+
+  it("rejects a non-finite creature spawn rate", () => {
+    const r = makeSettings(validInput({ creatureSpawnRate: Number.NaN }));
+    expect(isErr(r)).toBe(true);
+    if (isErr(r)) expect(r.error.kind).toBe("CreatureSpawnRateOutOfRange");
+  });
+
+  it("rejects a resource spawn rate outside 0.25..3", () => {
+    const low = makeSettings(validInput({ resourceSpawnRate: 0.24 }));
+    const high = makeSettings(validInput({ resourceSpawnRate: 3.01 }));
+    expect(isErr(low)).toBe(true);
+    expect(isErr(high)).toBe(true);
+    if (isErr(low)) expect(low.error.kind).toBe("ResourceSpawnRateOutOfRange");
+    if (isErr(high)) expect(high.error.kind).toBe("ResourceSpawnRateOutOfRange");
+  });
+
+  it("accepts the boundary spawn-rate values", () => {
+    const r = makeSettings(validInput({ creatureSpawnRate: 0.25, resourceSpawnRate: 3 }));
+    expect(isOk(r)).toBe(true);
+  });
+
+  it("updates creatureSpawnRate/resourceSpawnRate while keeping the rest", () => {
+    const r = updateSettings(defaultSettings(), {
+      creatureSpawnRate: 2,
+      resourceSpawnRate: 0.5,
+    });
+    expect(isOk(r)).toBe(true);
+    if (isOk(r)) {
+      expect(r.value.creatureSpawnRate).toBe(2);
+      expect(r.value.resourceSpawnRate).toBe(0.5);
     }
   });
 

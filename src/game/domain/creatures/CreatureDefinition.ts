@@ -9,6 +9,8 @@
  * (CreatureRegistry.ts doc comment explains why).
  */
 
+import type { BiomeId } from "../world/BiomeId";
+
 export interface CreatureLootRule {
   readonly itemId: string;
   readonly min: number;
@@ -55,6 +57,16 @@ export interface CreatureVisual {
  */
 export type CreatureDisposition = "friendly" | "neutral" | "hostile";
 
+/**
+ * When a species is willing to spawn, relative to `domain/time/DayNight`'s
+ * `isNight` (E6.3). "always" (default when omitted) means no time gating —
+ * every creature shipped before E6.3 behaves exactly as before. Cozy: this
+ * is presentation flavor (an owl reads as a "comes out at night" species),
+ * never a danger-spike lever — nocturnal/diurnal creatures keep their normal
+ * temperament and damage.
+ */
+export type CreatureActivityWindow = "nocturnal" | "diurnal" | "always";
+
 export interface CreatureDefinition {
   readonly id: string;
   /** Spawn-field kind — always "creature" here; resource nodes are not creatures. */
@@ -71,8 +83,16 @@ export interface CreatureDefinition {
   /**
    * Model/visual reference. `id` doubles as the CreatureModelLibrary key
    * (src/spawn/CreatureModels.ts); `visual` is the primitive fallback drawn
-   * until/unless a rigged model is loaded for the species. A later slice
-   * (E6.3) adds `biomeAffinity` alongside this — left out until then.
+   * until/unless a rigged model is loaded for the species.
    */
   readonly visual: CreatureVisual;
+  /**
+   * E6.3: biomes this species is willing to spawn in (`domain/spawn/SpawnField`'s
+   * biome gate). Absent = universal (spawns in every biome, pre-E6.3
+   * behaviour) — this is the single source of truth `BiomeResources.ts`'s
+   * per-biome creature lists derive from.
+   */
+  readonly biomeAffinity?: readonly BiomeId[];
+  /** E6.3: time-of-day gate — defaults to "always" (no gating) when omitted. */
+  readonly activityWindow?: CreatureActivityWindow;
 }
