@@ -41,7 +41,7 @@ the token/primitive level is low-risk and propagates automatically.
 | Phase | Content | Status |
 |---|---|---|
 | E8.0 Visual-language contract | Rarity color scale + surface elevation tokens, window-chrome spec, panel-background recipe, colorblind rarity alt palette — types/tokens only, no behavior | ✅ Done (17b00d4) |
-| E8.1 Window chrome & procedural backgrounds | `WindowFrame` shared overlay shell; every overlay screen migrates onto it; layered-gradient + SVG-noise panel backgrounds replace flat rectangles | Pending |
+| E8.1 Window chrome & procedural backgrounds | `WindowFrame` shared overlay shell; every overlay screen migrates onto it; layered-gradient + SVG-noise panel backgrounds replace flat rectangles | ✅ Done (50b2216, 2801cca, f88daad) |
 | E8.2 Iconography v2 | Authored per-category glyph paths, rarity frame ring, overlay badges (equipped/new/qty); `PanelEmblem` grows into a per-screen emblem library + party/faction crest generator | Pending |
 | E8.3 Rich tooltip system | Pure `domain/ui/TooltipModel.ts` item-card model; `RichTooltip` component (hover/focus/long-press) replaces single-line hovers for items everywhere | Pending |
 | E8.4 Context menus | Pure `domain/ui/ItemActions.ts` action list; `ContextMenu` component (mouse/keyboard/touch), replacing the `InventoryGrid` split-only handler | Pending |
@@ -65,7 +65,24 @@ item-interaction primitives E8.5's chat links and E9's equipment tooltips reuse.
 
 ## How to add a screen/component
 
-*(Filled in as slices land — same discipline as `COMBAT_PLAN.md`'s "How to add content".)*
+**Overlay windows (E8.1+).** Build the shell with `components/WindowFrame.ts`, never a
+hand-rolled `lw-inv-header`. Pass `{ doc, title, close: { label, ariaLabel, onClose }, body }`;
+append the returned `frame.panel` into your own `role="dialog"` overlay wrapper (the wrapper,
+Escape handling, and pointer-lock release stay per-screen — they're not chrome). Optional slots:
+`emblem` (a `PanelEmblemKind`), `headerExtra` (a pre-built tab strip — you keep its state/handlers),
+`titleVisuallyHidden: true` (tab-dominant windows keep the title as the a11y heading only),
+`headerActions` (extra header buttons before close, e.g. Map's recenter), `keyhints` (footer chips).
+
+**Panels & backgrounds.** Everything themed reads `var(--lw-*)` and sits inside `.lw-panel`
+(via `Panel`/`WindowFrame`), which owns the procedural background — don't set per-panel
+`background`. New surfaces use the `--lw-surface-0..3` / `--lw-inset` elevation ramp.
+
+**Visual QA — import the real styles, never scrape them.** `THEME_CSS_VARS`/`UI_STYLES` are
+template literals with `${THEME.*}` interpolations that only resolve when the TS module is
+imported. A preview harness must `import { UI_STYLES } from ".../styles"` (run via `tsx`) — copying
+the template *source* text yields a themeless page where every `--lw-*` var is a literal `${...}`
+string (learned the hard way in E8.1). Judge panels over a *dimmed-world* backdrop, not pure black:
+overlays sit over the lit world at ~45%, so a pure-black preview reads far darker than reality.
 
 ## Security follow-ups
 

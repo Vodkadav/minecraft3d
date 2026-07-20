@@ -256,8 +256,17 @@ wire-touching slice).
   scale (`surface-0..3` + scrim/ornament/inset), `WINDOW_CHROME_SPEC` + `PANEL_BACKGROUND_RECIPE`
   typed doc-contracts, all `--lw-*` CSS vars — `ui/theme/tokens.ts`, types/tokens only, nothing
   renders them yet (wiring is E8.1+). 192-line contract test
-- [ ] E8.1 Window chrome & procedural backgrounds: `WindowFrame` shared overlay shell; every overlay
-  screen migrates onto it; layered-gradient + SVG-noise panel backgrounds replace flat rectangles
+- [x] E8.1 Window chrome & procedural backgrounds: `components/WindowFrame.ts` shared overlay shell
+  (emblem + title + optional headerExtra/tab-strip + optional headerActions + close, over body, with
+  optional footer keyhints; encodes `WINDOW_CHROME_SPEC`, doc-pure, 7 tests). All 8 overlay dialogs
+  migrated off the hand-rolled `lw-inv-header` onto it — Chest/Campfire/Trade/Research (single title),
+  Character/Bank (emblem + tab strip, sr-only title), Inventory (tab strip), Map (emblem + recenter
+  headerAction); each screen keeps its own Escape/close/tab-state logic. `.lw-panel` now renders
+  `PANEL_BACKGROUND_RECIPE` (edge vignette over static SVG fractal-noise grain over a warm
+  surface-2→surface-1 gradient + soft drop shadow) — static, reduced-motion-safe by construction,
+  propagating to all Panel() consumers incl. HUD clusters for free. Browser visual-QA'd against a
+  dimmed-world backdrop. Also fixed a long-standing dropped `}` on `.laas-room-code` that had nested
+  the whole sheet (4351ddc)
 - [ ] E8.2 Iconography v2: authored per-category glyph paths, rarity frame ring, overlay badges
   (equipped/new/qty); `PanelEmblem` grows into a per-screen emblem library + party/faction crest
 - [ ] E8.3 Rich tooltip system: pure `domain/ui/TooltipModel.ts` item-card model + `RichTooltip`
