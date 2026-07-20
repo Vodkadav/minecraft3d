@@ -916,7 +916,13 @@ ${THEME_CSS_VARS}
 .laas-credits {
   position: relative;
   z-index: 1;
-  background: var(--lw-bg-panel);
+  /* E8.6: menu shells share the E8.1 panel surface language (warm elevation
+     gradient + edge vignette + soft drop shadow) for cross-surface cohesion. */
+  background-color: var(--lw-surface-2);
+  background-image:
+    radial-gradient(135% 115% at 50% -12%, rgba(255,255,255,0.07), transparent 42%),
+    radial-gradient(150% 120% at 50% 118%, rgba(0,0,0,0.20), transparent 62%),
+    linear-gradient(158deg, var(--lw-surface-2), var(--lw-surface-1) 72%);
   color: var(--lw-fg);
   border: 1px solid var(--lw-border);
   border-radius: var(--lw-radius-lg);
@@ -927,6 +933,7 @@ ${THEME_CSS_VARS}
   display: flex;
   flex-direction: column;
   gap: var(--lw-space-3);
+  box-shadow: 0 1px 0 rgba(255,255,255,0.05) inset, 0 14px 30px -14px rgba(0,0,0,0.6);
 }
 .laas-main-menu h1,
 .laas-lobby h1,
