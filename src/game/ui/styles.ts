@@ -1265,12 +1265,6 @@ ${THEME_CSS_VARS}
   outline: 3px solid currentColor;
   outline-offset: 2px;
 }
-.laas-ui[data-high-contrast="true"] {
-  --laas-fg: #000;
-  --laas-bg: #fff;
-  color: var(--laas-fg);
-  background: var(--laas-bg);
-}
 @media (prefers-reduced-motion: reduce) {
   .laas-ui *, .laas-ui *::before, .laas-ui *::after {
     animation-duration: 0.001ms !important;
@@ -1641,6 +1635,35 @@ ${THEME_CSS_VARS}
 }
 .lw-context-menu-item[aria-disabled="true"]:hover {
   background: transparent;
+}
+
+/* ===== E8.8 (partial): high-contrast --lw-* wiring =====
+   Closes the recorded gap — the old rule only overrode two dead legacy vars
+   (--laas-fg/--laas-bg), so high-contrast did nothing to the token-driven UI.
+   This remaps the real --lw-* tokens to a maximum-contrast white-on-black set
+   (bright borders/accents) on the accessibility root; every component reads
+   these vars, so the whole UI switches at once. */
+.laas-ui[data-high-contrast="true"] {
+  --lw-bg: #000000;
+  --lw-bg-panel: #000000;
+  --lw-bg-track: #000000;
+  --lw-fg: #ffffff;
+  --lw-fg-muted: #ffffff;
+  --lw-border: #ffffff;
+  --lw-accent: #ffd166;
+  --lw-accent-hover: #ffe08a;
+  --lw-focus: #ffff00;
+  --lw-success: #56ff8f;
+  --lw-warning: #ffcc33;
+  --lw-danger: #ff6a5c;
+  --lw-label-chip-bg: #000000;
+  --lw-surface-0: #000000;
+  --lw-surface-1: #0b0b0b;
+  --lw-surface-2: #161616;
+  --lw-surface-3: #202020;
+  --lw-scrim: rgba(0, 0, 0, 0.92);
+  --lw-ornament: #ffffff;
+  --lw-inset: #000000;
 }
 `;
 
