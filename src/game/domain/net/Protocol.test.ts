@@ -176,6 +176,39 @@ const HAPPY: NetMessage[] = [
     capacity: 2,
     slots: [{ itemId: "wood", count: 4 }, null],
   },
+  // ---- E7.0 combat contracts ----
+  { kind: "equipItem", slot: "weapon", itemId: "iron-sword" },
+  { kind: "equipItem", slot: "spell", itemId: "sparkle-bolt" },
+  { kind: "aimedAttack", origin: [1, 2, 3], dir: [0, 0, 1], weaponSlot: "weapon" },
+  { kind: "aimedAttack", origin: [1, 2, 3], dir: [0.577, 0.577, 0.577], weaponSlot: "spell" },
+  { kind: "castSpell", abilityId: "sparkle-bolt", origin: [0, 1, 0], dir: [1, 0, 0] },
+  { kind: "castSpell", abilityId: "vine-snare", origin: [0, 1, 0], groundPoint: [5, 0, 5] },
+  { kind: "deployItem", deployableId: "bumble-trap", position: [3, 0, 3] },
+  {
+    kind: "projectiles",
+    entities: [
+      {
+        id: "proj:1",
+        projectileId: "arrow",
+        ownerId: "p1",
+        x: 1,
+        y: 2,
+        z: 3,
+        dirX: 0,
+        dirY: 0,
+        dirZ: 1,
+      },
+    ],
+  },
+  { kind: "projectiles", entities: [] },
+  {
+    kind: "deployables",
+    entities: [
+      { id: "dep:1", deployableId: "bumble-trap", ownerId: "p1", x: 1, y: 0, z: 2, armed: true },
+    ],
+  },
+  { kind: "deployables", entities: [] },
+  { kind: "effect", effectId: "boom", x: 1, y: 2, z: 3 },
 ];
 
 describe("parseMessage — happy paths", () => {
@@ -401,6 +434,45 @@ describe("parseMessage — malformed input is an error value", () => {
     }, // over the 4-member cap
     { kind: "partyInvite", fromPeerId: "alice" }, // missing fromPlayerName
     { kind: "partyInventoryState", targetPeerId: "bob", capacity: 1, slots: [] }, // slots length mismatch
+    // ---- E7.0 combat contracts ----
+    { kind: "equipItem", slot: "shield", itemId: "iron-sword" }, // unknown slot
+    { kind: "equipItem", slot: "weapon" }, // missing itemId
+    { kind: "equipItem", slot: "weapon", itemId: "" }, // empty itemId
+    { kind: "aimedAttack", origin: [1, 2, 3], dir: [0, 0, 1] }, // missing weaponSlot
+    { kind: "aimedAttack", origin: [1, 2], dir: [0, 0, 1], weaponSlot: "weapon" }, // short origin
+    { kind: "aimedAttack", origin: [1, 2, 3], dir: [0, 0, 5], weaponSlot: "weapon" }, // dir out of [-1,1]
+    { kind: "aimedAttack", origin: [1, 2, 3], dir: [0.1, 0, 0], weaponSlot: "weapon" }, // dir not unit-length
+    { kind: "aimedAttack", origin: [NaN, 2, 3], dir: [0, 0, 1], weaponSlot: "weapon" }, // non-finite origin
+    { kind: "castSpell", abilityId: "sparkle-bolt", origin: [0, 1, 0] }, // neither dir nor groundPoint
+    {
+      kind: "castSpell",
+      abilityId: "sparkle-bolt",
+      origin: [0, 1, 0],
+      dir: [1, 0, 0],
+      groundPoint: [1, 0, 0],
+    }, // both dir and groundPoint
+    { kind: "castSpell", abilityId: "", origin: [0, 1, 0], dir: [1, 0, 0] }, // empty abilityId
+    { kind: "deployItem", deployableId: "bumble-trap" }, // missing position
+    { kind: "deployItem", deployableId: "bumble-trap", position: [1, "2", 3] }, // wrong type
+    { kind: "projectiles" }, // missing entities
+    { kind: "projectiles", entities: [{ id: "p:1", projectileId: "arrow", ownerId: "p1", x: 1, y: 2 }] }, // no z/dir
+    {
+      kind: "projectiles",
+      entities: Array.from({ length: 260 }, (_, i) => ({
+        id: `p:${i}`,
+        projectileId: "arrow",
+        ownerId: "p1",
+        x: 0,
+        y: 0,
+        z: 0,
+        dirX: 0,
+        dirY: 0,
+        dirZ: 1,
+      })),
+    }, // oversized array (DoS-shaped payload)
+    { kind: "deployables", entities: [{ id: "d:1", deployableId: "bumble-trap", ownerId: "p1" }] }, // missing coords/armed
+    { kind: "effect", effectId: "boom", x: 1, y: 2 }, // missing z
+    { kind: "effect", effectId: "", x: 1, y: 2, z: 3 }, // empty effectId
   ];
 
   it.each(BAD.map((m) => [JSON.stringify(m) ?? String(m), m] as const))(
