@@ -58,6 +58,45 @@ export class DeployableRegistry {
  *  (see `ProjectileRegistry.ts`'s doc comment for the append convention). */
 export const STARTER_DEPLOYABLES: readonly DeployableSpec[] = [
   // ---- E7.5 Deployables (timed grenade, proximity mine, stepped bumble-trap) ----
+  // Ids double as the corresponding STARTER_ITEMS id (the thing you throw/place
+  // IS the thing debited from inventory — same "no separate ammo id" shape as
+  // the E7.4 "bomb" thrown weapon). `HostSession.handleDeployItem` resolves
+  // damage/damageType/feelEvent for the SAME id through `WEAPON_REGISTRY`
+  // (each item's `combat.kind === "deployable"` block).
+  //
+  // A short fuse after the throw — armDelayMs IS the fuse: the instant it
+  // elapses the grenade triggers on its own (Deployable.ts "timed" trigger),
+  // no nearby entity required.
+  {
+    id: "grenade",
+    trigger: "timed",
+    armDelayMs: 1500,
+    triggerRadius: 0,
+    telegraphVfx: "vfx.telegraph.grenade",
+    aoe: "grenade-boom",
+  },
+  // A safety arm window (so the placer can back away) then a proximity
+  // trigger radius wide enough to catch anyone who wanders up to it.
+  {
+    id: "proximity-mine",
+    trigger: "proximity",
+    armDelayMs: 800,
+    triggerRadius: 2,
+    telegraphVfx: "vfx.telegraph.mine",
+    aoe: "mine-boom",
+  },
+  // The cozy "bumble-trap": a quick arm, a tight step-on-it trigger radius,
+  // and a gentle snare/knock-up blast (see its AoeRegistry entry) rather
+  // than a damage spike — bright/telegraphed per the cozy charter, never a
+  // gotcha (plan §2 decision 2 / ADR 0004 §4).
+  {
+    id: "bumble-trap",
+    trigger: "stepped",
+    armDelayMs: 400,
+    triggerRadius: 1.2,
+    telegraphVfx: "vfx.telegraph.bumbletrap",
+    aoe: "bumble-trap-pop",
+  },
 ];
 
 export const DEPLOYABLE_REGISTRY: DeployableRegistry = unwrap(

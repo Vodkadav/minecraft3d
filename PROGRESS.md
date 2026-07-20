@@ -228,8 +228,9 @@ slice (E7.0 protocol growth, E7.2–E7.6).
   host-only), starter "bomb-boom" AoeSpec + thrown "bomb" item/recipe, ring+confetti+flash boom VFX
   (spawn/AoeField.ts) with a deferred, off-by-default block-dig seam — no wire/protocol changes
   (E7.0's `effect` message already covers this); security-reviewed (APPROVED), merged
-- [ ] E7.5 Deployables: timed grenade, proximity mine, telegraphed bumble-trap; host-owned
-  arm/trigger
+- [x] E7.5 Deployables: timed grenade, proximity mine, telegraphed bumble-trap; host-owned
+  arm/trigger (Deployable state machine, DeployableRegistry, deployItem handler + trigger tick,
+  DeployableField VFX) — security-reviewed (APPROVED), merged
 - [ ] E7.6 Monster abilities: telegraphed windups (spit/cast/stomp), stand-and-cast /
   retreat-and-fire brain decisions
 - [x] E7.7 Defeat VFX: poof + confetti + loot fountain, gentle player-down (no item loss)

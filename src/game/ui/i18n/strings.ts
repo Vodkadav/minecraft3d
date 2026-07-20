@@ -173,6 +173,11 @@ export const UI_STRINGS: Catalog = {
     "item.relic-charm.name": "Relic Charm",
     "item.bomb.name": "Bomb",
 
+    // ---- E7.5 deployables ----
+    "item.grenade.name": "Grenade",
+    "item.proximity-mine.name": "Proximity Mine",
+    "item.bumble-trap.name": "Bumble-Trap",
+
     "item.wolf-fang.name": "Wolf Fang",
     "item.sparkle-gem.name": "Sparkle Gem",
     "item.golden-acorn.name": "Golden Acorn",
@@ -682,6 +687,11 @@ export const UI_STRINGS: Catalog = {
     "item.relic-charm.name": "Amuleto de reliquia",
     "item.bomb.name": "Bomba",
 
+    // ---- E7.5 deployables ----
+    "item.grenade.name": "Granada",
+    "item.proximity-mine.name": "Mina de proximidad",
+    "item.bumble-trap.name": "Trampa abejorro",
+
     "item.wolf-fang.name": "Colmillo de lobo",
     "item.sparkle-gem.name": "Gema centelleante",
     "item.golden-acorn.name": "Bellota dorada",
@@ -1190,6 +1200,11 @@ export const UI_STRINGS: Catalog = {
     "item.gilded-pickaxe.name": "Forgyldt hakke",
     "item.relic-charm.name": "Relikvieamulet",
     "item.bomb.name": "Bombe",
+
+    // ---- E7.5 deployables ----
+    "item.grenade.name": "Granat",
+    "item.proximity-mine.name": "Nærhedsmine",
+    "item.bumble-trap.name": "Humlefælde",
 
     "item.wolf-fang.name": "Ulvetand",
     "item.sparkle-gem.name": "Glimmersten",

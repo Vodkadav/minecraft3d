@@ -99,6 +99,31 @@ describe("JoinSession", () => {
     expect(onGroundItems).toHaveBeenCalledExactlyOnceWith(entities);
   });
 
+  it("surfaces a host deployables snapshot via onDeployables (E7.5)", () => {
+    const net = makeTransportNetwork();
+    new HostSession(net.host, () => SNAPSHOT, { onWorldEdit: () => {} });
+    const onDeployables = vi.fn();
+    new JoinSession(net.addPeer("alice"), "Alice", { onDeployables });
+
+    const entities = [
+      { id: "deploy:1", deployableId: "grenade", ownerId: "alice", x: 1, y: 0, z: 2, armed: false },
+    ];
+    net.host.send("alice", { kind: "deployables", entities });
+
+    expect(onDeployables).toHaveBeenCalledExactlyOnceWith(entities);
+  });
+
+  it("surfaces a host boom/telegraph effect cue via onEffect (E7.4/E7.5)", () => {
+    const net = makeTransportNetwork();
+    new HostSession(net.host, () => SNAPSHOT, { onWorldEdit: () => {} });
+    const onEffect = vi.fn();
+    new JoinSession(net.addPeer("alice"), "Alice", { onEffect });
+
+    net.host.send("alice", { kind: "effect", effectId: "vfx.boom.grenade", x: 1, y: 2, z: 3 });
+
+    expect(onEffect).toHaveBeenCalledExactlyOnceWith("vfx.boom.grenade", 1, 2, 3);
+  });
+
   it("sendInteract reaches the host's onInteract hook, tagged with the sender", () => {
     const net = makeTransportNetwork();
     const interacts: Array<[string, string, string]> = [];

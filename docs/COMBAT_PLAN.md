@@ -33,7 +33,7 @@ status: the `## Combat (E7)` checklist in [`PROGRESS.md`](../PROGRESS.md). Archi
 | E7.2 Ranged | Draw-to-charge, host-simulated projectiles, ammo items, quiver HUD | Done |
 | E7.3 Spells | Sparkle Bolt / Frost Puff / Healing Bloom / Vine Snare, focus resource, cast bar | Pending |
 | E7.4 AoE | Shared radius/falloff resolver, block-safe flag, boom VFX | Done |
-| E7.5 Deployables | Grenade / proximity mine / bumble-trap, host arm+trigger | Pending |
+| E7.5 Deployables | Grenade / proximity mine / bumble-trap, host arm+trigger | Done |
 | E7.6 Monster abilities | Telegraphed windups, stand-and-cast / retreat-and-fire | Pending |
 | E7.7 Defeat VFX | Poof + confetti + loot fountain, gentle player-down | Done |
 | E7.8 Loot pools | Weighted rarity tiers, difficulty multiplier, deterministic roll | Done |
@@ -80,6 +80,12 @@ E7.1, E7.7, E7.8 fully independent.
   - **Projectile broadcast cadence** (perf, not security): `broadcastProjectiles` fires every host
     tick while any projectile is live; bounded by the 12/peer cap. Throttle to the 10 Hz creature
     cadence later.
+- **E7.5 Deployables** (APPROVED): faithful mirror of the E7.2 pattern — all 7 guards verified
+  (validate → rate-limit → registry → per-peer cap → host-authoritative inventory debit → spawn;
+  trigger resolves `resolveAoe` over the host's own entity set only). Deploy debits the real item, so
+  possession is verified by construction here (stronger than E7.2's equip gap). Block-safe by default.
+  Nits (track, not blocking): no max-lifetime on proximity/stepped deployables (a griefer can park
+  their cap-of-6 mines indefinitely) + same broadcast-cadence throttle as projectiles.
 
 ## Integration follow-up (cross-stream, recorded not skipped)
 

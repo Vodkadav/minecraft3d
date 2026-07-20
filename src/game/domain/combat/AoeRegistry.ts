@@ -60,6 +60,12 @@ export const STARTER_AOES: readonly AoeSpec[] = [
   { id: "bomb-boom", radius: 4, falloff: "linear", blockSafe: true, vfx: "vfx.boom.bomb" },
   // ---- E7.3 Spellcasting (Healing Bloom) ----
   // ---- E7.5 Deployables (traps/mines/grenades) ----
+  { id: "grenade-boom", radius: 3.5, falloff: "linear", blockSafe: true, vfx: "vfx.boom.grenade" },
+  { id: "mine-boom", radius: 3, falloff: "linear", blockSafe: true, vfx: "vfx.boom.mine" },
+  // Cozy stance (plan §2 decision 2): the bumble-trap's "blast" is a gentle
+  // snare/knock-up, not a damage spike — same shared falloff resolver, just
+  // a smaller radius/low base damage on the item itself (starterItems.ts).
+  { id: "bumble-trap-pop", radius: 2, falloff: "none", blockSafe: true, vfx: "vfx.boom.bumbletrap" },
   // ---- E7.6 Monster abilities (AoE stomp) ----
 ];
 

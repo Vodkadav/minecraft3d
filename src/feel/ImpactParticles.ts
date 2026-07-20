@@ -36,6 +36,12 @@ const BURST_COLOR: Record<string, readonly [number, number, number]> = {
   // exact moment the cozy charter cares most (a defeat). Cream/white instead,
   // matching feel/DefeatEffects' poof-smoke palette.
   defeatPoof: [0.95, 0.93, 0.86],
+  // E7.5 — "trapArm"/"trapTrigger" (declared E7.0) had no visual yet; without
+  // these they'd fall back to "hit"'s danger red, reading as a violent gotcha
+  // rather than a cozy telegraphed bumble-trap (ADR 0004 §4). Bright gold for
+  // the arming pulse, minty-green "poof" for the snare/knock-up trigger.
+  trapArm: [0.95, 0.85, 0.35],
+  trapTrigger: [0.35, 0.75, 0.55],
 };
 
 interface Slot {

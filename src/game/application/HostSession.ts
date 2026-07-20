@@ -20,10 +20,13 @@ import { ItemRegistry } from "../domain/items/ItemRegistry";
 import type { DamageType } from "../domain/items/ItemDefinition";
 import {
   AIMED_ATTACK_RATE_LIMIT,
+  DEPLOY_ITEM_RATE_LIMIT,
+  MAX_ACTIVE_DEPLOYABLES_PER_PEER,
   MAX_ACTIVE_PROJECTILES_PER_PEER,
   remoteAllowedPlaceableAction,
   tryConsumeToken,
   validateAimedAttack,
+  validateDeployItem,
   validateDig,
   validateInventoryOp,
   validatePlaceableInteract,
@@ -35,6 +38,8 @@ import {
   parseMessage,
   type AimedAttackMsg,
   type ChatMsg,
+  type DeployableEntity,
+  type DeployItemMsg,
   type DigMsg,
   type EquipSlot,
   type FillMsg,
@@ -65,6 +70,10 @@ import {
 import { chargeMultiplier } from "../domain/combat/RangedCharge";
 import { PROJECTILE_REGISTRY } from "../domain/combat/ProjectileRegistry";
 import { WEAPON_REGISTRY } from "../domain/combat/WeaponRegistry";
+import { spawnDeployable, stepDeployable, type DeployableInstance } from "../domain/combat/Deployable";
+import { DEPLOYABLE_REGISTRY, type DeployableSpec } from "../domain/combat/DeployableRegistry";
+import { resolveAoe } from "../domain/combat/Aoe";
+import { AOE_REGISTRY } from "../domain/combat/AoeRegistry";
 import { buildChatMessage, type ChatChannel, type ChatMessage } from "../domain/social/Chat";
 import {
   bothConfirmed,
@@ -210,6 +219,26 @@ export interface HostSessionHooks {
    *  same source of truth that's also broadcast to joiners (mirrors
    *  `onPeerPose`'s "host sees its own truth locally too" pattern). */
   onProjectilesSnapshot?(entities: readonly ProjectileEntity[]): void;
+  /** E7.5: a host-resolved deployable blast hit — damage/target/type are ALL
+   *  computed by the host's own `resolveAoe` call over ITS OWN authoritative
+   *  entity set (never a client-supplied/client-sized collection, ADR 0004
+   *  §2/plan §6). Fired once per target caught in the blast. */
+  onDeployableHit?(
+    targetId: string,
+    damage: number,
+    damageType: DamageType,
+    feelEvent: string,
+    ownerId: string,
+  ): void;
+  /** E7.5: fired after each trigger-tick with the full active deployable set
+   *  — mirrors `onProjectilesSnapshot`'s "host sees its own truth locally
+   *  too" pattern. */
+  onDeployablesSnapshot?(entities: readonly DeployableEntity[]): void;
+  /** E7.5: a one-shot boom/telegraph VFX cue the host's own local client
+   *  should also play (mirrors `onChat`'s host self-loop — the host has no
+   *  wire hop to itself). Every joiner gets the same cue via the `effect`
+   *  broadcast. */
+  onEffect?(effectId: string, x: number, y: number, z: number): void;
 }
 
 export interface HostSessionDeps {
@@ -258,6 +287,8 @@ interface PeerRecord {
   equipped: Partial<Record<EquipSlot, string>>;
   /** E7.2 security follow-up #1: per-peer token bucket for `aimedAttack`. */
   aimedAttackRate: RateLimitState;
+  /** E7.5: per-peer token bucket for `deployItem`, same shape/rationale. */
+  deployItemRate: RateLimitState;
 }
 
 /** E7.2: one live, host-simulated projectile. `state` steps every `tick()`;
@@ -276,6 +307,17 @@ interface HostProjectile {
   readonly damageType: DamageType;
   readonly feelEvent: string;
   state: ProjectileState;
+}
+
+/** E7.5: one live, host-simulated deployable. `instance` steps every
+ *  `tick()`; `damage`/`damageType`/`feelEvent` were resolved ONCE at
+ *  placement from the host's own `WEAPON_REGISTRY` record (security item 5)
+ *  and never change. */
+interface HostDeployable {
+  readonly damage: number;
+  readonly damageType: DamageType;
+  readonly feelEvent: string;
+  instance: DeployableInstance;
 }
 
 export class HostSession {
@@ -308,6 +350,10 @@ export class HostSession {
   private readonly activeProjectiles = new Map<string, HostProjectile>();
   private nextProjectileId = 1;
 
+  // ---- E7.5 deployable arm/trigger simulation ----
+  private readonly activeDeployables = new Map<string, HostDeployable>();
+  private nextDeployableId = 1;
+
   constructor(
     private readonly transport: NetTransport,
     private readonly snapshot: () => WorldSnapshot,
@@ -328,6 +374,7 @@ export class HostSession {
         vitals: null,
         equipped: {},
         aimedAttackRate: { tokens: AIMED_ATTACK_RATE_LIMIT.capacity, lastRefillMs: this.clock() },
+        deployItemRate: { tokens: DEPLOY_ITEM_RATE_LIMIT.capacity, lastRefillMs: this.clock() },
       }),
     );
     transport.onPeerLeave((peerId) => {
@@ -440,6 +487,9 @@ export class HostSession {
         return;
       case "aimedAttack":
         this.handleAimedAttack(peerId, msg);
+        return;
+      case "deployItem":
+        this.handleDeployItem(peerId, msg);
         return;
       default:
         // host->joiner kinds echoed back at the host: no-op.
@@ -1266,14 +1316,78 @@ export class HostSession {
     });
   }
 
-  /** Advance every live projectile one tick, resolve collisions against
-   *  `hooks.findHittableEntities()`, and stream the resulting set. Called by
-   *  the composition root's frame loop (mirrors `SpawnFieldView.update`'s own
-   *  per-frame stepping, just hosted here since the sim itself is pure/
+  /** A joiner's mine/trap/grenade placement (E7.5, ADR 0004 §2). Every guard
+   *  below drops the intent silently on failure — never a throw, never a
+   *  partial effect (mirrors `handleAimedAttack`'s security checklist). */
+  private handleDeployItem(peerId: string, msg: DeployItemMsg): void {
+    const peer = this.peers.get(peerId);
+    if (!peer) return;
+
+    // security #3: null-pose gate — never trust a placement with no
+    // validated recent pose on record for this sender.
+    if (!validateDeployItem(peer.lastPose?.state ?? null, msg)) return;
+
+    // security #1: per-peer token bucket.
+    const limited = tryConsumeToken(peer.deployItemRate, DEPLOY_ITEM_RATE_LIMIT, this.clock());
+    peer.deployItemRate = limited.next;
+    if (!limited.allowed) return;
+
+    // security #4: resolve the claimed deployableId through the registry —
+    // drop on Unknown* rather than trusting the sender's claim at face value.
+    const specResult = DEPLOYABLE_REGISTRY.get(msg.deployableId);
+    if (!isOk(specResult)) return;
+    const spec = specResult.value;
+
+    // The deployed item's id doubles as its DeployableRegistry id
+    // (starterItems.ts's E7.5 section) — resolve the SAME id's weapon
+    // metadata for damage/damageType/feelEvent, never a client-claimed
+    // number (security item 5, same posture as ranged's ammo/damage).
+    const weaponResult = WEAPON_REGISTRY.get(msg.deployableId);
+    if (!isOk(weaponResult)) return;
+    const weapon = weaponResult.value;
+    if (weapon.kind !== "deployable") return;
+
+    // security #2: per-peer active-deployable DoS cap.
+    let activeForPeer = 0;
+    for (const d of this.activeDeployables.values()) {
+      if (d.instance.ownerId === peerId) activeForPeer++;
+    }
+    if (activeForPeer >= MAX_ACTIVE_DEPLOYABLES_PER_PEER) return;
+
+    // security #5: debit the deployed item from the host's OWN authoritative
+    // inventory — a peer with none simply gets no placement, never a
+    // conjured/duplicated mine.
+    const debited = peer.inventory.remove(msg.deployableId, 1);
+    if (!isOk(debited)) return;
+    peer.inventory = debited.value;
+    this.sendInventoryState(peerId, peer.inventory);
+
+    const id = `deploy:${this.nextDeployableId++}`;
+    this.activeDeployables.set(id, {
+      damage: weapon.damage,
+      damageType: weapon.damageType,
+      feelEvent: weapon.feelEvent,
+      instance: spawnDeployable(id, spec.id, peerId, {
+        x: msg.position[0],
+        y: msg.position[1],
+        z: msg.position[2],
+      }),
+    });
+  }
+
+  /** Advance every live projectile AND deployable one tick. Called by the
+   *  composition root's frame loop (mirrors `SpawnFieldView.update`'s own
+   *  per-frame stepping, just hosted here since both sims are pure/
    *  Three.js-free — see ADR 0004 §3). A no-op call when nothing is active
    *  costs nothing. */
   tick(dtMs: number): void {
-    if (this.activeProjectiles.size === 0) return;
+    if (this.activeProjectiles.size > 0) this.tickProjectiles(dtMs);
+    if (this.activeDeployables.size > 0) this.tickDeployables(dtMs);
+  }
+
+  /** Resolve collisions against `hooks.findHittableEntities()` and stream
+   *  the resulting projectile set. */
+  private tickProjectiles(dtMs: number): void {
     const targets = this.hooks.findHittableEntities?.() ?? [];
     for (const [id, proj] of this.activeProjectiles) {
       const outcome = stepProjectile(proj.state, proj, dtMs);
@@ -1291,6 +1405,69 @@ export class HostSession {
       if (outcome.expired) this.activeProjectiles.delete(id);
     }
     this.broadcastProjectiles();
+  }
+
+  /** Advance every armed/arming deployable, resolving a trigger the instant
+   *  `Deployable.stepDeployable` reports one — via the shared `resolveAoe`
+   *  (E7.4) over `hooks.findHittableEntities()`'s OWN authoritative entity
+   *  set (security item 6: never a client-supplied/client-sized collection),
+   *  then streams the resulting set. */
+  private tickDeployables(dtMs: number): void {
+    const targets = this.hooks.findHittableEntities?.() ?? [];
+    for (const [id, dep] of this.activeDeployables) {
+      const specResult = DEPLOYABLE_REGISTRY.get(dep.instance.deployableId);
+      if (!isOk(specResult)) {
+        // Can't happen from a real placement (handleDeployItem already
+        // resolved this id) — defensive only, never a crash on stale data.
+        this.activeDeployables.delete(id);
+        continue;
+      }
+      const spec = specResult.value;
+      dep.instance = stepDeployable(dep.instance, spec, dtMs, targets);
+      if (dep.instance.state === "triggered") {
+        this.resolveDeployableTrigger(dep, spec, targets);
+        this.activeDeployables.delete(id);
+      }
+    }
+    this.broadcastDeployables();
+  }
+
+  /** Resolve one deployable's blast: the host's own AoE spec + its own live
+   *  entity set — a joiner never supplies or influences either. Applies a
+   *  hit per target via `onDeployableHit` and broadcasts the shared `effect`
+   *  cue so every peer plays the same boom/pop at the same place. */
+  private resolveDeployableTrigger(
+    dep: HostDeployable,
+    spec: DeployableSpec,
+    targets: readonly HittableEntity[],
+  ): void {
+    const { x, y, z, ownerId } = dep.instance;
+    const aoeResult = AOE_REGISTRY.get(spec.aoe);
+    if (isOk(aoeResult)) {
+      const aoeSpec = aoeResult.value;
+      const hitsResult = resolveAoe(aoeSpec, { x, y, z }, targets);
+      if (isOk(hitsResult)) {
+        for (const hit of hitsResult.value) {
+          this.hooks.onDeployableHit?.(hit.id, dep.damage * hit.magnitude, dep.damageType, dep.feelEvent, ownerId);
+        }
+      }
+      this.transport.broadcast({ kind: "effect", effectId: aoeSpec.vfx, x, y, z });
+      this.hooks.onEffect?.(aoeSpec.vfx, x, y, z);
+    }
+  }
+
+  private broadcastDeployables(): void {
+    const entities: DeployableEntity[] = [...this.activeDeployables.entries()].map(([id, d]) => ({
+      id,
+      deployableId: d.instance.deployableId,
+      ownerId: d.instance.ownerId,
+      x: d.instance.x,
+      y: d.instance.y,
+      z: d.instance.z,
+      armed: d.instance.state === "armed",
+    }));
+    this.transport.broadcast({ kind: "deployables", entities });
+    this.hooks.onDeployablesSnapshot?.(entities);
   }
 
   private broadcastProjectiles(): void {
