@@ -431,6 +431,9 @@ async function bootEngine(hooks: LaasHooks, launch: MenuLaunch | null): Promise<
         ctx.world?.applyInventoryState?.(wire);
         launch.persistInventoryState?.(wire);
       },
+      // E5.5: the joiner's chat UI — receives relayed host chatMessages, and
+      // its outward `onSubmit` becomes a `chat` intent.
+      ...(ctx.world?.chat ? { chat: ctx.world.chat } : {}),
     });
     engine.onUpdate((dt) => world.update(dt));
   } else if (launch) {
@@ -444,6 +447,10 @@ async function bootEngine(hooks: LaasHooks, launch: MenuLaunch | null): Promise<
       groundItems: ctx.world?.groundItems ?? null,
       placeables: ctx.world?.placeables ?? null,
       ...(ctx.world?.registry ? { registry: ctx.world.registry } : {}),
+      // E5.5: the host's own chat UI — its `onSubmit` relays directly
+      // through HostSession.sendHostChat (no wire hop to itself).
+      ...(ctx.world?.chat ? { chat: ctx.world.chat } : {}),
+      ...(ctx.world?.hostPlayerName ? { hostPlayerName: ctx.world.hostPlayerName } : {}),
       parent: engine.scene,
     });
     engine.onUpdate((dt) => net.update(dt));

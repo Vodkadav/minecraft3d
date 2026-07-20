@@ -839,4 +839,203 @@ describe("HostSession", () => {
       expect(inbox).toEqual([]);
     });
   });
+
+  // ---- E5.5: kid-safe chat ----
+
+  describe("chat", () => {
+    it("say: relays a valid chat message to ALL peers, tagged with the host's OWN record of the sender's name", () => {
+      net = makeTransportNetwork();
+      session = new HostSession(net.host, () => SNAPSHOT, { onWorldEdit: () => {} }, { clock: () => now });
+      const alice = net.addPeer("alice");
+      const bob = net.addPeer("bob");
+      alice.broadcast({ kind: "join", playerName: "Alice" });
+      bob.broadcast({ kind: "join", playerName: "Bob" });
+      const aliceInbox = collect(alice);
+      const bobInbox = collect(bob);
+
+      alice.broadcast({ kind: "chat", channel: "say", text: "hello!" });
+
+      const expected = {
+        kind: "chatMessage",
+        senderPeerId: "alice",
+        senderName: "Alice",
+        text: "hello!",
+        channel: "say",
+        timestamp: now,
+      };
+      // "say" echoes back to the sender too, same as any other broadcast state
+      expect(aliceInbox).toContainEqual(expected);
+      expect(bobInbox).toContainEqual(expected);
+    });
+
+    it("never trusts a per-message claimed sender name — uses the host's join record instead", () => {
+      net = makeTransportNetwork();
+      session = new HostSession(net.host, () => SNAPSHOT, { onWorldEdit: () => {} }, { clock: () => now });
+      const alice = net.addPeer("alice");
+      const bob = net.addPeer("bob");
+      alice.broadcast({ kind: "join", playerName: "Alice" });
+      bob.broadcast({ kind: "join", playerName: "Bob" });
+      const bobInbox = collect(bob);
+
+      // the wire ChatMsg shape carries no sender-name field at all — even a
+      // hostile payload smuggling one in is ignored by the validator/dispatch
+      alice.broadcast({ kind: "chat", channel: "say", text: "hi", senderName: "NotAlice" });
+
+      const msg = bobInbox.find((m) => (m as { kind: string }).kind === "chatMessage") as
+        | { senderName: string }
+        | undefined;
+      expect(msg?.senderName).toBe("Alice");
+    });
+
+    it("masks profanity and redacts PII before relaying — never the raw text", () => {
+      net = makeTransportNetwork();
+      session = new HostSession(net.host, () => SNAPSHOT, { onWorldEdit: () => {} }, { clock: () => now });
+      const alice = net.addPeer("alice");
+      alice.broadcast({ kind: "join", playerName: "Alice" });
+      const inbox = collect(alice);
+
+      alice.broadcast({ kind: "chat", channel: "say", text: "email me at kid@example.com you shit" });
+
+      const msg = inbox.find((m) => (m as { kind: string }).kind === "chatMessage") as
+        | { text: string }
+        | undefined;
+      expect(msg?.text).toBe("email me at [email] you ****");
+    });
+
+    it("drops an empty/whitespace-only chat submission silently (no broadcast)", () => {
+      net = makeTransportNetwork();
+      session = new HostSession(net.host, () => SNAPSHOT, { onWorldEdit: () => {} }, { clock: () => now });
+      const alice = net.addPeer("alice");
+      const bob = net.addPeer("bob");
+      alice.broadcast({ kind: "join", playerName: "Alice" });
+      bob.broadcast({ kind: "join", playerName: "Bob" });
+      const bobInbox = collect(bob);
+
+      alice.broadcast({ kind: "chat", channel: "say", text: "   " });
+
+      expect(bobInbox.filter((m) => (m as { kind: string }).kind === "chatMessage")).toEqual([]);
+    });
+
+    it("chat from an unknown peer (no session record yet) is a no-op, never throws", () => {
+      net = makeTransportNetwork();
+      session = new HostSession(net.host, () => SNAPSHOT, { onWorldEdit: () => {} }, { clock: () => now });
+      const detached = net.addDetachedPeer("ghost");
+      const inbox = collect(detached.transport);
+      expect(() =>
+        detached.transport.broadcast({ kind: "chat", channel: "say", text: "hi" }),
+      ).not.toThrow();
+      expect(inbox).toEqual([]);
+    });
+
+    it("NEVER logs chat text — a malformed chat payload logs only { peerId, reason }, no content", () => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      net = makeTransportNetwork();
+      session = new HostSession(net.host, () => SNAPSHOT, { onWorldEdit: () => {} }, { clock: () => now });
+      const alice = net.addPeer("alice");
+      alice.broadcast({ kind: "chat", channel: "guild", text: "a secret nobody should log" });
+      for (const call of warn.mock.calls) {
+        expect(JSON.stringify(call)).not.toContain("secret nobody should log");
+      }
+      warn.mockRestore();
+    });
+
+    it("say: surfaces the host's own chat to itself via onChat (no wire hop to self)", () => {
+      const heard: Array<{ senderPeerId: string; text: string }> = [];
+      net = makeTransportNetwork();
+      session = new HostSession(
+        net.host,
+        () => SNAPSHOT,
+        { onWorldEdit: () => {}, onChat: (msg) => heard.push(msg) },
+        { clock: () => now, hostPlayerName: "TheHost" },
+      );
+      const alice = net.addPeer("alice");
+      alice.broadcast({ kind: "join", playerName: "Alice" });
+      const aliceInbox = collect(alice);
+
+      session.sendHostChat("hi everyone", "say");
+
+      expect(heard).toEqual([
+        { senderPeerId: "host", senderName: "TheHost", text: "hi everyone", channel: "say", timestamp: now },
+      ]);
+      expect(aliceInbox).toContainEqual({
+        kind: "chatMessage",
+        senderPeerId: "host",
+        senderName: "TheHost",
+        text: "hi everyone",
+        channel: "say",
+        timestamp: now,
+      });
+    });
+
+    it("say: surfaces relayed joiner chat to the host too via onChat", () => {
+      const heard: string[] = [];
+      net = makeTransportNetwork();
+      session = new HostSession(
+        net.host,
+        () => SNAPSHOT,
+        { onWorldEdit: () => {}, onChat: (msg) => heard.push(msg.text) },
+        { clock: () => now },
+      );
+      const alice = net.addPeer("alice");
+      alice.broadcast({ kind: "join", playerName: "Alice" });
+
+      alice.broadcast({ kind: "chat", channel: "say", text: "hi host" });
+
+      expect(heard).toEqual(["hi host"]);
+    });
+
+    it("party: fails closed (echoes only to the sender) when no party system is wired", () => {
+      net = makeTransportNetwork();
+      session = new HostSession(net.host, () => SNAPSHOT, { onWorldEdit: () => {} }, { clock: () => now });
+      const alice = net.addPeer("alice");
+      const bob = net.addPeer("bob");
+      alice.broadcast({ kind: "join", playerName: "Alice" });
+      bob.broadcast({ kind: "join", playerName: "Bob" });
+      const aliceInbox = collect(alice);
+      const bobInbox = collect(bob);
+
+      alice.broadcast({ kind: "chat", channel: "party", text: "psst, just us" });
+
+      // never leaked to bob — a private-intended message must never go public
+      expect(bobInbox.filter((m) => (m as { kind: string }).kind === "chatMessage")).toEqual([]);
+      expect(aliceInbox).toContainEqual({
+        kind: "chatMessage",
+        senderPeerId: "alice",
+        senderName: "Alice",
+        text: "psst, just us",
+        channel: "party",
+        timestamp: now,
+      });
+    });
+
+    it("party: routes to the wired party roster port when present", () => {
+      net = makeTransportNetwork();
+      session = new HostSession(
+        net.host,
+        () => SNAPSHOT,
+        { onWorldEdit: () => {}, partyMembersOf: () => ["bob"] },
+        { clock: () => now },
+      );
+      const alice = net.addPeer("alice");
+      const bob = net.addPeer("bob");
+      const carol = net.addPeer("carol");
+      alice.broadcast({ kind: "join", playerName: "Alice" });
+      bob.broadcast({ kind: "join", playerName: "Bob" });
+      carol.broadcast({ kind: "join", playerName: "Carol" });
+      const bobInbox = collect(bob);
+      const carolInbox = collect(carol);
+
+      alice.broadcast({ kind: "chat", channel: "party", text: "party time" });
+
+      expect(bobInbox).toContainEqual({
+        kind: "chatMessage",
+        senderPeerId: "alice",
+        senderName: "Alice",
+        text: "party time",
+        channel: "party",
+        timestamp: now,
+      });
+      expect(carolInbox.filter((m) => (m as { kind: string }).kind === "chatMessage")).toEqual([]);
+    });
+  });
 });

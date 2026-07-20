@@ -9,6 +9,7 @@
  */
 
 import { err, ok, type Result } from "../Result";
+import { CHAT_MAX_LENGTH, isChatChannel, type ChatChannel } from "../social/Chat";
 import type { ChunkDelta, PlayerState } from "../world/WorldSaveData";
 
 // ---- Joiner → Host intents ----
@@ -125,6 +126,20 @@ export interface InventoryOpMsg {
   readonly inventoryOp: InventoryOp;
 }
 
+/**
+ * A chat submission (E5.5). Carries only text + channel — never a claimed
+ * sender name: the host looks up the sender's playerName from its OWN
+ * connection record (set once at `join`), so a peer can never spoof another
+ * player's display name in chat. The host is the only party that filters
+ * (kid-safe profanity/PII) and relays; this message is never trusted or
+ * displayed at face value.
+ */
+export interface ChatMsg {
+  readonly kind: "chat";
+  readonly channel: ChatChannel;
+  readonly text: string;
+}
+
 export type JoinerMessage =
   | JoinMsg
   | PoseMsg
@@ -132,7 +147,8 @@ export type JoinerMessage =
   | FillMsg
   | InteractMsg
   | PlaceableInteractMsg
-  | InventoryOpMsg;
+  | InventoryOpMsg
+  | ChatMsg;
 
 // ---- Host → Joiner ----
 
@@ -250,6 +266,23 @@ export interface InventoryStateMsg {
   readonly slots: readonly (InventoryStackWire | null)[];
 }
 
+/**
+ * A host-resolved chat message, relayed to the recipients the channel
+ * implies (E5.5): `say` broadcasts to every peer, `party` — until a party
+ * roster exists (E5.1) — only ever reaches the sender back (fail-closed, see
+ * `HostSession`). `text` is already filtered (kid-safe masked/redacted);
+ * `senderName` is the host's own record of that peer, never the sender's
+ * unchecked claim.
+ */
+export interface ChatMessageMsg {
+  readonly kind: "chatMessage";
+  readonly senderPeerId: string;
+  readonly senderName: string;
+  readonly text: string;
+  readonly channel: ChatChannel;
+  readonly timestamp: number;
+}
+
 export type HostMessage =
   | WelcomeMsg
   | PeerPoseMsg
@@ -261,7 +294,8 @@ export type HostMessage =
   | HostClosingMsg
   | PlaceableStateMsg
   | InventoryStateMsg
-  | GroundItemsMsg;
+  | GroundItemsMsg
+  | ChatMessageMsg;
 
 export type NetMessage = JoinerMessage | HostMessage;
 
@@ -416,6 +450,15 @@ function isInventoryOp(v: unknown): v is InventoryOp {
  *  active drop count but bounded so a hostile peer can't DoS `parseMessage`. */
 const MAX_WIRE_GROUND_ITEMS = 256;
 
+/** Wire-level cap for a chat submission (E5.5) — mirrors `Chat.CHAT_MAX_LENGTH`
+ *  (the single source of truth); checked again here so a hostile peer can't
+ *  even get an oversized payload past the parse boundary. */
+const MAX_WIRE_CHAT_TEXT_LEN = CHAT_MAX_LENGTH;
+
+function isChatText(v: unknown): v is string {
+  return isStr(v) && v.length > 0 && v.length <= MAX_WIRE_CHAT_TEXT_LEN;
+}
+
 function isGroundItemEntity(v: unknown): v is GroundItemEntity {
   return (
     isRecord(v) &&
@@ -482,6 +525,13 @@ const VALIDATORS: Record<string, (m: Record<string, unknown>) => boolean> = {
   peerJoined: (m) => isStr(m.peerId) && isPlayerName(m.playerName),
   peerLeft: (m) => isStr(m.peerId),
   hostClosing: () => true,
+  chat: (m) => isChatChannel(m.channel) && isChatText(m.text),
+  chatMessage: (m) =>
+    isStr(m.senderPeerId) &&
+    isPlayerName(m.senderName) &&
+    isChatText(m.text) &&
+    isChatChannel(m.channel) &&
+    isNum(m.timestamp),
 };
 
 /** Validate an untrusted wire payload into a typed message, or an error value. */

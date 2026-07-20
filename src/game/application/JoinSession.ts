@@ -18,6 +18,7 @@ import type {
   WorldEdit,
 } from "../domain/net/Protocol";
 import { parseMessage } from "../domain/net/Protocol";
+import type { ChatChannel, ChatMessage } from "../domain/social/Chat";
 import type { PlayerState } from "../domain/world/WorldSaveData";
 import type { NetTransport } from "./ports/NetTransport";
 
@@ -42,6 +43,10 @@ export interface JoinSessionHooks {
    *  placeableInteract. A joiner NEVER mutates its inventory locally; this
    *  is the only path its inventory UI updates from. */
   onInventoryState?(wire: SerializedInventoryWire): void;
+  /** A host-resolved, already-filtered chat message (E5.5) — the ONLY path
+   *  this joiner's chat UI ever receives text from; it is never mutated or
+   *  displayed from anything else. NEVER logged. */
+  onChatMessage?(msg: ChatMessage): void;
 }
 
 export class JoinSession {
@@ -106,6 +111,15 @@ export class JoinSession {
         case "inventoryState":
           hooks.onInventoryState?.({ capacity: msg.capacity, slots: msg.slots });
           return;
+        case "chatMessage":
+          hooks.onChatMessage?.({
+            senderPeerId: msg.senderPeerId,
+            senderName: msg.senderName,
+            text: msg.text,
+            channel: msg.channel,
+            timestamp: msg.timestamp,
+          });
+          return;
         default:
           // Joiner-intent kinds arriving at a joiner: not ours to handle.
           return;
@@ -145,5 +159,13 @@ export class JoinSession {
    *  via `onInventoryState`; this session never mutates anything locally. */
   sendInventoryOp(op: InventoryOp): void {
     this.transport.broadcast({ kind: "inventoryOp", inventoryOp: op });
+  }
+
+  /** A chat submission (E5.5) — carries only text + channel, never a claimed
+   *  sender name; the host attaches the sender's identity from its own join
+   *  record. NEVER logged (the transport itself is the only place this text
+   *  leaves the process). */
+  sendChat(text: string, channel: ChatChannel): void {
+    this.transport.broadcast({ kind: "chat", channel, text });
   }
 }

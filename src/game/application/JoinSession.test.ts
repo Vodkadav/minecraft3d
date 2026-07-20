@@ -217,4 +217,37 @@ describe("JoinSession", () => {
     expect(warn).toHaveBeenCalled();
     warn.mockRestore();
   });
+
+  // ---- E5.5: kid-safe chat ----
+
+  it("sendChat reaches the other joiner as a filtered chatMessage via onChatMessage", () => {
+    const net = makeTransportNetwork();
+    new HostSession(net.host, () => SNAPSHOT, { onWorldEdit: () => {} }, { clock: () => 5000 });
+    const alice = new JoinSession(net.addPeer("alice"), "Alice", {});
+    const onChatMessage = vi.fn();
+    new JoinSession(net.addPeer("bob"), "Bob", { onChatMessage });
+
+    alice.sendChat("hi there, damn it's nice out", "say");
+
+    expect(onChatMessage).toHaveBeenCalledExactlyOnceWith({
+      senderPeerId: "alice",
+      senderName: "Alice",
+      text: "hi there, **** it's nice out",
+      channel: "say",
+      timestamp: 5000,
+    });
+  });
+
+  it("sendChat never carries a claimed sender name over the wire (attaches on the host side)", () => {
+    const net = makeTransportNetwork();
+    new HostSession(net.host, () => SNAPSHOT, { onWorldEdit: () => {} });
+    const alice = new JoinSession(net.addPeer("alice"), "Alice", {});
+    const onChatMessage = vi.fn();
+    new JoinSession(net.addPeer("bob"), "Bob", { onChatMessage });
+
+    alice.sendChat("hi", "say");
+
+    const [msg] = onChatMessage.mock.calls[0] as [{ senderName: string }];
+    expect(msg.senderName).toBe("Alice");
+  });
 });
