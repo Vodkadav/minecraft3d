@@ -33,12 +33,21 @@ import type {
   WorldEdit,
 } from "../game/domain/net/Protocol";
 import { makeRoomCode } from "../game/domain/net/RoomCode";
+import type { ChatChannel, ChatMessage } from "../game/domain/social/Chat";
 import type { PlayerState } from "../game/domain/world/WorldSaveData";
 import { makeTrysteroTransport } from "../game/infrastructure/net/TrysteroTransport";
 import type { GroundItemFieldHandle } from "../spawn/GroundItemField";
 import type { SpawnFieldHandle } from "../spawn/SpawnFieldView";
 import type { PlaceableInteractionHandle } from "../voxel/placement/PlaceableInteractionTool";
 import { RemotePlayers } from "./RemotePlayers";
+
+/** The scene-owned chat UI surface (E5.5) — structurally the same shape as
+ *  `debug/Scenes.ts`'s `ChatUiHandle`; defined locally so this net-glue
+ *  module doesn't reach into the debug/scene layer for a type. */
+export interface ChatUiPort {
+  receiveMessage(msg: ChatMessage): void;
+  onSubmit: ((text: string, channel: ChatChannel) => void) | null;
+}
 
 /** Structural slice of VoxelTerrain the net glue needs (null until M8 boots it). */
 export interface EditableVoxels {
@@ -76,6 +85,11 @@ export interface HostNetDeps {
   readonly placeables?: PlaceableInteractionHandle | null;
   /** The item catalogue peer inventories validate against (E0.4). */
   readonly registry?: ItemRegistry;
+  /** The scene's chat UI (E5.5) — receives every relayed/host-own chat
+   *  message; its `onSubmit` is wired here to relay the host's own sends. */
+  readonly chat?: ChatUiPort | null;
+  /** The host's own localized display name for chat (E5.5). */
+  readonly hostPlayerName?: string;
   readonly parent: Object3D;
   /** Test seam; defaults to the live trystero adapter. */
   readonly transportFactory?: (code: string) => NetTransport;
@@ -144,9 +158,22 @@ export async function attachHostNet(deps: HostNetDeps): Promise<HostNetHandle> {
         deps.placeables?.resolveHostIntent(action, placeableId, peerId, itemId, count),
       onGroundItemPeek: (targetId) => deps.groundItems?.peek(targetId),
       onGroundItemRemove: (targetId) => deps.groundItems?.remove(targetId),
+      // E5.5: the host has no wire hop to its own broadcast — every `say`
+      // (and any `party` message the host is part of, once E5.1 wires
+      // `partyMembersOf`) reaches the host's OWN chat UI through here.
+      onChat: (msg) => deps.chat?.receiveMessage(msg),
     },
-    { ...(deps.registry ? { registry: deps.registry } : {}) },
+    {
+      ...(deps.registry ? { registry: deps.registry } : {}),
+      ...(deps.hostPlayerName ? { hostPlayerName: deps.hostPlayerName } : {}),
+    },
   );
+
+  // the host's own chat submissions relay through the SAME validate/filter
+  // path a joiner's intent takes (HostSession.sendHostChat).
+  if (deps.chat) {
+    deps.chat.onSubmit = (text, channel) => session.sendHostChat(text, channel);
+  }
 
   // the host's own digs reach joiners as resolved world truth
   if (deps.voxels) {
@@ -187,6 +214,7 @@ export async function attachHostNet(deps: HostNetDeps): Promise<HostNetHandle> {
       if (deps.voxels) deps.voxels.onLocalEdit = null;
       if (deps.spawns) deps.spawns.onSnapshot = null;
       if (deps.groundItems) deps.groundItems.onSnapshot = null;
+      if (deps.chat) deps.chat.onSubmit = null;
       remote.dispose();
       session.close();
     },
@@ -215,6 +243,9 @@ export interface JoinWorldDeps {
    *  (E0.4) — the composition root reconciles its inventory UI from this,
    *  never mutating it locally. */
   onInventoryState?(wire: SerializedInventoryWire): void;
+  /** The scene's chat UI (E5.5) — receives every host-relayed chat message;
+   *  its `onSubmit` is wired here to send a `chat` intent. */
+  readonly chat?: ChatUiPort | null;
 }
 
 export interface JoinWorldHandle {
@@ -271,6 +302,7 @@ export function createJoinNet(code: string, opts: JoinNetOptions = {}): JoinNetH
     readonly onHostGone?: () => void;
     readonly onHostReturned?: () => void;
     readonly onInventoryState?: (wire: SerializedInventoryWire) => void;
+    readonly chat?: ChatUiPort | null;
   } | null = null;
   let applyingRemote = false;
   // an inventoryState can arrive before attachWorld (right after join, while
@@ -337,6 +369,9 @@ export function createJoinNet(code: string, opts: JoinNetOptions = {}): JoinNetH
       if (world?.onInventoryState) world.onInventoryState(wire);
       else pendingInventoryState = wire;
     },
+    // E5.5: a host-resolved, already-filtered chat message — the ONLY path
+    // this joiner's chat UI ever receives text from.
+    onChatMessage: (msg: ChatMessage): void => world?.chat?.receiveMessage(msg),
   };
 
   // trystero peers appear seconds after joinRoom, in no particular order in a
@@ -393,8 +428,14 @@ export function createJoinNet(code: string, opts: JoinNetOptions = {}): JoinNetH
         ...(deps.onHostGone ? { onHostGone: deps.onHostGone } : {}),
         ...(deps.onHostReturned ? { onHostReturned: deps.onHostReturned } : {}),
         ...(deps.onInventoryState ? { onInventoryState: deps.onInventoryState } : {}),
+        ...(deps.chat ? { chat: deps.chat } : {}),
       };
       world = attached;
+      // joiner: chat submissions become `chat` intents (E5.5) — the host is
+      // the only party that resolves/filters/relays.
+      if (deps.chat) {
+        deps.chat.onSubmit = (text, channel) => session?.sendChat(text, channel);
+      }
       if (deps.onInventoryState && pendingInventoryState) {
         deps.onInventoryState(pendingInventoryState);
         pendingInventoryState = null;
@@ -444,6 +485,7 @@ export function createJoinNet(code: string, opts: JoinNetOptions = {}): JoinNetH
           if (deps.voxels) deps.voxels.onLocalEdit = null;
           if (deps.spawns) deps.spawns.onInteractIntent = null;
           if (deps.groundItems) deps.groundItems.onInteractIntent = null;
+          if (deps.chat) deps.chat.onSubmit = null;
           if (deps.placeables) {
             deps.placeables.onInteractIntent = null;
             deps.placeables.onInventoryOpIntent = null;

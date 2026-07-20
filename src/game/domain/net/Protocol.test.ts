@@ -103,6 +103,16 @@ const HAPPY: NetMessage[] = [
   },
   { kind: "inventoryState", capacity: 2, slots: [{ itemId: "wood", count: 4 }, null] },
   { kind: "inventoryState", capacity: 0, slots: [] },
+  { kind: "chat", channel: "say", text: "hello there!" },
+  { kind: "chat", channel: "party", text: "hi team" },
+  {
+    kind: "chatMessage",
+    senderPeerId: "p1",
+    senderName: "Luna",
+    text: "hello there!",
+    channel: "say",
+    timestamp: 1000,
+  },
 ];
 
 describe("parseMessage — happy paths", () => {
@@ -233,6 +243,36 @@ describe("parseMessage — malformed input is an error value", () => {
       capacity: 200,
       slots: Array.from({ length: 200 }, () => null),
     }, // oversized slot array (DoS-shaped payload)
+    { kind: "chat" }, // missing channel/text
+    { kind: "chat", channel: "guild", text: "hi" }, // unknown channel
+    { kind: "chat", channel: "say", text: "" }, // empty text
+    { kind: "chat", channel: "say", text: "a".repeat(161) }, // over the wire cap
+    { kind: "chat", channel: "say", text: 7 }, // wrong type
+    { kind: "chatMessage", senderPeerId: "p1", text: "hi", channel: "say", timestamp: 1 }, // missing senderName
+    {
+      kind: "chatMessage",
+      senderPeerId: "p1",
+      senderName: "Luna",
+      text: "hi",
+      channel: "guild",
+      timestamp: 1,
+    }, // unknown channel
+    {
+      kind: "chatMessage",
+      senderPeerId: "p1",
+      senderName: "Luna",
+      text: "hi",
+      channel: "say",
+      timestamp: "now",
+    }, // wrong timestamp type
+    {
+      kind: "chatMessage",
+      senderPeerId: "p1",
+      senderName: "Luna",
+      text: "a".repeat(161),
+      channel: "say",
+      timestamp: 1,
+    }, // over the wire cap
   ];
 
   it.each(BAD.map((m) => [JSON.stringify(m) ?? String(m), m] as const))(
@@ -271,6 +311,21 @@ describe("N1: playerName length bound", () => {
 
   it("rejects a peerJoined playerName one over the cap", () => {
     const r = parseMessage({ kind: "peerJoined", peerId: "p1", playerName: NAME_25 });
+    expect(isErr(r)).toBe(true);
+  });
+});
+
+describe("E5.5: chat text wire bound", () => {
+  const TEXT_160 = "a".repeat(160);
+  const TEXT_161 = "a".repeat(161);
+
+  it("accepts chat text at exactly the wire cap", () => {
+    const r = parseMessage({ kind: "chat", channel: "say", text: TEXT_160 });
+    expect(isOk(r)).toBe(true);
+  });
+
+  it("rejects chat text one over the wire cap", () => {
+    const r = parseMessage({ kind: "chat", channel: "say", text: TEXT_161 });
     expect(isErr(r)).toBe(true);
   });
 });

@@ -26,6 +26,7 @@ import {
 } from "../domain/net/IntentRules";
 import {
   parseMessage,
+  type ChatMsg,
   type DigMsg,
   type FillMsg,
   type InteractAction,
@@ -37,6 +38,7 @@ import {
   type SerializedInventoryWire,
   type WorldEdit,
 } from "../domain/net/Protocol";
+import { buildChatMessage, type ChatChannel, type ChatMessage } from "../domain/social/Chat";
 import type { ChunkDelta, PlayerState } from "../domain/world/WorldSaveData";
 import type { NetTransport } from "./ports/NetTransport";
 
@@ -92,6 +94,20 @@ export interface HostSessionHooks {
    *  withdraw/harvest. */
   onGroundItemPeek?(targetId: string): { itemId: string; count: number } | undefined;
   onGroundItemRemove?(targetId: string): void;
+  /** A resolved chat message (E5.5) the HOST itself should display locally —
+   *  fired for every `say` message (the host has no wire hop to its own
+   *  broadcast) and for `party` messages the host is a member of. Mirrors
+   *  `onPeerPose`'s "host" self-loop convention. NEVER logged; this is the
+   *  only path chat text reaches the composition root. */
+  onChat?(msg: ChatMessage): void;
+  /** Party roster port (E5.5 deferral — E5.1's `Party.ts` hasn't landed yet):
+   *  given a sender peerId, return the OTHER party members' peerIds a
+   *  `party`-channel message should reach, or `null` if no party system is
+   *  wired. `HostSession` fails closed when this is unwired — a `party`
+   *  message never broadcasts to everyone, it only echoes back to its own
+   *  sender, since leaking an intended-private message would be a
+   *  child-safety regression, not just a missing feature. */
+  partyMembersOf?(senderPeerId: string): readonly string[] | null;
 }
 
 export interface HostSessionDeps {
@@ -103,9 +119,14 @@ export interface HostSessionDeps {
   readonly registry?: ItemRegistry;
   /** Slot count a fresh peer inventory is seeded with. */
   readonly playerInventoryCapacity?: number;
+  /** The HOST's own display name for chat (E5.5) — the host is a "player"
+   *  too but has no `join` message of its own to carry a name. */
+  readonly hostPlayerName?: string;
 }
 
 const DEFAULT_PLAYER_INVENTORY_CAPACITY = 27;
+const DEFAULT_HOST_PLAYER_NAME = "Host";
+const HOST_PEER_ID = "host";
 
 function emptyRegistry(): ItemRegistry {
   const created = ItemRegistry.create([]);
@@ -122,6 +143,10 @@ interface PeerRecord {
    *  joiner re-announces on a timer) must never re-seed the authoritative
    *  copy, or a peer could rewrite its own inventory at will. */
   inventorySeeded: boolean;
+  /** The host's own record of this peer's display name (set from `join`) —
+   *  chat (E5.5) relays THIS, never a per-message claim, so a peer can't
+   *  spoof another player's name in a chat line. */
+  playerName: string;
 }
 
 export class HostSession {
@@ -129,6 +154,7 @@ export class HostSession {
   private readonly clock: () => number;
   private readonly registry: ItemRegistry;
   private readonly playerInventoryCapacity: number;
+  private readonly hostPlayerName: string;
 
   constructor(
     private readonly transport: NetTransport,
@@ -139,11 +165,13 @@ export class HostSession {
     this.clock = deps.clock ?? (() => Date.now());
     this.registry = deps.registry ?? emptyRegistry();
     this.playerInventoryCapacity = deps.playerInventoryCapacity ?? DEFAULT_PLAYER_INVENTORY_CAPACITY;
+    this.hostPlayerName = deps.hostPlayerName ?? DEFAULT_HOST_PLAYER_NAME;
     transport.onPeerJoin((peerId) =>
       this.peers.set(peerId, {
         lastPose: null,
         inventory: Inventory.empty(this.registry, this.playerInventoryCapacity),
         inventorySeeded: false,
+        playerName: "",
       }),
     );
     transport.onPeerLeave((peerId) => {
@@ -212,6 +240,9 @@ export class HostSession {
       case "inventoryOp":
         this.handleInventoryOp(peerId, msg.inventoryOp);
         return;
+      case "chat":
+        this.handleChat(peerId, msg);
+        return;
       default:
         // host->joiner kinds echoed back at the host: no-op.
         return;
@@ -244,6 +275,11 @@ export class HostSession {
         if (isOk(seeded)) peer.inventory = seeded.value;
       }
       peer.inventorySeeded = true;
+      // Re-set on every join (the joiner re-announces on a timer) — this is
+      // just a display label, not an authority boundary like the inventory
+      // claim above, so re-applying it each time is harmless and keeps it
+      // current if the peer's local name setting ever changes mid-session.
+      peer.playerName = playerName;
       this.sendInventoryState(peerId, peer.inventory);
     }
 
@@ -397,6 +433,81 @@ export class HostSession {
     peer.inventory = credited.value;
     this.hooks.onGroundItemRemove?.(targetId);
     this.sendInventoryState(peerId, peer.inventory);
+  }
+
+  /** A joiner's chat submission (E5.5). The sender's name is looked up from
+   *  the host's OWN peer record, never trusted from the wire message — a
+   *  peer cannot spoof another player's display name. */
+  private handleChat(peerId: string, msg: ChatMsg): void {
+    const peer = this.peers.get(peerId);
+    if (!peer) return;
+    this.resolveAndBroadcastChat(peerId, peer.playerName, msg.text, msg.channel);
+  }
+
+  /** The HOST's own chat submission — same validate/filter/relay path a
+   *  joiner's intent takes, with sender identity "host" (mirrors the
+   *  existing `peerPose` "host" self-broadcast convention). */
+  sendHostChat(text: string, channel: ChatChannel): void {
+    this.resolveAndBroadcastChat(HOST_PEER_ID, this.hostPlayerName, text, channel);
+  }
+
+  /** Validate length, filter (kid-safe profanity/PII masking), then relay to
+   *  exactly the recipients the channel implies. `text`/the built message are
+   *  NEVER logged anywhere in this path — a rejected submission is dropped
+   *  silently, the same "drop, don't warn" contract dig/fill malformed edits
+   *  already use, chosen here specifically so a child's chat content can
+   *  never end up in a console/crash log. */
+  private resolveAndBroadcastChat(
+    senderPeerId: string,
+    senderName: string,
+    rawText: string,
+    channel: ChatChannel,
+  ): void {
+    const built = buildChatMessage({
+      senderPeerId,
+      senderName,
+      text: rawText,
+      channel,
+      timestamp: this.clock(),
+    });
+    if (!isOk(built)) return;
+    const msg = built.value;
+    const wire = {
+      kind: "chatMessage" as const,
+      senderPeerId: msg.senderPeerId,
+      senderName: msg.senderName,
+      text: msg.text,
+      channel: msg.channel,
+      timestamp: msg.timestamp,
+    };
+
+    if (channel === "say") {
+      // broadcast reaches every connected peer INCLUDING the sender (a
+      // joiner sees its own message echoed back, same as any other
+      // broadcast state); the host has no wire hop to itself, so it always
+      // gets its own local copy via `onChat`.
+      this.transport.broadcast(wire);
+      this.hooks.onChat?.(msg);
+      return;
+    }
+
+    // party channel (E5.5 deferral — E5.1's Party.ts hasn't landed): route
+    // through the `partyMembersOf` port. Unwired ⇒ FAIL CLOSED: the message
+    // reaches only its own sender, never a public broadcast — leaking an
+    // intended-private message would be a child-safety regression, not a
+    // convenience shortcut.
+    const members = this.hooks.partyMembersOf?.(senderPeerId) ?? null;
+    if (members === null) {
+      if (senderPeerId === HOST_PEER_ID) this.hooks.onChat?.(msg);
+      else this.transport.send(senderPeerId, wire);
+      return;
+    }
+    for (const memberId of members) this.transport.send(memberId, wire);
+    if (senderPeerId === HOST_PEER_ID || members.includes(HOST_PEER_ID)) {
+      this.hooks.onChat?.(msg);
+    } else if (senderPeerId !== HOST_PEER_ID) {
+      this.transport.send(senderPeerId, wire);
+    }
   }
 
   private broadcastPlaceableState(placeableId: string, state: unknown): void {

@@ -435,6 +435,15 @@ export const UI_STRINGS: Catalog = {
     "bank.close.aria": "Close bank",
     "bank.tab.shared": "Shared",
     "bank.tab.character": "Character",
+
+    "chat.log.aria": "Chat messages",
+    "chat.hint": "Press Enter to chat",
+    "chat.channel.aria": "Chat channel",
+    "chat.channel.say": "Say",
+    "chat.channel.party": "Party",
+    "chat.input.aria": "Chat message",
+    "chat.input.placeholder": "Say something nice…",
+    "chat.host.name": "Host",
   },
   es: {
     "app.title": "Diggy World",
@@ -862,6 +871,15 @@ export const UI_STRINGS: Catalog = {
     "bank.close.aria": "Cerrar banco",
     "bank.tab.shared": "Compartido",
     "bank.tab.character": "Personaje",
+
+    "chat.log.aria": "Mensajes de chat",
+    "chat.hint": "Pulsa Enter para chatear",
+    "chat.channel.aria": "Canal de chat",
+    "chat.channel.say": "Decir",
+    "chat.channel.party": "Grupo",
+    "chat.input.aria": "Mensaje de chat",
+    "chat.input.placeholder": "Di algo amable…",
+    "chat.host.name": "Anfitrión",
   },
   da: {
     "app.title": "Diggy World",
@@ -1289,6 +1307,15 @@ export const UI_STRINGS: Catalog = {
     "bank.close.aria": "Luk bank",
     "bank.tab.shared": "Delt",
     "bank.tab.character": "Karakter",
+
+    "chat.log.aria": "Chatbeskeder",
+    "chat.hint": "Tryk Enter for at chatte",
+    "chat.channel.aria": "Chatkanal",
+    "chat.channel.say": "Sig",
+    "chat.channel.party": "Gruppe",
+    "chat.input.aria": "Chatbesked",
+    "chat.input.placeholder": "Sig noget rart…",
+    "chat.host.name": "Vært",
   },
 };
 

@@ -110,12 +110,13 @@ import type { WorldSaveStore } from '../game/application/ports/WorldSaveStore';
 import { emptyExploration, revealAround } from '../game/domain/map/Exploration';
 import { mergeMarkers, type MapMarker } from '../game/domain/map/MinimapModel';
 import { mountMapScreen } from '../game/ui/MapScreen';
+import { mountChatBox } from '../game/ui/ChatBox';
 import { mountMinimapView } from '../spawn/MinimapView';
 import { createPlayerSurvivalBar } from '../spawn/PlayerSurvivalBar';
 import { IndexedDbKeyValueStore } from '../game/infrastructure/persistence/IndexedDbKeyValueStore';
 import { OpfsBlobStore } from '../game/infrastructure/persistence/OpfsBlobStore';
 import { PersistentWorldSaveStore } from '../game/infrastructure/persistence/PersistentWorldSaveStore';
-import type { WorldContext } from './Scenes';
+import type { ChatUiHandle, WorldContext } from './Scenes';
 import type { CamPose } from '../core/Hooks';
 
 /** Health fraction at/below which the persistent low-health vignette shows (Workstream 2.5). */
@@ -1057,6 +1058,23 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
       );
       mapScreen.refresh();
     });
+
+    // E5.5 kid-safe chat: a docked, always-visible scrollback + an Enter-to-
+    // open input. The UI never filters anything itself — it only displays
+    // whatever the host already resolved. `chatHandle` is the indirection
+    // the net glue (wired in main.ts, after this scene builds) reaches
+    // through `ctx.world.chat`, same pattern as `ctx.world.spawns`/`placeables`.
+    const chatHandle: ChatUiHandle = { receiveMessage: () => {}, onSubmit: null };
+    const chatBox = mountChatBox({
+      loc,
+      setInputEnabled: (on) => ctx.hooks.flyCamEnabled?.(on),
+      onSubmit: (text, channel) => chatHandle.onSubmit?.(text, channel),
+    });
+    chatHandle.receiveMessage = (msg) => chatBox.receiveMessage(msg);
+    if (ctx.world) {
+      ctx.world.chat = chatHandle; // M7 net glue reaches it here
+      ctx.world.hostPlayerName = loc.t('chat.host.name');
+    }
 
     // Workstream 5.3: Z sleeps through the night (a no-op by day — no bed
     // exists yet, Workstream 7); sets the spawn point at the player's

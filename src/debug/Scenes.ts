@@ -8,6 +8,7 @@ import type { AudioPort } from '../game/application/ports/AudioPort';
 import type { WorldSaveStore } from '../game/application/ports/WorldSaveStore';
 import type { ItemRegistry } from '../game/domain/items/ItemRegistry';
 import type { SerializedInventoryWire } from '../game/domain/net/Protocol';
+import type { ChatChannel, ChatMessage } from '../game/domain/social/Chat';
 import type { PlayerState } from '../game/domain/world/WorldSaveData';
 import type { GroundItemFieldHandle } from '../spawn/GroundItemField';
 import type { SpawnFieldHandle } from '../spawn/SpawnFieldView';
@@ -43,6 +44,24 @@ export interface WorldLaunchBinding {
    *  transfer (E0.4 wave-3). A joiner's inventory UI updates ONLY here, never
    *  from a local mutation. */
   applyInventoryState?(wire: SerializedInventoryWire): void;
+  /** Set by the scene once the ChatBox UI mounts (E5.5) — the net glue feeds
+   *  resolved host messages into it (`receiveMessage`) and wires its outward
+   *  submit callback to whatever sending actually means for this role (host:
+   *  relay directly; joiner: send a `chat` intent). */
+  chat?: ChatUiHandle;
+  /** Set by the scene (menu-launched only) — a localized display name for
+   *  the HOST's own chat messages (E5.5); the host has no `join` message of
+   *  its own to carry a name. */
+  hostPlayerName?: string;
+}
+
+/** The scene-owned chat UI surface the net glue drives (E5.5). */
+export interface ChatUiHandle {
+  receiveMessage(msg: ChatMessage): void;
+  /** Wired by the net glue after construction: what actually happens when
+   *  the player submits a line from the UI. Null until wired (nothing sends
+   *  before the net layer exists). */
+  onSubmit: ((text: string, channel: ChatChannel) => void) | null;
 }
 
 export interface WorldContext {

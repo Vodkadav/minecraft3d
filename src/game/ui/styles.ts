@@ -1151,6 +1151,74 @@ ${THEME_CSS_VARS}
   color: var(--lw-fg-muted);
   margin-top: var(--lw-space-2);
 }
+
+/* E5.5 kid-safe chat — a docked, non-modal panel (never blocks gameplay);
+   only the input row is a focus target, toggled by Enter/Escape. */
+.lw-chat {
+  position: fixed;
+  left: var(--lw-space-4);
+  bottom: var(--lw-space-4);
+  width: min(420px, 90vw);
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  gap: var(--lw-space-2);
+  pointer-events: none;
+}
+.lw-chat-log {
+  max-height: 220px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--lw-space-1);
+  padding: var(--lw-space-2);
+  background: rgba(0, 0, 0, 0.35);
+  border-radius: var(--lw-radius-md);
+  font-size: var(--lw-font-sm);
+}
+.lw-chat-line {
+  color: var(--lw-fg);
+  word-break: break-word;
+}
+.lw-chat-line-name {
+  font-weight: 600;
+}
+.lw-chat-line[data-channel="party"] .lw-chat-line-name {
+  color: var(--lw-accent);
+}
+.lw-chat-form {
+  display: none;
+  gap: var(--lw-space-2);
+  pointer-events: auto;
+}
+.lw-chat[data-open="true"] .lw-chat-form {
+  display: flex;
+}
+.lw-chat-channel {
+  background: var(--lw-bg-panel);
+  color: var(--lw-fg);
+  border: 1px solid var(--lw-border);
+  border-radius: var(--lw-radius-sm);
+  padding: var(--lw-space-1) var(--lw-space-2);
+  font-size: var(--lw-font-sm);
+}
+.lw-chat-input {
+  flex: 1;
+  background: var(--lw-bg-panel);
+  color: var(--lw-fg);
+  border: 1px solid var(--lw-border);
+  border-radius: var(--lw-radius-sm);
+  padding: var(--lw-space-1) var(--lw-space-2);
+  font-size: var(--lw-font-sm);
+}
+.lw-chat-hint {
+  font-size: var(--lw-font-xs);
+  color: var(--lw-fg-muted);
+  pointer-events: none;
+}
+.lw-chat[data-open="true"] .lw-chat-hint {
+  display: none;
+}
 `;
 
 export function injectStyles(doc: Document): void {
