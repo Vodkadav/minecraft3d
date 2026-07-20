@@ -21,8 +21,7 @@ import { RESEARCH_NODES } from "../domain/research/starterResearchTree";
 import type { ProgressionState } from "../domain/progression/ProgressionState";
 import { isOk } from "../domain/Result";
 import type { Localizer } from "../application/i18n/Localizer";
-import { Button } from "./components/Button";
-import { Panel } from "./components/Panel";
+import { WindowFrame } from "./components/WindowFrame";
 import { injectStyles } from "./styles";
 
 export interface ResearchScreenOptions {
@@ -77,25 +76,25 @@ export function mountResearchScreen(opts: ResearchScreenOptions): ResearchScreen
   overlay.setAttribute("aria-modal", "true");
   overlay.setAttribute("aria-label", opts.loc.t("research.title"));
 
-  const closeBtn = Button({
-    label: opts.loc.t("research.close"),
-    ariaLabel: opts.loc.t("research.close.aria"),
-    variant: "quiet",
-    onClick: () => close(),
-  });
-
   const pointsLine = doc.createElement("div");
   pointsLine.className = "lw-research-points";
-
-  const header = doc.createElement("div");
-  header.className = "lw-inv-header";
-  header.append(pointsLine, closeBtn);
 
   const body = doc.createElement("div");
   body.className = "lw-research-body";
 
-  const panel = Panel([header, body], { className: "lw-inv-overlay-panel" });
-  overlay.appendChild(panel);
+  const frame = WindowFrame({
+    doc,
+    title: opts.loc.t("research.title"),
+    headerExtra: pointsLine,
+    close: {
+      label: opts.loc.t("research.close"),
+      ariaLabel: opts.loc.t("research.close.aria"),
+      onClose: () => close(),
+    },
+    body: [body],
+    panelClassName: "lw-inv-overlay-panel",
+  });
+  overlay.appendChild(frame.panel);
   doc.body.appendChild(overlay);
 
   function setResearchInternal(next: ResearchState): void {

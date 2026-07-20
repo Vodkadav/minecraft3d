@@ -23,8 +23,8 @@ import type { TradeStackWire, TradeStateMsg } from "../../domain/net/Protocol";
 import type { Localizer } from "../../application/i18n/Localizer";
 import { itemDisplayName } from "../i18n/itemNames";
 import { Button } from "./Button";
+import { WindowFrame } from "./WindowFrame";
 import { InventoryGrid, type InventoryGridHandle } from "./InventoryGrid";
-import { Panel } from "./Panel";
 import { injectStyles } from "../styles";
 
 const OFFER_CAPACITY = 8;
@@ -94,21 +94,6 @@ export function mountTradeScreen(opts: TradeScreenOptions): TradeScreenHandle {
   overlay.setAttribute("role", "dialog");
   overlay.setAttribute("aria-modal", "true");
   overlay.setAttribute("aria-label", opts.loc.t("trade.title"));
-
-  const closeBtn = Button({
-    label: opts.loc.t("inventory.close"),
-    ariaLabel: opts.loc.t("inventory.close.aria"),
-    variant: "quiet",
-    onClick: () => {
-      args?.onCancel();
-      close();
-    },
-  });
-  const header = doc.createElement("div");
-  header.className = "lw-inv-header";
-  const title = doc.createElement("h2");
-  title.textContent = opts.loc.t("trade.title");
-  header.append(title, closeBtn);
 
   const helpLine = doc.createElement("p");
   helpLine.className = "lw-trade-help";
@@ -196,8 +181,21 @@ export function mountTradeScreen(opts: TradeScreenOptions): TradeScreenHandle {
   footer.className = "lw-trade-footer";
   footer.append(myConfirmStatus, theirConfirmStatus, confirmBtn, cancelBtn);
 
-  const panel = Panel([header, helpLine, body, footer], { className: "lw-inv-overlay-panel" });
-  overlay.appendChild(panel);
+  const frame = WindowFrame({
+    doc,
+    title: opts.loc.t("trade.title"),
+    close: {
+      label: opts.loc.t("inventory.close"),
+      ariaLabel: opts.loc.t("inventory.close.aria"),
+      onClose: () => {
+        args?.onCancel();
+        close();
+      },
+    },
+    body: [helpLine, body, footer],
+    panelClassName: "lw-inv-overlay-panel",
+  });
+  overlay.appendChild(frame.panel);
   doc.body.appendChild(overlay);
 
   function close(): void {

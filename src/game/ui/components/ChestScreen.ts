@@ -19,7 +19,7 @@ import type { ItemRegistry } from "../../domain/items/ItemRegistry";
 import type { Localizer } from "../../application/i18n/Localizer";
 import { Button } from "./Button";
 import { InventoryGrid } from "./InventoryGrid";
-import { Panel } from "./Panel";
+import { WindowFrame } from "./WindowFrame";
 import { injectStyles } from "../styles";
 
 export interface ChestScreenOptions {
@@ -86,18 +86,6 @@ export function mountChestScreen(opts: ChestScreenOptions): ChestScreenHandle {
   overlay.setAttribute("role", "dialog");
   overlay.setAttribute("aria-modal", "true");
   overlay.setAttribute("aria-label", opts.loc.t("placeable.chest.title"));
-
-  const closeBtn = Button({
-    label: opts.loc.t("inventory.close"),
-    ariaLabel: opts.loc.t("inventory.close.aria"),
-    variant: "quiet",
-    onClick: () => close(),
-  });
-  const header = doc.createElement("div");
-  header.className = "lw-inv-header";
-  const title = doc.createElement("h2");
-  title.textContent = opts.loc.t("placeable.chest.title");
-  header.append(title, closeBtn);
 
   const playerGrid = InventoryGrid({
     registry: opts.registry,
@@ -192,8 +180,18 @@ export function mountChestScreen(opts: ChestScreenOptions): ChestScreenHandle {
   body.className = "lw-chest-body";
   body.append(playerColumn, chestColumn);
 
-  const panel = Panel([header, body], { className: "lw-inv-overlay-panel" });
-  overlay.appendChild(panel);
+  const frame = WindowFrame({
+    doc,
+    title: opts.loc.t("placeable.chest.title"),
+    close: {
+      label: opts.loc.t("inventory.close"),
+      ariaLabel: opts.loc.t("inventory.close.aria"),
+      onClose: () => close(),
+    },
+    body: [body],
+    panelClassName: "lw-inv-overlay-panel",
+  });
+  overlay.appendChild(frame.panel);
   doc.body.appendChild(overlay);
 
   function close(): void {

@@ -15,7 +15,7 @@ import type { ItemRegistry } from "../../domain/items/ItemRegistry";
 import type { Localizer } from "../../application/i18n/Localizer";
 import { itemDisplayName } from "../i18n/itemNames";
 import { Button } from "./Button";
-import { Panel } from "./Panel";
+import { WindowFrame } from "./WindowFrame";
 import { injectStyles } from "../styles";
 
 export interface CampfireScreenOptions {
@@ -59,23 +59,21 @@ export function mountCampfireScreen(opts: CampfireScreenOptions): CampfireScreen
   overlay.setAttribute("aria-modal", "true");
   overlay.setAttribute("aria-label", opts.loc.t("placeable.campfire.title"));
 
-  const closeBtn = Button({
-    label: opts.loc.t("inventory.close"),
-    ariaLabel: opts.loc.t("inventory.close.aria"),
-    variant: "quiet",
-    onClick: () => close(),
-  });
-  const header = doc.createElement("div");
-  header.className = "lw-inv-header";
-  const title = doc.createElement("h2");
-  title.textContent = opts.loc.t("placeable.campfire.title");
-  header.append(title, closeBtn);
-
   const body = doc.createElement("div");
   body.className = "lw-campfire-body";
 
-  const panel = Panel([header, body], { className: "lw-inv-overlay-panel" });
-  overlay.appendChild(panel);
+  const frame = WindowFrame({
+    doc,
+    title: opts.loc.t("placeable.campfire.title"),
+    close: {
+      label: opts.loc.t("inventory.close"),
+      ariaLabel: opts.loc.t("inventory.close.aria"),
+      onClose: () => close(),
+    },
+    body: [body],
+    panelClassName: "lw-inv-overlay-panel",
+  });
+  overlay.appendChild(frame.panel);
   doc.body.appendChild(overlay);
 
   function cookableItemIds(inventory: Inventory): string[] {
