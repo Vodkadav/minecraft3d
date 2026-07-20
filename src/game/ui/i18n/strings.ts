@@ -64,6 +64,8 @@ export const UI_STRINGS: Catalog = {
     "settings.hudStyle.orbs": "Orbs",
     "settings.autoloot": "Autoloot",
     "settings.autolootRadius": "Autoloot radius (m)",
+    "settings.creatureSpawnRate": "Creature spawn rate",
+    "settings.resourceSpawnRate": "Resource spawn rate",
     "settings.back": "Back",
 
     "lobby.title": "Online worlds",
@@ -516,6 +518,8 @@ export const UI_STRINGS: Catalog = {
     "settings.hudStyle.orbs": "Orbes",
     "settings.autoloot": "Recolección automática",
     "settings.autolootRadius": "Radio de recolección automática (m)",
+    "settings.creatureSpawnRate": "Tasa de aparición de criaturas",
+    "settings.resourceSpawnRate": "Tasa de aparición de recursos",
     "settings.back": "Atrás",
 
     "lobby.title": "Mundos en línea",
@@ -968,6 +972,8 @@ export const UI_STRINGS: Catalog = {
     "settings.hudStyle.orbs": "Kugler",
     "settings.autoloot": "Automatisk opsamling",
     "settings.autolootRadius": "Radius for automatisk opsamling (m)",
+    "settings.creatureSpawnRate": "Spawnrate for skabninger",
+    "settings.resourceSpawnRate": "Spawnrate for ressourcer",
     "settings.back": "Tilbage",
 
     "lobby.title": "Online-verdener",

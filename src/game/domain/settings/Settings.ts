@@ -43,6 +43,10 @@ export const TEXT_SCALE_MAX = 2.0;
 export const AUTOLOOT_RADIUS_MIN_M = 1;
 export const AUTOLOOT_RADIUS_MAX_M = 15;
 
+// ---- E6.6: spawn-rate multiplier bounds (stack onto animalDensity) ----
+export const SPAWN_RATE_MIN = 0.25;
+export const SPAWN_RATE_MAX = 3;
+
 export interface Settings {
   readonly graphicsPreset: GraphicsPreset;
   /** Normalized 0..1; feeds M5 spawn density. */
@@ -76,6 +80,12 @@ export interface Settings {
   readonly autolootEnabled: boolean;
   /** Metres; AUTOLOOT_RADIUS_MIN..MAX_M. */
   readonly autolootRadiusM: number;
+  // ---- E6.6: spawn-rate multipliers, stacked onto animalDensity/SpawnField
+  // density (domain/spawn/SpawnField's biome/time gate) ----
+  /** SPAWN_RATE_MIN..MAX; default 1 (no-op). */
+  readonly creatureSpawnRate: number;
+  /** SPAWN_RATE_MIN..MAX; default 1 (no-op). */
+  readonly resourceSpawnRate: number;
 }
 
 /** Mutable/plain shape accepted by the factory before validation. */
@@ -102,6 +112,8 @@ export type SettingsInput = {
   readonly hudStyle: HudStyle;
   readonly autolootEnabled: boolean;
   readonly autolootRadiusM: number;
+  readonly creatureSpawnRate: number;
+  readonly resourceSpawnRate: number;
 };
 
 export type SettingsError =
@@ -114,7 +126,9 @@ export type SettingsError =
   | { readonly kind: "DayLengthOutOfRange"; readonly value: number }
   | { readonly kind: "UnknownNameplateMode"; readonly value: string }
   | { readonly kind: "UnknownHudStyle"; readonly value: string }
-  | { readonly kind: "AutolootRadiusOutOfRange"; readonly value: number };
+  | { readonly kind: "AutolootRadiusOutOfRange"; readonly value: number }
+  | { readonly kind: "CreatureSpawnRateOutOfRange"; readonly value: number }
+  | { readonly kind: "ResourceSpawnRateOutOfRange"; readonly value: number };
 
 function isGraphicsPreset(value: string): value is GraphicsPreset {
   return (GRAPHICS_PRESETS as readonly string[]).includes(value);
@@ -187,6 +201,20 @@ export function makeSettings(input: SettingsInput): Result<Settings, SettingsErr
   ) {
     return err({ kind: "AutolootRadiusOutOfRange", value: input.autolootRadiusM });
   }
+  if (
+    !Number.isFinite(input.creatureSpawnRate) ||
+    input.creatureSpawnRate < SPAWN_RATE_MIN ||
+    input.creatureSpawnRate > SPAWN_RATE_MAX
+  ) {
+    return err({ kind: "CreatureSpawnRateOutOfRange", value: input.creatureSpawnRate });
+  }
+  if (
+    !Number.isFinite(input.resourceSpawnRate) ||
+    input.resourceSpawnRate < SPAWN_RATE_MIN ||
+    input.resourceSpawnRate > SPAWN_RATE_MAX
+  ) {
+    return err({ kind: "ResourceSpawnRateOutOfRange", value: input.resourceSpawnRate });
+  }
   return ok({
     graphicsPreset: input.graphicsPreset,
     animalDensity: input.animalDensity,
@@ -210,6 +238,8 @@ export function makeSettings(input: SettingsInput): Result<Settings, SettingsErr
     hudStyle: input.hudStyle,
     autolootEnabled: input.autolootEnabled,
     autolootRadiusM: input.autolootRadiusM,
+    creatureSpawnRate: input.creatureSpawnRate,
+    resourceSpawnRate: input.resourceSpawnRate,
   });
 }
 
@@ -243,6 +273,9 @@ export function defaultSettings(): Settings {
     // shouldn't need to discover a toggle to get the "walk over it" feel.
     autolootEnabled: true,
     autolootRadiusM: 3,
+    // E6.6: 1 = no-op, identical to pre-E6.6 SpawnField density behaviour.
+    creatureSpawnRate: 1,
+    resourceSpawnRate: 1,
   };
 }
 

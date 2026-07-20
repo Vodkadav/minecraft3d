@@ -11,7 +11,13 @@
  * ring is exact at its edges.
  */
 
-import { spawnsNear, worldToSpawnCell, SPAWN_CELL_M, type SpawnEntity } from "./SpawnField";
+import {
+  spawnsNear,
+  worldToSpawnCell,
+  SPAWN_CELL_M,
+  type SpawnEntity,
+  type SpawnNearGate,
+} from "./SpawnField";
 
 /** No-spawn radius around every player — nothing pops in in plain sight. */
 export const MIN_SPAWN_DIST_M = 24;
@@ -19,6 +25,19 @@ export const MIN_SPAWN_DIST_M = 24;
 export const ACTIVE_RANGE_M = 128;
 /** Active entities survive out to here before despawning (hysteresis). */
 export const DESPAWN_RANGE_M = 160;
+
+/**
+ * E6.3: a global ceiling on the active set, per kind — the density/spawn-rate
+ * settings (up to 3x, E6.6) can otherwise push the active count arbitrarily
+ * high. Generous enough that default settings (density 0.5, rates 1) never
+ * come close — this is a budget backstop, not a nerf.
+ */
+export interface SpawnCaps {
+  readonly maxCreatures: number;
+  readonly maxNodes: number;
+}
+
+export const DEFAULT_SPAWN_CAPS: SpawnCaps = { maxCreatures: 64, maxNodes: 96 };
 
 export interface SpawnStepContext {
   readonly seed: number;
@@ -31,6 +50,10 @@ export interface SpawnStepContext {
   readonly active: ReadonlySet<string>;
   /** Harvested/killed ids for this epoch — never (re-)spawned. */
   readonly removed: ReadonlySet<string>;
+  /** E6.3 biome/time-of-day/spawn-rate gate. Omit for pre-E6.3 behaviour. */
+  readonly gate?: SpawnNearGate;
+  /** E6.3 global per-kind cap. Omit for no cap (pre-E6.3 behaviour). */
+  readonly caps?: SpawnCaps;
 }
 
 export interface SpawnStep {
@@ -60,21 +83,48 @@ export function stepSpawns(ctx: SpawnStepContext): SpawnStep {
   // by id so overlapping windows don't double-enter an entity.
   const candidates = new Map<string, SpawnEntity>();
   for (const [px, pz] of ctx.players) {
-    for (const s of spawnsNear(ctx.seed, ctx.epoch, px, pz, radiusCells, ctx.density)) {
+    for (const s of spawnsNear(ctx.seed, ctx.epoch, px, pz, radiusCells, ctx.density, ctx.gate)) {
       candidates.set(s.id, s);
     }
   }
 
-  const enter: SpawnEntity[] = [];
   const keep = new Set<string>();
+  const enterCandidates: SpawnEntity[] = [];
   for (const s of candidates.values()) {
     if (ctx.removed.has(s.id)) continue;
     const d = nearestDistSq(s.position[0], s.position[2], ctx.players);
     if (ctx.active.has(s.id)) {
       if (d <= despawnSq) keep.add(s.id);
     } else if (d >= minSq && d <= activeSq) {
+      enterCandidates.push(s);
+    }
+  }
+
+  // E6.3 global cap: trim new entries once a kind's budget (already-kept +
+  // newly-entering) is spent. Already-active entities are never evicted by
+  // the cap — only new materialization is throttled — so a cap change (or a
+  // density spike) can't yank creatures out from under the player.
+  let enter: SpawnEntity[];
+  if (ctx.caps) {
+    let creatureCount = 0;
+    let nodeCount = 0;
+    for (const id of keep) {
+      if (candidates.get(id)?.kind === "creature") creatureCount++;
+      else nodeCount++;
+    }
+    enter = [];
+    for (const s of enterCandidates) {
+      if (s.kind === "creature") {
+        if (creatureCount >= ctx.caps.maxCreatures) continue;
+        creatureCount++;
+      } else {
+        if (nodeCount >= ctx.caps.maxNodes) continue;
+        nodeCount++;
+      }
       enter.push(s);
     }
+  } else {
+    enter = enterCandidates;
   }
 
   const leave: string[] = [];

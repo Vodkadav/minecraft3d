@@ -15,6 +15,8 @@ import {
   AUTOLOOT_RADIUS_MIN_M,
   GRAPHICS_PRESETS,
   HUD_STYLES,
+  SPAWN_RATE_MAX,
+  SPAWN_RATE_MIN,
   TEXT_SCALE_MAX,
   TEXT_SCALE_MIN,
   type GraphicsPreset,
@@ -299,6 +301,29 @@ export function SettingsView(
     apply({ autolootRadiusM: Number(autolootRadius.value) }),
   );
   field(doc, root, "laas-autoloot-radius", loc.t("settings.autolootRadius"), autolootRadius);
+
+  // ---- E6.6: spawn-rate multipliers (self-contained block, additive) ----
+  const creatureRate = doc.createElement("input");
+  creatureRate.type = "range";
+  creatureRate.min = String(SPAWN_RATE_MIN);
+  creatureRate.max = String(SPAWN_RATE_MAX);
+  creatureRate.step = "0.05";
+  creatureRate.value = String(s.creatureSpawnRate);
+  creatureRate.addEventListener("change", () =>
+    apply({ creatureSpawnRate: Number(creatureRate.value) }),
+  );
+  field(doc, root, "laas-creature-spawn-rate", loc.t("settings.creatureSpawnRate"), creatureRate);
+
+  const resourceRate = doc.createElement("input");
+  resourceRate.type = "range";
+  resourceRate.min = String(SPAWN_RATE_MIN);
+  resourceRate.max = String(SPAWN_RATE_MAX);
+  resourceRate.step = "0.05";
+  resourceRate.value = String(s.resourceSpawnRate);
+  resourceRate.addEventListener("change", () =>
+    apply({ resourceSpawnRate: Number(resourceRate.value) }),
+  );
+  field(doc, root, "laas-resource-spawn-rate", loc.t("settings.resourceSpawnRate"), resourceRate);
 
   // Back
   const back = doc.createElement("button");

@@ -15,6 +15,8 @@
 
 import { hashUnitFloat } from "../rng/hash";
 import { CREATURE_REGISTRY } from "../creatures/CreatureRegistry";
+import type { CreatureDefinition } from "../creatures/CreatureDefinition";
+import type { BiomeId } from "../world/BiomeId";
 
 export type SpawnKind = "node" | "creature";
 
@@ -117,6 +119,39 @@ export function worldToSpawnCell(coord: number): number {
   return Math.floor(coord / SPAWN_CELL_M);
 }
 
+/**
+ * E6.3 gating for a single cell — all optional, so an omitted field means
+ * "no gating on that axis" and every pre-E6.3 call site (and test) keeps its
+ * exact prior output. Only `kind: "creature"` species are ever gated by
+ * `biome`/`isNight` — resource nodes are unaffected (their per-biome variety
+ * already comes from which node species exist at all, not this gate).
+ */
+export interface SpawnCellGate {
+  /** Biome already resolved for this specific cell by the [F] caller (the
+   *  domain has no surface/height of its own — see `BiomeResources.ts`'s
+   *  module doc). A creature whose registry `biomeAffinity` excludes it is
+   *  skipped. */
+  readonly biome?: BiomeId;
+  /** True during night (`DayNight.isNight`). Gates a creature whose registry
+   *  `activityWindow` is "nocturnal"/"diurnal" against it. */
+  readonly isNight?: boolean;
+  /** Multiplier stacked onto `density`, creature-kind species only (E6.6
+   *  `creatureSpawnRate`). Defaults to 1 (no-op). */
+  readonly creatureRate?: number;
+  /** Multiplier stacked onto `density`, node-kind species only (E6.6
+   *  `resourceSpawnRate`). Defaults to 1 (no-op). */
+  readonly nodeRate?: number;
+}
+
+/** True if `def`'s activity window excludes the given time. Undefined
+ *  `isNight` (caller didn't say) or "always" never excludes. */
+function excludedByTime(activityWindow: string | undefined, isNight: boolean | undefined): boolean {
+  if (isNight === undefined) return false;
+  if (activityWindow === "nocturnal") return !isNight;
+  if (activityWindow === "diurnal") return isNight;
+  return false;
+}
+
 /** All spawns of cell (cx, cz) for this seed+epoch at the given density. */
 export function spawnsInCell(
   seed: number,
@@ -124,13 +159,28 @@ export function spawnsInCell(
   cx: number,
   cz: number,
   density: number,
+  gate?: SpawnCellGate,
 ): SpawnEntity[] {
   const out: SpawnEntity[] = [];
   for (let si = 0; si < SPAWN_SPECIES.length; si++) {
     const sp = SPAWN_SPECIES[si] as SpawnSpecies;
+    const rate = sp.kind === "creature" ? (gate?.creatureRate ?? 1) : (gate?.nodeRate ?? 1);
+    let def: CreatureDefinition | null = null;
+    if (sp.kind === "creature" && (gate?.biome !== undefined || gate?.isNight !== undefined)) {
+      const found = CREATURE_REGISTRY.get(sp.id);
+      def = found.ok ? found.value : null;
+    }
     for (let slot = 0; slot < sp.maxPerCell; slot++) {
       const k = si * 8 + slot;
-      if (hashUnitFloat(seed, epoch, cx, cz, EXISTS_SALT + k) >= sp.weight * density) continue;
+      if (hashUnitFloat(seed, epoch, cx, cz, EXISTS_SALT + k) >= sp.weight * density * rate) {
+        continue;
+      }
+      if (def) {
+        if (gate?.biome !== undefined && def.biomeAffinity && !def.biomeAffinity.includes(gate.biome)) {
+          continue;
+        }
+        if (excludedByTime(def.activityWindow, gate?.isNight)) continue;
+      }
       const x = (cx + hashUnitFloat(seed, epoch, cx, cz, POS_X_SALT + k)) * SPAWN_CELL_M;
       const z = (cz + hashUnitFloat(seed, epoch, cx, cz, POS_Z_SALT + k)) * SPAWN_CELL_M;
       out.push({
@@ -144,6 +194,15 @@ export function spawnsInCell(
   return out;
 }
 
+/** Same gate shape as {@link SpawnCellGate}, but `biome` becomes a per-cell
+ *  resolver since `spawnsNear` spans many cells that can straddle biomes. */
+export interface SpawnNearGate {
+  readonly biomeAt?: (cx: number, cz: number) => BiomeId;
+  readonly isNight?: boolean;
+  readonly creatureRate?: number;
+  readonly nodeRate?: number;
+}
+
 /** Every spawn within `radiusCells` cells of world position (x, z). */
 export function spawnsNear(
   seed: number,
@@ -152,13 +211,24 @@ export function spawnsNear(
   z: number,
   radiusCells: number,
   density: number,
+  gate?: SpawnNearGate,
 ): SpawnEntity[] {
   const ccx = worldToSpawnCell(x);
   const ccz = worldToSpawnCell(z);
   const found: SpawnEntity[] = [];
   for (let dz = -radiusCells; dz <= radiusCells; dz++) {
     for (let dx = -radiusCells; dx <= radiusCells; dx++) {
-      found.push(...spawnsInCell(seed, epoch, ccx + dx, ccz + dz, density));
+      const cx = ccx + dx;
+      const cz = ccz + dz;
+      const cellGate: SpawnCellGate | undefined = gate
+        ? {
+            biome: gate.biomeAt?.(cx, cz),
+            isNight: gate.isNight,
+            creatureRate: gate.creatureRate,
+            nodeRate: gate.nodeRate,
+          }
+        : undefined;
+      found.push(...spawnsInCell(seed, epoch, cx, cz, density, cellGate));
     }
   }
   return found;

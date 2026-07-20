@@ -39,10 +39,12 @@ import {
 import { CreatureModelLibrary, type CreatureInstance } from "./CreatureModels";
 import {
   NODE_YIELD,
+  SPAWN_CELL_M,
   worldToSpawnCell,
   type SpawnEntity,
 } from "../game/domain/spawn/SpawnField";
-import { stepSpawns } from "../game/domain/spawn/SpawnProximity";
+import { DEFAULT_SPAWN_CAPS, stepSpawns } from "../game/domain/spawn/SpawnProximity";
+import { classifyBiome } from "../game/domain/world/BiomeResources";
 import {
   decideBehavior,
   steer,
@@ -144,8 +146,15 @@ export interface SpawnFieldDeps {
    *  composition root drains stamina/hunger here. */
   onAttack?(): void;
   /** Workstream 5.4: true while it's night — widens aggro reaction range and
-   *  scales up contact-bite damage. Omitted/false = always-day behaviour. */
+   *  scales up contact-bite damage. Omitted/false = always-day behaviour. Also
+   *  feeds E6.3's nocturnal/diurnal creature-activity gate on spawn rolls. */
   isNight?(): boolean;
+  /** E6.6: creature spawn-rate multiplier (Settings.creatureSpawnRate),
+   *  stacked onto `density` for creature-kind species only. Defaults to 1. */
+  creatureSpawnRate?: number;
+  /** E6.6: resource spawn-rate multiplier (Settings.resourceSpawnRate),
+   *  stacked onto `density` for node-kind species only. Defaults to 1. */
+  resourceSpawnRate?: number;
   /** Workstream 5.6: difficulty multiplier on contact-bite damage (peaceful
    *  = 0 disables player-facing creature damage entirely). Defaults to 1. */
   creatureDamageMult?: number;
@@ -989,6 +998,11 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
         lastCz = cz;
         sinceStep = 0;
         const active = new Set([...nodes.keys(), ...creatures.keys()]);
+        // E6.3: biome resolved per-cell from the same ground height seam
+        // materialize()/validGround() already use (the domain has no
+        // surface — see BiomeResources.ts's module doc). E6.6: rate
+        // multipliers stack onto the existing density; caps are a fixed
+        // safety budget, not user-configurable.
         const { enter, leave } = stepSpawns({
           seed: deps.seed,
           epoch: 0,
@@ -996,6 +1010,16 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
           players: [[px, pz]],
           active,
           removed,
+          gate: {
+            biomeAt: (cx, cz) =>
+              classifyBiome(
+                deps.ground.heightAt((cx + 0.5) * SPAWN_CELL_M, (cz + 0.5) * SPAWN_CELL_M),
+              ),
+            isNight: deps.isNight?.(),
+            creatureRate: deps.creatureSpawnRate ?? 1,
+            nodeRate: deps.resourceSpawnRate ?? 1,
+          },
+          caps: DEFAULT_SPAWN_CAPS,
         });
         for (const id of leave) if (!tamed.has(id)) remove(id);
         for (const s of enter) materialize(s);

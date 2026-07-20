@@ -903,6 +903,8 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
       },
       isNight: () => isNight(sunSky.timeOfDay),
       creatureDamageMult: difficultyRules(settings.settings.difficulty).creatureDamage,
+      creatureSpawnRate: settings.settings.creatureSpawnRate,
+      resourceSpawnRate: settings.settings.resourceSpawnRate,
       ...(reducedMotionRef ? { reducedMotion: reducedMotionRef } : {}),
       ...(voxelsRef
         ? {

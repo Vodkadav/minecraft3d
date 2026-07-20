@@ -113,3 +113,77 @@ describe("consistency with SpawnField", () => {
     for (const s of enter) expect(fieldIds.has(s.id)).toBe(true);
   });
 });
+
+// E6.3: global per-kind caps.
+describe("stepSpawns caps", () => {
+  it("omitting caps never throttles entry (back-compat default)", () => {
+    const withoutCaps = stepSpawns({ seed: SEED, epoch: EPOCH, density: 1, players: [[0, 0]], active: new Set(), removed: new Set() });
+    const withUndefinedCaps = stepSpawns({
+      seed: SEED,
+      epoch: EPOCH,
+      density: 1,
+      players: [[0, 0]],
+      active: new Set(),
+      removed: new Set(),
+      caps: undefined,
+    });
+    expect(withUndefinedCaps.enter.map((s) => s.id)).toEqual(withoutCaps.enter.map((s) => s.id));
+  });
+
+  it("never enters more creatures than maxCreatures, nor more nodes than maxNodes", () => {
+    const { enter } = stepSpawns({
+      seed: SEED,
+      epoch: EPOCH,
+      density: 1,
+      players: [[0, 0]],
+      active: new Set(),
+      removed: new Set(),
+      caps: { maxCreatures: 2, maxNodes: 3 },
+    });
+    expect(enter.filter((s) => s.kind === "creature").length).toBeLessThanOrEqual(2);
+    expect(enter.filter((s) => s.kind === "node").length).toBeLessThanOrEqual(3);
+  });
+
+  it("counts already-active entities toward the cap and never evicts them for it", () => {
+    const first = stepSpawns({
+      seed: SEED,
+      epoch: EPOCH,
+      density: 1,
+      players: [[0, 0]],
+      active: new Set(),
+      removed: new Set(),
+    });
+    const creature = first.enter.find((s) => s.kind === "creature");
+    if (!creature) throw new Error("setup: expected at least one creature to spawn");
+    const active = new Set([creature.id]);
+    const next = stepSpawns({
+      seed: SEED,
+      epoch: EPOCH,
+      density: 1,
+      players: [[0, 0]],
+      active,
+      removed: new Set(),
+      caps: { maxCreatures: 0, maxNodes: 0 },
+    });
+    // the already-active creature survives the step even though the cap is 0
+    expect(next.leave).not.toContain(creature.id);
+    // but nothing new enters
+    expect(next.enter.length).toBe(0);
+  });
+});
+
+// E6.3: the biome/time/rate gate threads through unmodified.
+describe("stepSpawns gate", () => {
+  it("threads isNight to SpawnField — a nocturnal-only species never enters by day", () => {
+    const { enter } = stepSpawns({
+      seed: SEED,
+      epoch: EPOCH,
+      density: 1,
+      players: [[0, 0]],
+      active: new Set(),
+      removed: new Set(),
+      gate: { isNight: false },
+    });
+    expect(enter.some((s) => s.species === "owl")).toBe(false);
+  });
+});

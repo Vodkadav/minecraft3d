@@ -4,6 +4,10 @@
  * CreatureBrain.TEMPERAMENT / Taming.TAMING_RULES / spawn/SpawnPlacement
  * .SPECIES_VISUAL — this is a consolidation, not a rebalance. Adding a
  * creature later (E6.5) is one entry here.
+ *
+ * E6.3: `biomeAffinity` values reproduce exactly what `BiomeResources.ts`'s
+ * old hand-maintained per-biome creature lists said (a consolidation, not a
+ * rebalance) — that file now derives its lists from these instead.
  */
 
 import type { CreatureDefinition } from "./CreatureDefinition";
@@ -26,6 +30,7 @@ export const STARTER_CREATURES: readonly CreatureDefinition[] = [
     taming: { foodItemId: "berries", feedsRequired: 3, cooldownMs: 5000 },
     disposition: "friendly",
     visual: { shape: "cone", color: 0xb98a5a, size: 1.4, lift: 0.7 },
+    biomeAffinity: ["lowland"],
   },
   {
     id: "wolf",
@@ -44,6 +49,7 @@ export const STARTER_CREATURES: readonly CreatureDefinition[] = [
     taming: { foodItemId: "meat", feedsRequired: 4, cooldownMs: 8000 },
     disposition: "hostile",
     visual: { shape: "cone", color: 0x5d4633, size: 1.0, lift: 0.5 },
+    biomeAffinity: ["highland", "alpine"],
   },
 
   // ---- Workstream 7.2 creature variety ----
@@ -65,6 +71,7 @@ export const STARTER_CREATURES: readonly CreatureDefinition[] = [
     taming: { foodItemId: "carrot", feedsRequired: 4, cooldownMs: 6000 },
     disposition: "friendly",
     visual: { shape: "cone", color: 0x8a6a45, size: 1.7, lift: 0.85 },
+    biomeAffinity: ["highland", "alpine"],
   },
   {
     id: "fox",
@@ -83,6 +90,7 @@ export const STARTER_CREATURES: readonly CreatureDefinition[] = [
     // untameable — a small, timid animal, not every creature needs to be a mount.
     disposition: "neutral",
     visual: { shape: "cone", color: 0xc5622a, size: 0.7, lift: 0.35 },
+    biomeAffinity: ["lowland"],
   },
   {
     id: "boar",
@@ -101,6 +109,7 @@ export const STARTER_CREATURES: readonly CreatureDefinition[] = [
     // untameable — aggressive wild animal, not a mount.
     disposition: "hostile",
     visual: { shape: "cone", color: 0x4a3728, size: 1.1, lift: 0.5 },
+    biomeAffinity: ["highland"],
   },
   {
     id: "rabbit",
@@ -116,6 +125,7 @@ export const STARTER_CREATURES: readonly CreatureDefinition[] = [
     // untameable — small and timid, not a mount.
     disposition: "neutral",
     visual: { shape: "sphere", color: 0xcfc6b8, size: 0.4, lift: 0.2 },
+    biomeAffinity: ["lowland"],
   },
 
   // ---- E6.5 asset-library expansion — primitive-only visuals, no rigged
@@ -140,6 +150,7 @@ export const STARTER_CREATURES: readonly CreatureDefinition[] = [
     taming: { foodItemId: "wheat", feedsRequired: 3, cooldownMs: 5000 },
     disposition: "friendly",
     visual: { shape: "sphere", color: 0xe8e2d0, size: 0.9, lift: 0.4 },
+    biomeAffinity: ["lowland"],
   },
   {
     id: "bear",
@@ -159,6 +170,7 @@ export const STARTER_CREATURES: readonly CreatureDefinition[] = [
     // untameable — big and dangerous, not a mount.
     disposition: "hostile",
     visual: { shape: "cone", color: 0x3b2a1d, size: 1.6, lift: 0.8 },
+    biomeAffinity: ["highland"],
   },
   {
     id: "owl",
@@ -171,10 +183,13 @@ export const STARTER_CREATURES: readonly CreatureDefinition[] = [
       loot: [{ itemId: "feather", min: 1, max: 2 }],
     },
     temperament: { reactRange: 20, aggressive: false, fleeBelowHealth: 1 },
-    // untameable — a small forest bird. Suggested E6.3 nocturnal candidate:
-    // owls read as a "comes out at night" species once biome/time gating lands.
+    // untameable — a small forest bird.
     disposition: "neutral",
     visual: { shape: "sphere", color: 0x8a6f4e, size: 0.5, lift: 0.4 },
+    biomeAffinity: ["lowland"],
+    // E6.3: the nocturnal candidate flagged by E6.5 — owls read as a "comes
+    // out at night" species. Flavor only, not a danger spike (still passive).
+    activityWindow: "nocturnal",
   },
   {
     id: "badger",
@@ -193,6 +208,10 @@ export const STARTER_CREATURES: readonly CreatureDefinition[] = [
     // untameable — a grumpy little digger.
     disposition: "hostile",
     visual: { shape: "cone", color: 0x2e2e2e, size: 0.6, lift: 0.3 },
+    biomeAffinity: ["highland"],
+    // E6.3: secondary nocturnal candidate flagged by E6.5. Its bite damage
+    // is unchanged — nocturnal is presentation flavor, never a danger spike.
+    activityWindow: "nocturnal",
   },
   {
     id: "squirrel",
@@ -211,5 +230,6 @@ export const STARTER_CREATURES: readonly CreatureDefinition[] = [
     // untameable — tiny and skittish.
     disposition: "neutral",
     visual: { shape: "sphere", color: 0xa9682f, size: 0.35, lift: 0.2 },
+    biomeAffinity: ["lowland"],
   },
 ];

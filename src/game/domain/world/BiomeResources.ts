@@ -12,9 +12,18 @@
  * signal reaches game code, so a wetland at low elevation and a dry lowland
  * both classify as "lowland" — a real biome-aware classifier needs a new
  * engine-side port (out of scope for this slice).
+ *
+ * E6.3: `creatures` per biome is now DERIVED from `CreatureRegistry`'s
+ * `biomeAffinity` (one source of truth — the registry entry is what
+ * `domain/spawn/SpawnField`'s biome gate actually reads too), instead of a
+ * second hand-maintained list that could drift from it. `gatherables`/`nodes`
+ * stay hand-maintained (unaffected by this slice).
  */
 
-export type BiomeId = "lowland" | "highland" | "alpine";
+import { CREATURE_REGISTRY } from "../creatures/CreatureRegistry";
+import type { BiomeId } from "./BiomeId";
+
+export type { BiomeId };
 
 const LOWLAND_MAX_M = 250;
 const HIGHLAND_MAX_M = 900;
@@ -48,21 +57,27 @@ export const BIOME_RESOURCES: Readonly<Record<BiomeId, BiomeResourceTable>> = {
       "carrot-patch",
       "beehive",
     ],
-    // E6.5: sheep/squirrel/owl added conservatively (additive, no rebalance).
-    creatures: ["deer", "rabbit", "fox", "sheep", "squirrel", "owl"],
+    creatures: creaturesFor("lowland"),
   },
   highland: {
     gatherables: ["stone", "flint", "coal", "ore"],
     nodes: ["stone-node", "flint-node", "coal-node", "potato-patch"],
-    // E6.5: bear/badger added conservatively (additive, no rebalance).
-    creatures: ["wolf", "boar", "elk", "bear", "badger"],
+    creatures: creaturesFor("highland"),
   },
   alpine: {
     gatherables: ["gold-ore", "copper-ore", "silver-ore"],
     nodes: ["gold-vein", "copper-vein", "silver-vein"],
-    creatures: ["elk", "wolf"],
+    creatures: creaturesFor("alpine"),
   },
 };
+
+/** Registry creatures whose `biomeAffinity` includes `biome` (absent
+ *  affinity = universal, included everywhere). */
+function creaturesFor(biome: BiomeId): readonly string[] {
+  return CREATURE_REGISTRY.all()
+    .filter((c) => c.biomeAffinity === undefined || c.biomeAffinity.includes(biome))
+    .map((c) => c.id);
+}
 
 export function resourcesFor(biome: BiomeId): BiomeResourceTable {
   return BIOME_RESOURCES[biome];
