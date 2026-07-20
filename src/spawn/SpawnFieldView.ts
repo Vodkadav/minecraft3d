@@ -79,6 +79,7 @@ import {
   resolveMelee,
   type MeleeTarget,
 } from "../game/domain/combat/MeleeResolve";
+import type { DefeatEffectsHandle } from "../feel/DefeatEffects";
 
 /** Seconds between proximity re-steps when no cell is crossed. */
 const STEP_INTERVAL_S = 1.0;
@@ -209,6 +210,14 @@ export interface SpawnFieldDeps {
    *  materialize scale-up (an instant pop instead) — defaults to the OS
    *  prefers-reduced-motion query when omitted. */
   reducedMotion?(): boolean;
+  /** E7.7: poof/confetti/loot-fountain/"Defeated!" note, fired at the kill
+   *  position on both the killer's own resolve (applyMeleeHit) AND every
+   *  peer's streamed death (playDeathRemote) — the existing `dying` flag
+   *  already makes every peer agree on WHEN a creature died, this just
+   *  plays the same rich VFX locally on each of them (no new wire message).
+   *  Omitted = no rich defeat VFX (the plain `defeatPoof` FeelEvent bundle
+   *  still fires shake/rumble regardless via `deps.feel`). */
+  readonly defeatEffects?: DefeatEffectsHandle;
 }
 
 /**
@@ -361,6 +370,43 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
       const p = t / GROW_DURATION_S;
       obj.scale.setScalar(0.05 + 0.95 * (1 - Math.pow(1 - p, 3)));
       growing.set(obj, t);
+    }
+  }
+
+  // ---- E7.7: a brief cartoony squash accompanies the poof at the instant
+  // of a rigged creature's death (the death clip itself keeps playing
+  // underneath) — same Map-of-elapsed-seconds shape as `growing` above,
+  // gated by the same `reducedMotion()` check. Scales RELATIVE to whatever
+  // scale the object already had at squash-start (captured per-entry, not a
+  // hardcoded 1) so it composes correctly with the per-species model
+  // normalization `CreatureModelLibrary` applies to `instance.root.scale`.
+  const SQUASH_DURATION_S = 0.22;
+  interface SquashState {
+    elapsed: number;
+    readonly baseX: number;
+    readonly baseY: number;
+    readonly baseZ: number;
+  }
+  const squashing = new Map<Object3D, SquashState>();
+  function beginSquash(obj: Object3D): void {
+    if (reducedMotion()) return;
+    squashing.set(obj, { elapsed: 0, baseX: obj.scale.x, baseY: obj.scale.y, baseZ: obj.scale.z });
+  }
+  function stepSquash(dt: number): void {
+    if (squashing.size === 0) return;
+    for (const [obj, s] of squashing) {
+      const t = s.elapsed + dt;
+      if (t >= SQUASH_DURATION_S) {
+        obj.scale.set(s.baseX, s.baseY, s.baseZ);
+        squashing.delete(obj);
+        continue;
+      }
+      // ease-out cubic pop that settles back to base scale — a squash-and-
+      // recover flourish, not a shrink-away (the death clip owns the fall).
+      const p = t / SQUASH_DURATION_S;
+      const amt = 1 - (1 - Math.pow(1 - p, 3));
+      obj.scale.set(s.baseX * (1 + 0.35 * amt), s.baseY * (1 - 0.35 * amt), s.baseZ * (1 + 0.35 * amt));
+      s.elapsed = t;
     }
   }
 
@@ -527,6 +573,7 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
     const creature = creatures.get(id);
     if (creature) {
       growing.delete(creature.obj);
+      squashing.delete(creature.obj);
       group.remove(creature.obj);
       creatures.delete(id);
       return;
@@ -677,6 +724,15 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
     deps.feel?.trigger(weapon.feelEvent as FeelEventId, { worldPos: pos, crit });
     if (!r.died) return false;
     deps.feel?.trigger("kill", { worldPos: pos, numberValue: damage, crit });
+    // E7.7: the celebratory defeat bundle — a themed particle burst via the
+    // plain FeelEvent (shake/rumble, mobile-safe no-op if unmapped) AND the
+    // richer poof/confetti/loot-fountain/"Defeated!" toolkit (E7.7-owned,
+    // skipped entirely when the composition root didn't mount it — mobile
+    // preset). Fired here for the LOCAL/host resolve; `playDeathRemote`
+    // below fires the same pair for every peer's streamed death, off the
+    // existing `dying` flag — no new wire message.
+    deps.feel?.trigger("defeatPoof", { worldPos: pos });
+    deps.defeatEffects?.defeat(pos);
     const roll = hashUnitFloat(deps.seed, clockMs | 0, 0x6f00 + saltIndex);
     const drop = scaleStacks(lootFor(target.entity.species, roll), deps.lootMult?.() ?? 1);
     if (drop.length > 0) deps.onDropLoot?.(drop, pos);
@@ -686,8 +742,10 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
     if (target.riddenBy !== null) resolveDismountPeer(target.riddenBy);
     // rigged creatures fall over first; primitives vanish immediately
     const duration = target.instance?.playDeath() ?? 0;
-    if (duration > 0) target.dying = duration;
-    else remove(target.entity.id);
+    if (duration > 0) {
+      target.dying = duration;
+      beginSquash(target.obj);
+    } else remove(target.entity.id);
     return true;
   }
 
@@ -1034,11 +1092,20 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
 
   /** Joiner: the host just streamed this id as newly `dying` — play the
    *  one-shot death clip once; the entity keeps updating (frozen position)
-   *  until the host's own removal drops it from the stream. */
+   *  until the host's own removal drops it from the stream. E7.7: also plays
+   *  the same defeat VFX pair the killer's own resolve does (applyMeleeHit)
+   *  — the streamed `dying` flag is what makes every peer agree on WHEN a
+   *  creature died; this just plays the same cosmetic locally, no new wire
+   *  message needed. */
   function playDeathRemote(e: CreatureEntity): void {
     const c = creatures.get(e.id);
     if (!c || c.dying !== null) return;
-    c.dying = c.instance?.playDeath() ?? 0;
+    const pos: [number, number, number] = [c.obj.position.x, c.obj.position.y, c.obj.position.z];
+    deps.feel?.trigger("defeatPoof", { worldPos: pos });
+    deps.defeatEffects?.defeat(pos);
+    const duration = c.instance?.playDeath() ?? 0;
+    c.dying = duration;
+    if (duration > 0) beginSquash(c.obj);
   }
 
   function applySnapshot(entities: readonly CreatureEntity[]): void {
@@ -1089,6 +1156,7 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
     update(dt: number): void {
       clockMs += dt * 1000;
       stepGrowth(dt);
+      stepSquash(dt);
       // Joiner puppets the host's stream: no proximity, no AI. Advance the
       // animation mixers so the streamed poses stay animated, and smooth each
       // creature's rendered transform toward the latest snapshot (`remoteTarget`)
