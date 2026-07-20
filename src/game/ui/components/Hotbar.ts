@@ -5,6 +5,11 @@
  * clicking a slot selects it too. No icon art exists yet, so slots render the
  * item's short display name — still legible, still keyboard-navigable
  * (each slot is a real, focusable button).
+ *
+ * Tooltips: the rich item-card tooltip (`RichTooltip.ts`) replaces the old
+ * native `title` attribute for every occupied slot — reachable by hover,
+ * keyboard focus, and touch long-press (see `InventoryGrid.ts` for the same
+ * migration on the backpack grid).
  */
 
 import type { Inventory } from "../../domain/inventory/Inventory";
@@ -18,14 +23,17 @@ import {
   selectHotbarSlot,
   type HotbarState,
 } from "../../domain/ui/HotbarSelection";
+import { buildTooltipModel } from "../../domain/ui/TooltipModel";
+import type { Localizer } from "../../application/i18n/Localizer";
 import { createItemIconEl } from "../icons/ItemIconElement";
+import { RichTooltip, type RichTooltipHandle } from "./RichTooltip";
 import { injectStyles } from "../styles";
 
 export interface HotbarOptions {
   readonly registry: ItemRegistry;
+  readonly loc: Localizer;
   readonly ariaLabel: string;
   readonly slotAriaLabel: (index: number) => string;
-  readonly emptySlotLabel: string;
   onSelect?(index: number): void;
   /** Injectable for tests; defaults to the real window. */
   readonly target?: EventTarget;
@@ -76,6 +84,7 @@ export function Hotbar(opts: HotbarOptions): HotbarHandle {
   }
 
   let hotbar: HotbarState = initialHotbar();
+  const tooltips: (RichTooltipHandle | undefined)[] = new Array(HOTBAR_SIZE).fill(undefined);
 
   function applySelection(): void {
     slotEls.forEach((slotEl, i) => {
@@ -120,9 +129,12 @@ export function Hotbar(opts: HotbarOptions): HotbarHandle {
         if (!slotEl) return;
         const key = slotEl.querySelector(".lw-hotbar-slot-key");
         const count = slotEl.querySelector(".lw-hotbar-slot-count");
+
+        tooltips[i]?.dispose();
+        tooltips[i] = undefined;
+
         if (!slot) {
           slotEl.setAttribute("aria-label", opts.slotAriaLabel(i));
-          slotEl.title = opts.emptySlotLabel;
           if (count) count.textContent = "";
           const nameEl = slotEl.querySelector(".lw-hotbar-slot-name");
           nameEl?.remove();
@@ -144,8 +156,17 @@ export function Hotbar(opts: HotbarOptions): HotbarHandle {
           nameEl,
         );
         slotEl.setAttribute("aria-label", opts.slotAriaLabel(i));
-        slotEl.title = `${displayName} x${slot.count}`;
         if (count) count.textContent = slot.count > 1 ? String(slot.count) : "";
+
+        const model = buildTooltipModel({
+          itemId: slot.itemId,
+          registry: opts.registry,
+          t: (k, params) => opts.loc.t(k, params),
+          quantity: slot.count,
+        });
+        if (isOk(model)) {
+          tooltips[i] = RichTooltip({ doc, anchor: slotEl, model: model.value });
+        }
       });
       applySelection();
     },

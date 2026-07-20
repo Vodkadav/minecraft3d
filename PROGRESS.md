@@ -269,8 +269,18 @@ wire-touching slice).
   the whole sheet (4351ddc)
 - [ ] E8.2 Iconography v2: authored per-category glyph paths, rarity frame ring, overlay badges
   (equipped/new/qty); `PanelEmblem` grows into a per-screen emblem library + party/faction crest
-- [ ] E8.3 Rich tooltip system: pure `domain/ui/TooltipModel.ts` item-card model + `RichTooltip`
-  component (hover/keyboard-focus/touch long-press), replacing single-line hovers for items
+- [x] E8.3 Rich tooltip system: pure `domain/ui/TooltipModel.ts` item-card model (localized name,
+  rarity tier — defaults to "common", no item carries a real one yet, see UX_PLAN's standing
+  deferrals — category, tag-driven stat/affix rows for food/combat items, optional quantity/
+  keyhints; 23 tests) + `components/RichTooltip.ts` (doc-pure, hover + keyboard-focus + ~500ms touch
+  long-press to open, blur/mouseleave/Escape/outside-tap to dismiss, `role="tooltip"` +
+  `aria-describedby`, viewport-clamped positioning, rarity-colored name via
+  `var(--lw-rarity-<tier>-text)`, reduced-motion-safe via the existing `.laas-ui` global rule; 15
+  tests). Replaces the single-line `Tooltip.ts`/native `title` hovers in `InventoryGrid.ts` and
+  `Hotbar.ts` (and transitively `ChestScreen`/`BankScreen`/`TradeScreen`, which reuse
+  `InventoryGrid`) — split/quick-move keyhints now surface in the card too. 23 new i18n keys
+  (category/tier/hunger/health/damage/attackSpeed/damageType/reach rows + 10 category labels + 5
+  damage-type labels) × EN/ES/DA
 - [ ] E8.4 Context menus: pure `domain/ui/ItemActions.ts` action list + `ContextMenu` component
   (mouse right-click / keyboard / touch long-press), replacing the `InventoryGrid` split-only handler
 - [ ] E8.5 Inputs & chat polish: shared `Field.ts` input primitive; chat gains rarity-colored item

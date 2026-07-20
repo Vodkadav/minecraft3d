@@ -94,12 +94,14 @@ overlays sit over the lit world at ~45%, so a pure-black preview reads far darke
 
 ## Standing deferrals (recorded, not skipped)
 
-- **E8.2 item rarity source** — items carry no explicit `rarity` field, only a progression `tier`
-  (`domain/items/ItemDefinition`). E8.2 derives rarity from tier (`ui/icons/ItemRarity.ts`:
-  0→common … 4+→legendary) as the honest proxy and single source. A real per-item rarity field is
-  a future content pass (E9-ish) that only has to replace that one function.
+- **Item rarity source (E8.2/E8.3)** — items carry no explicit `rarity` field, only a progression
+  `tier` (`domain/items/ItemDefinition`). The single rarity source is `ui/icons/ItemRarity.ts`
+  (`rarityTierForItemTier`: tier 0→common … 4+→legendary), the honest proxy. Both the icon rarity
+  ring (`ItemIconElement` `rarityTier` param) and the tooltip (`domain/ui/TooltipModel.ts`
+  `buildTooltipModel`, which defaults to `"common"` and takes a `rarityTier` override) consume it —
+  wired at the E8 integration step. A real per-item rarity field (and UI to assign/roll it) is E9's
+  itemization wave, which only has to set the tier the override param already threads.
 - **E8.2 slot-wiring of rarity rings + badges** — the ring/badge *capabilities* landed
-  (`ItemIconElement` gained an optional `rarityTier`; `ItemBadges.ts`), but wiring them onto the
-  actual inventory/hotbar slots was deferred to the E8 integration step because `InventoryGrid.ts`/
-  `Hotbar.ts` were being edited in parallel by the E8.3/E8.4 slices; done at integration to avoid a
-  three-way conflict.
+  (`ItemIconElement` optional `rarityTier`; `ItemBadges.ts`); wiring them onto the actual inventory/
+  hotbar slots was deferred to the E8 integration step because `InventoryGrid.ts`/`Hotbar.ts` were
+  being edited in parallel by the E8.3/E8.4 slices — done at integration to avoid a three-way conflict.

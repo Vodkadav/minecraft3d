@@ -238,9 +238,9 @@ export function mountGameHud(opts: GameHudOptions): GameHudHandle {
 
   const hotbar = Hotbar({
     registry,
+    loc,
     ariaLabel: loc.t("hud.hotbar"),
     slotAriaLabel: (i) => loc.t("hud.hotbar.slot", { n: i + 1 }),
-    emptySlotLabel: loc.t("hud.hotbar.empty"),
     enableDigitKeys: opts.enableHotbarDigitKeys ?? true,
   });
   doc.body.appendChild(hotbar.el);

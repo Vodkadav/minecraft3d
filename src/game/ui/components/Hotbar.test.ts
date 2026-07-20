@@ -4,6 +4,7 @@ import { isOk } from "../../domain/Result";
 import { ItemRegistry } from "../../domain/items/ItemRegistry";
 import { STARTER_ITEMS } from "../../domain/items/starterItems";
 import { Inventory } from "../../domain/inventory/Inventory";
+import { createLocalizer } from "../i18n/strings";
 import { Hotbar } from "./Hotbar";
 
 function registry(): ItemRegistry {
@@ -25,9 +26,9 @@ describe("Hotbar", () => {
     const target = new EventTarget();
     const hotbar = Hotbar({
       registry: reg,
+      loc: createLocalizer("en"),
       ariaLabel: "Hotbar",
       slotAriaLabel: (i) => `Slot ${i + 1}`,
-      emptySlotLabel: "Empty",
       target,
     });
     expect(hotbar.el.querySelectorAll(".lw-hotbar-slot")).toHaveLength(9);
@@ -38,9 +39,9 @@ describe("Hotbar", () => {
     const target = new EventTarget();
     const hotbar = Hotbar({
       registry: reg,
+      loc: createLocalizer("en"),
       ariaLabel: "Hotbar",
       slotAriaLabel: (i) => `Slot ${i + 1}`,
-      emptySlotLabel: "Empty",
       target,
     });
     hotbar.render(inv(reg));
@@ -54,9 +55,9 @@ describe("Hotbar", () => {
     const target = new EventTarget();
     const hotbar = Hotbar({
       registry: reg,
+      loc: createLocalizer("en"),
       ariaLabel: "Hotbar",
       slotAriaLabel: (i) => `Slot ${i + 1}`,
-      emptySlotLabel: "Empty",
       target,
     });
     const slots = hotbar.el.querySelectorAll<HTMLElement>(".lw-hotbar-slot");
@@ -70,9 +71,9 @@ describe("Hotbar", () => {
     const onSelect = vi.fn();
     const hotbar = Hotbar({
       registry: reg,
+      loc: createLocalizer("en"),
       ariaLabel: "Hotbar",
       slotAriaLabel: (i) => `Slot ${i + 1}`,
-      emptySlotLabel: "Empty",
       target,
       onSelect,
     });
@@ -87,9 +88,9 @@ describe("Hotbar", () => {
     const target = new EventTarget();
     const hotbar = Hotbar({
       registry: reg,
+      loc: createLocalizer("en"),
       ariaLabel: "Hotbar",
       slotAriaLabel: (i) => `Slot ${i + 1}`,
-      emptySlotLabel: "Empty",
       target,
     });
     target.dispatchEvent(new KeyboardEvent("keydown", { key: "5" }));
@@ -101,9 +102,9 @@ describe("Hotbar", () => {
     const target = new EventTarget();
     const hotbar = Hotbar({
       registry: reg,
+      loc: createLocalizer("en"),
       ariaLabel: "Hotbar",
       slotAriaLabel: (i) => `Slot ${i + 1}`,
-      emptySlotLabel: "Empty",
       target,
     });
     target.dispatchEvent(new WheelEvent("wheel", { deltaY: -1 }));
@@ -115,9 +116,9 @@ describe("Hotbar", () => {
     const target = new EventTarget();
     const hotbar = Hotbar({
       registry: reg,
+      loc: createLocalizer("en"),
       ariaLabel: "Hotbar",
       slotAriaLabel: (i) => `Slot ${i + 1}`,
-      emptySlotLabel: "Empty",
       target,
       enableDigitKeys: false,
     });
@@ -133,9 +134,9 @@ describe("Hotbar", () => {
     const target = new EventTarget();
     const hotbar = Hotbar({
       registry: reg,
+      loc: createLocalizer("en"),
       ariaLabel: "Hotbar",
       slotAriaLabel: (i) => `Slot ${i + 1}`,
-      emptySlotLabel: "Empty",
       target,
     });
     hotbar.dispose();
