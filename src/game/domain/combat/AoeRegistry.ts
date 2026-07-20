@@ -58,7 +58,17 @@ export const STARTER_AOES: readonly AoeSpec[] = [
   // "bomb" item). blockSafe stays true (cozy default, plan §9); flipping it
   // is the deferred block-destroying-explosions follow-up, not this slice.
   { id: "bomb-boom", radius: 4, falloff: "linear", blockSafe: true, vfx: "vfx.boom.bomb" },
-  // ---- E7.3 Spellcasting (Healing Bloom) ----
+  // ---- E7.3 Spellcasting (Frost Puff, Healing Bloom, Vine Snare) ----
+  // Frost Puff's short forward cone — a small blast projected a few meters
+  // in front of the caster (see Ability.ts's resolveCastCenter), reads as a
+  // gentle puff rather than a hitscan cone.
+  { id: "frost-puff-cone", radius: 2.5, falloff: "linear", blockSafe: true, vfx: "vfx.frost.puff" },
+  // Healing Bloom centers on the caster — always includes self, extends to
+  // any ally within radius.
+  { id: "healing-bloom", radius: 5, falloff: "linear", blockSafe: true, vfx: "vfx.nature.bloom" },
+  // Vine Snare's ground-target root — a tight, non-falloff patch (root is
+  // binary, not scaled by distance).
+  { id: "vine-snare-root", radius: 2, falloff: "none", blockSafe: true, vfx: "vfx.nature.vine" },
   // ---- E7.5 Deployables (traps/mines/grenades) ----
   // ---- E7.6 Monster abilities (AoE stomp) ----
 ];

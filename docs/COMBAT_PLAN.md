@@ -35,7 +35,7 @@ status: the `## Combat (E7)` checklist in [`PROGRESS.md`](../PROGRESS.md). Archi
 | E7.4 AoE | Shared radius/falloff resolver, block-safe flag, boom VFX | Done |
 | E7.5 Deployables | Grenade / proximity mine / bumble-trap, host arm+trigger | Pending |
 | E7.6 Monster abilities | Telegraphed windups, stand-and-cast / retreat-and-fire | Pending |
-| E7.7 Defeat VFX | Poof + confetti + loot fountain, gentle player-down | Pending |
+| E7.7 Defeat VFX | Poof + confetti + loot fountain, gentle player-down | Done |
 | E7.8 Loot pools | Weighted rarity tiers, difficulty multiplier, deterministic roll | Done |
 
 ## Dependency order
@@ -80,6 +80,17 @@ E7.1, E7.7, E7.8 fully independent.
   - **Projectile broadcast cadence** (perf, not security): `broadcastProjectiles` fires every host
     tick while any projectile is live; bounded by the 12/peer cap. Throttle to the 10 Hz creature
     cadence later.
+
+## Integration follow-up (cross-stream, recorded not skipped)
+
+- **Combat presentation fields not yet wired into `main.ts`/`NetSync.ts`.** `ProjectileField`
+  (E7.2), `AoeField` (E7.4), and `DeployableField` (E7.5) each ship + test their pooled reconciler,
+  but none is instantiated in the live composition root yet (grep: `attachProjectileField`/
+  `attachAoeField` called nowhere outside their own modules/tests). The host simulation and wire are
+  fully live; only the cosmetic client-side fields await one integration slice that threads
+  `onProjectiles`/`onDeployables`/`onEffect`/`findHittableEntities` into `main.ts` for E7.2+E7.4+E7.5
+  together. Pure integration/no new domain — no security surface (host sim runs regardless). Schedule
+  after Wave B lands.
 
 ## Standing deferrals (recorded, not skipped)
 

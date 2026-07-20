@@ -232,7 +232,8 @@ slice (E7.0 protocol growth, E7.2–E7.6).
   arm/trigger
 - [ ] E7.6 Monster abilities: telegraphed windups (spit/cast/stomp), stand-and-cast /
   retreat-and-fire brain decisions
-- [ ] E7.7 Defeat VFX: poof + confetti + loot fountain, gentle player-down (no item loss)
+- [x] E7.7 Defeat VFX: poof + confetti + loot fountain, gentle player-down (no item loss)
+  (feel/DefeatEffects.ts, squash-and-recover, respawn shimmer) — presentation-only, no wire; merged
 - [x] E7.8 Loot pools: weighted rarity tiers, difficulty/encounter multiplier, deterministic
   single-roll (domain/loot/LootTable.ts + CreatureLootPools.ts, reward items) — merged 7879ab4
 - [ ] Combat playtest gate (structured session — owner schedules)

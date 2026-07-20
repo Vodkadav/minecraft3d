@@ -1756,3 +1756,194 @@ describe("HostSession — E7.2 ranged + ammo", () => {
     expect(last.entities).toEqual([]);
   });
 });
+
+describe("HostSession — E7.3 spellcasting", () => {
+  function makeSession(
+    hooks: Partial<HostSessionHooks> = {},
+  ): { net: ReturnType<typeof makeTransportNetwork>; session: HostSession; now: { value: number } } {
+    const net2 = makeTransportNetwork();
+    const nowBox = { value: 1000 };
+    const session2 = new HostSession(
+      net2.host,
+      () => SNAPSHOT,
+      { onWorldEdit: () => {}, ...hooks },
+      { registry: REGISTRY, clock: () => nowBox.value },
+    );
+    return { net: net2, session: session2, now: nowBox };
+  }
+
+  function projectilesMessages(inbox: unknown[]): { kind: string; entities: unknown[] }[] {
+    return inbox.filter((m) => (m as { kind: string }).kind === "projectiles") as {
+      kind: string;
+      entities: unknown[];
+    }[];
+  }
+
+  function effectMessages(
+    inbox: unknown[],
+  ): { kind: string; effectId: string; x: number; y: number; z: number }[] {
+    return inbox.filter((m) => (m as { kind: string }).kind === "effect") as {
+      kind: string;
+      effectId: string;
+      x: number;
+      y: number;
+      z: number;
+    }[];
+  }
+
+  function joinAndPose(
+    net2: ReturnType<typeof makeTransportNetwork>,
+    opts: { sendPose?: boolean } = {},
+  ): ReturnType<ReturnType<typeof makeTransportNetwork>["addPeer"]> {
+    const alice = net2.addPeer("alice");
+    alice.broadcast({ kind: "join", playerName: "Alice" });
+    if (opts.sendPose !== false) alice.broadcast({ kind: "pose", state: pose(0, 1, 0) });
+    return alice;
+  }
+
+  it("drops castSpell when the sender has never sent a pose (security a, null-pose gate)", () => {
+    const { net: net2, session } = makeSession();
+    const bob = net2.addPeer("bob");
+    const bobInbox = collect(bob);
+    const alice = joinAndPose(net2, { sendPose: false });
+    alice.broadcast({ kind: "castSpell", abilityId: "sparkle-bolt", origin: [0, 1, 0], dir: [0, 0, 1] });
+    session.tick(16);
+    expect(projectilesMessages(bobInbox).flatMap((m) => m.entities)).toEqual([]);
+  });
+
+  it("drops an unknown abilityId (security c)", () => {
+    const { net: net2, session } = makeSession();
+    const bob = net2.addPeer("bob");
+    const bobInbox = collect(bob);
+    const alice = joinAndPose(net2);
+    alice.broadcast({ kind: "castSpell", abilityId: "not-a-real-spell", origin: [0, 1, 0], dir: [0, 0, 1] });
+    session.tick(16);
+    expect(projectilesMessages(bobInbox).flatMap((m) => m.entities)).toEqual([]);
+    expect(effectMessages(bobInbox)).toEqual([]);
+  });
+
+  it("drops a cast once focus is insufficient (security d) — never goes negative or conjures an effect", () => {
+    const { net: net2, now } = makeSession();
+    const bob = net2.addPeer("bob");
+    const bobInbox = collect(bob);
+    const alice = joinAndPose(net2);
+    for (let i = 0; i < 7; i++) {
+      now.value += 5000; // refill castSpell's OWN rate-limit bucket every time — focus is the only gate left
+      alice.broadcast({ kind: "castSpell", abilityId: "vine-snare", origin: [0, 1, 0], groundPoint: [0, 1, 5] });
+    }
+    // vine-snare costs 18 focus, FOCUS_MAX is 100 -> floor(100/18) = 5 affordable casts.
+    expect(effectMessages(bobInbox)).toHaveLength(5);
+  });
+
+  it("rate-limits rapid casts (security b) even with focus fully topped up each time", () => {
+    const { net: net2 } = makeSession();
+    const bob = net2.addPeer("bob");
+    const bobInbox = collect(bob);
+    const alice = joinAndPose(net2);
+    for (let i = 0; i < 8; i++) {
+      // regenerate focus without advancing the clock, so the token bucket
+      // (which reads the clock directly, not tick()) never refills — only
+      // the rate limit can be the gate left standing in this loop.
+      alice.broadcast({ kind: "castSpell", abilityId: "vine-snare", origin: [0, 1, 0], groundPoint: [0, 1, 5] });
+    }
+    expect(effectMessages(bobInbox)).toHaveLength(6); // CAST_SPELL_RATE_LIMIT.capacity
+  });
+
+  it("sparkle bolt launches a host-simulated projectile (targeting: projectile)", () => {
+    const { net: net2, session } = makeSession();
+    const bob = net2.addPeer("bob");
+    const bobInbox = collect(bob);
+    const alice = joinAndPose(net2);
+    alice.broadcast({ kind: "castSpell", abilityId: "sparkle-bolt", origin: [0, 1, 0], dir: [0, 0, 1] });
+    session.tick(16);
+    const last = projectilesMessages(bobInbox).at(-1)!;
+    expect(last.entities).toHaveLength(1);
+    expect(last.entities[0]).toMatchObject({ projectileId: "sparkle-bolt", ownerId: "alice" });
+  });
+
+  it("sparkle bolt shares the per-peer active-projectile cap with aimedAttack (cap is reused, not re-invented)", () => {
+    const { net: net2, session, now } = makeSession();
+    const bob = net2.addPeer("bob");
+    const bobInbox = collect(bob);
+    const alice = net2.addPeer("alice");
+    alice.broadcast({
+      kind: "join",
+      playerName: "Alice",
+      inventory: { capacity: 27, slots: [{ itemId: "arrow", count: 99 }, ...Array(26).fill(null)] },
+    });
+    alice.broadcast({ kind: "pose", state: pose(0, 1, 0) });
+    alice.broadcast({ kind: "equipItem", slot: "weapon", itemId: "bow" });
+    for (let i = 0; i < 12; i++) {
+      now.value += 5000; // refill aimedAttack's OWN rate-limit bucket every time
+      alice.broadcast({ kind: "aimedAttack", origin: [0, 1, 0], dir: [0, 0, 1], weaponSlot: "weapon" });
+    }
+    now.value += 5000; // refill castSpell's OWN rate-limit bucket too
+    alice.broadcast({ kind: "castSpell", abilityId: "sparkle-bolt", origin: [0, 1, 0], dir: [0, 0, 1] });
+    session.tick(1);
+    const last = projectilesMessages(bobInbox).at(-1)!;
+    expect(last.entities).toHaveLength(12); // MAX_ACTIVE_PROJECTILES_PER_PEER — the 13th (spell) launch was dropped
+    expect(last.entities.every((e) => (e as { projectileId: string }).projectileId === "arrow")).toBe(true);
+  });
+
+  it("healing bloom always heals the caster itself, even with no ally hook wired", () => {
+    const onSpellEffect = vi.fn();
+    const { net: net2 } = makeSession({ onSpellEffect });
+    net2.addPeer("bob");
+    const alice = joinAndPose(net2);
+    alice.broadcast({ kind: "castSpell", abilityId: "healing-bloom", origin: [0, 1, 0], dir: [0, 0, 1] });
+    expect(onSpellEffect).toHaveBeenCalledWith("alice", 25, "heal", "nature", "spellNature", "alice");
+  });
+
+  it("healing bloom extends to allies from findHealableAllies within radius", () => {
+    const onSpellEffect = vi.fn();
+    const { net: net2 } = makeSession({
+      onSpellEffect,
+      findHealableAllies: () => [{ id: "bob", x: 2, y: 1, z: 0, radius: 0 }],
+    });
+    net2.addPeer("bob");
+    const alice = joinAndPose(net2);
+    alice.broadcast({ kind: "castSpell", abilityId: "healing-bloom", origin: [0, 1, 0], dir: [0, 0, 1] });
+    expect(onSpellEffect).toHaveBeenCalledWith("alice", 25, "heal", "nature", "spellNature", "alice");
+    expect(onSpellEffect).toHaveBeenCalledWith("bob", expect.any(Number), "heal", "nature", "spellNature", "alice");
+  });
+
+  it("frost puff resolves a control effect (kind 'control', amount 0 — no status system wired yet) against creatures in the cone", () => {
+    const onSpellEffect = vi.fn();
+    const { net: net2 } = makeSession({
+      onSpellEffect,
+      findHittableEntities: () => [{ id: "creature:1", x: 3, y: 1, z: 0, radius: 0.5 }],
+    });
+    net2.addPeer("bob");
+    const alice = joinAndPose(net2);
+    alice.broadcast({ kind: "castSpell", abilityId: "frost-puff", origin: [0, 1, 0], dir: [1, 0, 0] });
+    expect(onSpellEffect).toHaveBeenCalledWith("creature:1", 0, "control", "frost", "spellFrost", "alice");
+  });
+
+  it("drops a cone-targeted cast when the client sends a groundPoint instead of a dir", () => {
+    const { net: net2 } = makeSession();
+    const bob = net2.addPeer("bob");
+    const bobInbox = collect(bob);
+    const alice = joinAndPose(net2);
+    alice.broadcast({ kind: "castSpell", abilityId: "frost-puff", origin: [0, 1, 0], groundPoint: [1, 1, 1] });
+    expect(effectMessages(bobInbox)).toEqual([]);
+  });
+
+  it("broadcasts a cosmetic effect cue at the resolved AoE center for every peer", () => {
+    const { net: net2 } = makeSession();
+    const bob = net2.addPeer("bob");
+    const bobInbox = collect(bob);
+    const alice = joinAndPose(net2);
+    alice.broadcast({ kind: "castSpell", abilityId: "vine-snare", origin: [0, 1, 0], groundPoint: [2, 1, 4] });
+    expect(effectMessages(bobInbox)).toContainEqual({ kind: "effect", effectId: "vine-snare-root", x: 2, y: 1, z: 4 });
+  });
+
+  it("never logs cast contents — a dropped/malformed cast is a safe no-op, not a crash", () => {
+    const { net: net2, session } = makeSession();
+    net2.addPeer("bob");
+    const alice = joinAndPose(net2, { sendPose: false });
+    expect(() =>
+      alice.broadcast({ kind: "castSpell", abilityId: "sparkle-bolt", origin: [0, 1, 0], dir: [0, 0, 1] }),
+    ).not.toThrow();
+    expect(() => session.tick(16)).not.toThrow();
+  });
+});
