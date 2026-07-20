@@ -17,8 +17,10 @@
  *  - double-click quick-moves between the hotbar zone and the backpack zone
  *  - Escape cancels a pending pick
  *
- * Tooltips (registry + localized name + count) via the shared Tooltip
- * component; every slot is a real, focusable, ARIA-labelled gridcell.
+ * Tooltips: the rich item-card tooltip (`RichTooltip.ts`, backed by the pure
+ * `domain/ui/TooltipModel.ts`) replaces the old single-line `Tooltip.ts` for
+ * every slot — reachable by hover, keyboard focus, and touch long-press;
+ * every slot is a real, focusable, ARIA-labelled gridcell.
  */
 
 import { isOk } from "../../domain/Result";
@@ -34,10 +36,11 @@ import {
   splitCount,
   type GridUiState,
 } from "../../domain/ui/InventoryGridState";
+import { buildTooltipModel } from "../../domain/ui/TooltipModel";
 import type { Localizer } from "../../application/i18n/Localizer";
 import { itemDisplayName } from "../i18n/itemNames";
 import { createItemIconEl } from "../icons/ItemIconElement";
-import { attachTooltip, type TooltipHandle } from "./Tooltip";
+import { RichTooltip, type RichTooltipHandle } from "./RichTooltip";
 import { injectStyles } from "../styles";
 
 const DEFAULT_COLS = 9;
@@ -102,7 +105,7 @@ export function InventoryGrid(opts: InventoryGridOptions): InventoryGridHandle {
   let ui: GridUiState = initialGridState(0);
   let filterRules: readonly FilterRule[] = opts.filterRules ?? [];
   const slotEls: HTMLDivElement[] = [];
-  const tooltips: TooltipHandle[] = [];
+  const tooltips: RichTooltipHandle[] = [];
 
   function applyChange(result: { readonly ok: true; readonly value: Inventory } | { readonly ok: false; readonly error: InventoryError }): void {
     if (!isOk(result)) return; // rejected mutation (e.g. no room) — silently keeps state
@@ -208,10 +211,20 @@ export function InventoryGrid(opts: InventoryGridOptions): InventoryGridHandle {
         "aria-label",
         opts.loc.t("inventory.slot.aria", { n: index + 1, name: displayName, count: slot.count }),
       );
-      tooltips[index] = attachTooltip(
-        cell,
-        opts.loc.t("inventory.slot.tooltip", { name: displayName, count: slot.count }),
-      );
+
+      const keyhints: string[] = [];
+      if (!opts.readOnly && slot.count >= 2) keyhints.push(opts.loc.t("inventory.hint.split"));
+      if (!opts.readOnly && hotbarSize > 0) keyhints.push(opts.loc.t("inventory.hint.quickmove"));
+      const model = buildTooltipModel({
+        itemId: slot.itemId,
+        registry: opts.registry,
+        t: (key, params) => opts.loc.t(key, params),
+        quantity: slot.count,
+        keyhints: keyhints.length > 0 ? keyhints : undefined,
+      });
+      if (isOk(model)) {
+        tooltips[index] = RichTooltip({ doc, anchor: cell, model: model.value });
+      }
     });
   }
 

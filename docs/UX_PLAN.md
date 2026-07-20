@@ -94,5 +94,8 @@ overlays sit over the lit world at ~45%, so a pure-black preview reads far darke
 
 ## Standing deferrals (recorded, not skipped)
 
-- None recorded yet — this doc is created ahead of E8.0 landing; deferrals get recorded here as
-  each phase's implementer finds them, matching `COMBAT_PLAN.md`'s discipline.
+- **E8.3 rich tooltip — no rarity field on `ItemDefinition` yet.** `domain/ui/TooltipModel.ts`'s
+  `buildTooltipModel` defaults every item's `rarityTier` to `"common"` and accepts an optional
+  `rarityTier` override; nothing in the item registry or starter item data sets a real tier today.
+  Wiring a genuine per-item rarity (and any UI to assign/roll it) is E9's itemization wave — the
+  override param is the seam E9 threads through, not new work this slice.
