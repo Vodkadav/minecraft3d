@@ -303,30 +303,46 @@ wire-touching slice).
   registry data via `createTextNode`, not innerHTML), an accessible say/party channel `radiogroup` pill
   switcher, an unread badge, and a fixed localized kid-safe emote palette (insert-only). No new wire
   payload — a token is ordinary text in the existing chat `text` field through the UNMODIFIED host-side
-  profanity/PII filter. `ChatBoxHandle.insertItemLink(itemId)` is the ready hook; wiring an inventory
-  shift-click to it is deferred to the composition root (a `GameHud` follow-up, no new wire surface).
-  34+ tests
-- [~] E8.6 Menus, lobby & settings overhaul: menu/lobby/settings/credits shells moved onto the E8.1
-  panel surface language (warm elevation gradient + edge vignette + drop shadow). Remaining: Settings
-  UI category (hud style, tooltip verbosity, colorblind palette, reduce-flair — some gated on E8.8's
-  colorblind palette + a tooltip-verbosity consumer) and the lobby "play together" surface pass
+  profanity/PII filter. `ChatBoxHandle.insertItemLink(itemId)` is the ready hook. Shift-click wiring
+  DONE (2026-07-20, c53a1a0): a filled-slot shift-click (mouse) OR a new "Link to chat" context-menu
+  action (keyboard/touch parity) + a tooltip hint insert the link, threaded InventoryGrid →
+  InventoryScreen → GameHud → TerrainScene as an `onLinkItemToChat` callback (same shape as `onEat`/
+  `onBankChange`, owner-approved reversal of the "TerrainScene off-limits" caution). Adds NO wire
+  surface — the token travels the existing, unmodified host-side chat filter, exactly the wiring the
+  E8.5 link-authority invariant anticipated (no fresh security review required). 39+ tests
+- [x] E8.6 Menus, lobby & settings overhaul: menu/lobby/settings/credits shells on the E8.1 panel
+  surface language (warm elevation gradient + edge vignette + drop shadow). Settings UI category DONE
+  (2026-07-20): hudStyle already existed (E2.1); added `colorblindRarity` (live consumer — E8.8's
+  palette remap), `reduceFlair` (live consumer — flattens rich-tooltip glow + pauses menu-backdrop
+  parallax), and `tooltipVerbosity` full/compact (validated + persisted + control) — all defaults
+  no-op, EN/ES/DA. Lobby "play together" surface pass DONE (emblem heading + subtitle on the E8.1
+  surface). **Deferred (recorded):** the `tooltipVerbosity` CONSUMER — the setting persists but
+  `RichTooltip`/`buildTooltipModel` don't yet render a compact variant (threading it across every
+  tooltip call site is the follow-up; setting is inert until then, honestly marked)
 - [~] E8.7 HUD cohesion & action bar: hotbar slots/minimap/toasts moved onto the E8.1 surface-token +
   ornament-border + panel-shadow language (objective tracker/party/combat-meter already inherited it
   via `Panel()`) so all HUD chrome reads as one family; new `ActionBar.ts` (opt-in, "N"-toggled,
   Shift+1-9 activation, slot markup mirrors `Hotbar.ts`'s) + `BuffStrip.ts` (automatic, hidden while
   empty, gentle chip row) components, backed by pure `domain/ui/ActionBarState.ts`/`BuffStripState.ts`
   (TDD). Ability slots build from the real E7.3 `AbilityRegistry`; consumable slots from real
-  food-tagged `Inventory` stacks — reuse, no new ability/consumable system. Deferred (recorded in both
-  domain modules' doc comments): mounting either component into the live scene — the only composition
-  root that wires HUD panels together is `src/debug/TerrainScene.ts`, an engine dir off-limits to
-  additive game-code work; per-ability client-side cooldown tracking (E7.3 never built one); and a
-  real buff/status-effect source (none exists yet, per `AbilityRegistry.ts`'s own Frost Puff/Vine
-  Snare deferral note) — `BuffStrip.render` takes a plain chip array ready for whenever one lands
-- [~] E8.8 Accessibility, responsive & colorblind pass: high-contrast `--lw-*` wiring DONE (9d957e4 —
-  removed the dead legacy rule that rendered high-contrast panels white-on-white; remapped every
-  `--lw-*` token to a max-contrast white-on-black set on `[data-high-contrast="true"]`, browser-verified).
-  Remaining: ship the colorblind rarity palette toggle (E8.0 already defines `--lw-rarity-cb-*`), a
-  keyboard-nav/ARIA audit of the E8.1/E8.3/E8.4 chrome+tooltip+menu, and mobile/responsive layouts
+  food-tagged `Inventory` stacks — reuse, no new ability/consumable system. Mounting DONE (2026-07-20,
+  b5c009a): both components mount in `src/spawn/GameHud.ts` (game code, NOT TerrainScene — GameHud
+  already owns the live inventory + appends HUD elements to `body`, so the "off-limits engine dir"
+  blocker was avoidable). ActionBar re-renders consumables at every inventory-mutation site; a
+  consumable slot eats via a shared `eatItemById` helper (extracted from `eatSelected`, no dup logic);
+  BuffStrip renders `[]` (self-hides). Both opt-in/hidden by default so a no-flags boot is unchanged.
+  **Deferred (recorded):** ability-slot activation is a no-op (E7.3 built no client-side cast clock);
+  a real buff/status-effect source (none exists — `BuffStrip.render` takes a plain chip array ready
+  for whenever one lands)
+- [x] E8.8 Accessibility, responsive & colorblind pass: high-contrast `--lw-*` wiring DONE (9d957e4).
+  Colorblind rarity palette DONE (2026-07-20): `applyAccessibility` sets `data-colorblind-rarity`, a
+  `.laas-ui[data-colorblind-rarity="true"]` rule remaps all 5 `--lw-rarity-<tier>-{frame,text,glow}` to
+  the E8.0 `--lw-rarity-cb-*` tokens (settings toggle, slice A). Keyboard-nav/ARIA audit DONE (5a79ae8):
+  `ContextMenu` gained `aria-haspopup="menu"` + toggled `aria-expanded` (the one real defect);
+  `WindowFrame`/`RichTooltip` audited and found already-correct (labelled close, no focus trap/steal,
+  symmetric focus open/close). Mobile/responsive DONE: one `@media (max-width: 640px)` block —
+  overlays/HUD clusters reflow (min-width overflow fixed), hotbar/action-bar scroll instead of clip,
+  44px touch-target floor on buttons/inputs/slots
 - [ ] UI/UX visual-QA pass (aerial/close screenshots scored against the cozy-tone + a11y checklist:
   rarity legible + colorblind-safe, no empty panels, AA contrast, shape-not-color-only,
   reduced-motion honored)
