@@ -262,6 +262,30 @@ describe("E7.0 combat contracts: origin-near-pose bound", () => {
     ).toBe(false);
   });
 
+  it("validateCastSpell rejects a groundTarget spell whose groundPoint is far from the caster (sec finding A)", () => {
+    // origin is valid (near the pose) but the client-chosen blast center is not:
+    // a damaging groundTarget spell must never be centerable anywhere on the map.
+    expect(
+      validateCastSpell(lastPose, {
+        kind: "castSpell",
+        abilityId: "vine-snare",
+        origin: [2, 0, 0],
+        groundPoint: [500, 0, 0],
+      }),
+    ).toBe(false);
+  });
+
+  it("validateCastSpell accepts a groundTarget spell whose groundPoint is within cast range", () => {
+    expect(
+      validateCastSpell(lastPose, {
+        kind: "castSpell",
+        abilityId: "vine-snare",
+        origin: [2, 0, 0],
+        groundPoint: [10, 0, 0],
+      }),
+    ).toBe(true);
+  });
+
   it("validateDeployItem accepts a position near the sender's last pose", () => {
     expect(
       validateDeployItem(lastPose, { kind: "deployItem", deployableId: "bumble-trap", position: [3, 0, 0] }),

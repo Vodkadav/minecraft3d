@@ -47,6 +47,16 @@ const BURST_COLOR: Record<string, readonly [number, number, number]> = {
   // danger red (cozy tone, ADR 0004 §4 — a fair warning, not a threat).
   monsterTelegraph: [0.95, 0.83, 0.55],
   monsterCast: [0.95, 0.83, 0.55],
+  // E7.3: the three declared-but-uncolored spell FeelEventIds (`spellSpark`/
+  // `spellFrost`/`spellNature`, E7.0) had no visual yet — without these
+  // entries every spell hit would silently fall back to BURST_COLOR.hit's
+  // danger red, reading as violent. Cozy cyan-crackle/pale-blue/green-leaf
+  // instead (plan §5's spell palette); `heal` (Healing Bloom's feelEvent)
+  // stays burst-less on purpose, matching "eat"/regen's precedent of a
+  // screen-level-only heal cue with no particle burst.
+  spellSpark: [0.35, 0.85, 0.95], // cyan crackle
+  spellFrost: [0.72, 0.88, 0.98], // pale blue
+  spellNature: [0.42, 0.72, 0.35], // green leaf
 };
 
 interface Slot {

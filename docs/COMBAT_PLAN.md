@@ -31,7 +31,7 @@ status: the `## Combat (E7)` checklist in [`PROGRESS.md`](../PROGRESS.md). Archi
 | E7.0 Contracts | WeaponMetadata/DamageType, weapon/projectile/ability/aoe/deployable registries, wire intents + host streams, FeelEvents combat ids | Done |
 | E7.1 Melee | Per-weapon stats, attack-strength cooldown meter, cone assist, heavy sweep | Done |
 | E7.2 Ranged | Draw-to-charge, host-simulated projectiles, ammo items, quiver HUD | Done |
-| E7.3 Spells | Sparkle Bolt / Frost Puff / Healing Bloom / Vine Snare, focus resource, cast bar | Pending |
+| E7.3 Spells | Sparkle Bolt / Frost Puff / Healing Bloom / Vine Snare, focus resource, cast bar | Done |
 | E7.4 AoE | Shared radius/falloff resolver, block-safe flag, boom VFX | Done |
 | E7.5 Deployables | Grenade / proximity mine / bumble-trap, host arm+trigger | Done |
 | E7.6 Monster abilities | Telegraphed windups, stand-and-cast / retreat-and-fire | Done |
@@ -92,6 +92,14 @@ E7.1, E7.7, E7.8 fully independent.
   palette, `starterCreatures` order preserved. Nits (track, not blocking): ability damage bypasses the
   night/difficulty multipliers the melee bite uses; monster abilities (like the bite) only hit the
   host's local player, never joiners (gameplay gap, not a vuln).
+- **E7.3 Spellcasting** (APPROVED): host-authoritative castSpell — all 6 guards verified (null-pose
+  gate, rate-limit, registry drop-on-unknown, host-authoritative focus debit, host-computed
+  effects, authoritative target sets). Healing Bloom cannot heal enemies / target-spoof / over-heal.
+  **Finding A applied at merge:** `validateCastSpell` now range-bounds a `groundTarget` spell's
+  client-chosen `groundPoint` to ≤24 m of the caster (was finite-only) — closes the "center a blast
+  anywhere on the map" hole before any *damaging* groundTarget spell lands (today's Vine Snare is
+  damage-free). Deferred (for the future applier stream): Healing Bloom must clamp to `maxHealth`
+  (finding B); focus is debited before a targeting early-return can no-op (finding C, self-harm nit).
 
 ## Integration follow-up (cross-stream, recorded not skipped)
 

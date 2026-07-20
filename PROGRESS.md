@@ -222,8 +222,9 @@ slice (E7.0 protocol growth, E7.2–E7.6).
 - [x] E7.2 Ranged + ammo: draw-to-charge, host-simulated arcing projectiles, ammo consumption,
   cosmetic client tracers (bow/sling/dart-thrower + arrow/pebble/dart) — host-authoritative
   aimedAttack wire with all 6 E7.0-sec guards; security-reviewed (APPROVED), merged
-- [ ] E7.3 Spellcasting: Sparkle Bolt / Frost Puff / Healing Bloom / Vine Snare, regenerating
-  focus resource, cast bar
+- [x] E7.3 Spellcasting: Sparkle Bolt / Frost Puff / Healing Bloom / Vine Snare, regenerating
+  focus resource, cast bar (Ability resolver, Focus, castSpell handler, CastBar HUD) —
+  security-reviewed (APPROVED + groundPoint range-bound hardening applied), merged
 - [x] E7.4 AoE/explosives: shared `resolveAoe` radius/falloff resolver (domain/combat/Aoe.ts, pure,
   host-only), starter "bomb-boom" AoeSpec + thrown "bomb" item/recipe, ring+confetti+flash boom VFX
   (spawn/AoeField.ts) with a deferred, off-by-default block-dig seam — no wire/protocol changes

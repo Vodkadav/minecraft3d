@@ -131,6 +131,25 @@ export function validateTradePropose(senderPeerId: string, targetPeerId: string)
  * `HostSession`'s job against its own authoritative records, not this file's.
  */
 const MAX_ORIGIN_POSE_DISTANCE_M = 5;
+/**
+ * E7.3-sec finding A: a `groundTarget` spell's blast center (`groundPoint`) is
+ * client-chosen and, unlike `origin`, is NOT the sender's own position — so it
+ * gets its own, more generous cast-range bound (you aim a ground spell some
+ * way ahead of you) rather than the tight 5 m origin gate. Still finite and
+ * near the caster, so a future *damaging* groundTarget spell can never center a
+ * blast on an entity anywhere on the map (the range/line-of-sight bypass the
+ * review named). Today's only groundTarget spell (Vine Snare) is damage-free,
+ * so this is pure defense-in-depth ahead of that.
+ */
+const MAX_CAST_GROUND_DISTANCE_M = 24;
+
+function withinDistance(lastPose: PlayerState | null, point: Vec3Wire, maxM: number): boolean {
+  if (lastPose === null) return false;
+  const dx = point[0] - lastPose.position[0];
+  const dy = point[1] - lastPose.position[1];
+  const dz = point[2] - lastPose.position[2];
+  return Math.hypot(dx, dy, dz) <= maxM;
+}
 
 /**
  * E7.2 security follow-up #3 (E7.0-sec review): a combat origin is only ever
@@ -143,11 +162,7 @@ const MAX_ORIGIN_POSE_DISTANCE_M = 5;
  * skipping straight to a combat intent.
  */
 function originNearPose(lastPose: PlayerState | null, origin: Vec3Wire): boolean {
-  if (lastPose === null) return false;
-  const dx = origin[0] - lastPose.position[0];
-  const dy = origin[1] - lastPose.position[1];
-  const dz = origin[2] - lastPose.position[2];
-  return Math.hypot(dx, dy, dz) <= MAX_ORIGIN_POSE_DISTANCE_M;
+  return withinDistance(lastPose, origin, MAX_ORIGIN_POSE_DISTANCE_M);
 }
 
 export function validateAimedAttack(lastPose: PlayerState | null, msg: AimedAttackMsg): boolean {
@@ -155,7 +170,14 @@ export function validateAimedAttack(lastPose: PlayerState | null, msg: AimedAtta
 }
 
 export function validateCastSpell(lastPose: PlayerState | null, msg: CastSpellMsg): boolean {
-  return originNearPose(lastPose, msg.origin);
+  if (!originNearPose(lastPose, msg.origin)) return false;
+  // E7.3-sec finding A: a groundTarget spell's client-chosen blast center must
+  // also be bounded near the caster — origin proximity alone doesn't constrain
+  // where the blast lands. Absent (dir-targeted) casts skip this.
+  if (msg.groundPoint && !withinDistance(lastPose, msg.groundPoint, MAX_CAST_GROUND_DISTANCE_M)) {
+    return false;
+  }
+  return true;
 }
 
 export function validateDeployItem(lastPose: PlayerState | null, msg: DeployItemMsg): boolean {
@@ -220,6 +242,17 @@ export const MAX_ACTIVE_PROJECTILES_PER_PEER = 12;
  */
 export const DEPLOY_ITEM_RATE_LIMIT: RateLimitConfig = { capacity: 4, refillPerSecond: 1 };
 export const MAX_ACTIVE_DEPLOYABLES_PER_PEER = 6;
+
+/**
+ * E7.3 spellcasting: `castSpell`'s own token bucket, sized the same way as
+ * `AIMED_ATTACK_RATE_LIMIT` — generous over any legitimate spell's own
+ * `cooldownMs` (the fastest starter spell, Sparkle Bolt, recharges in
+ * 700 ms) but bounded so a hostile peer can't flood cast intents. A
+ * projectile-targeting spell ALSO shares `MAX_ACTIVE_PROJECTILES_PER_PEER`
+ * with ranged weapons (same host-simulated pool) — this bucket is the
+ * pacing bound for every spell, AoE-shaped ones included.
+ */
+export const CAST_SPELL_RATE_LIMIT: RateLimitConfig = { capacity: 4, refillPerSecond: 2 };
 
 export function validateInventoryOp(op: InventoryOp, capacity: number): boolean {
   switch (op.op) {

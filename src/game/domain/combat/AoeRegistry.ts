@@ -58,7 +58,12 @@ export const STARTER_AOES: readonly AoeSpec[] = [
   // "bomb" item). blockSafe stays true (cozy default, plan §9); flipping it
   // is the deferred block-destroying-explosions follow-up, not this slice.
   { id: "bomb-boom", radius: 4, falloff: "linear", blockSafe: true, vfx: "vfx.boom.bomb" },
-  // ---- E7.3 Spellcasting (Healing Bloom) ----
+  // ---- E7.3 Spellcasting (Frost Puff, Healing Bloom, Vine Snare) ----
+  { id: "frost-puff", radius: 3, falloff: "linear", blockSafe: true, vfx: "vfx.frost.puff" },
+  // falloff "none": a cozy full-strength heal anywhere within range, no
+  // penalty for standing at the edge of the bloom.
+  { id: "healing-bloom", radius: 5, falloff: "none", blockSafe: true, vfx: "vfx.heal.bloom" },
+  { id: "vine-snare", radius: 2.5, falloff: "none", blockSafe: true, vfx: "vfx.nature.vine" },
   // ---- E7.5 Deployables (traps/mines/grenades) ----
   { id: "grenade-boom", radius: 3.5, falloff: "linear", blockSafe: true, vfx: "vfx.boom.grenade" },
   { id: "mine-boom", radius: 3, falloff: "linear", blockSafe: true, vfx: "vfx.boom.mine" },
