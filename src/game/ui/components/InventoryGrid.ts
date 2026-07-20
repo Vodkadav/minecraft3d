@@ -13,14 +13,18 @@
  *    cross-grid drops call `onExternalDrop` instead of mutating locally)
  *  - arrow keys move a roving-tabindex cursor; Enter/Space activates it
  *    exactly like a click (pick then place)
- *  - right-click / contextmenu on a stack of 2+ splits it in half
+ *  - right-click / `Shift+F10` / touch long-press opens the `ContextMenu`
+ *    (E8.4, action list from the pure `domain/ui/ItemActions`) — Split is one
+ *    action among Use/Equip/Quick-Move/Drop/Info, replacing the old ad-hoc
+ *    split-only `contextmenu` handler
  *  - double-click quick-moves between the hotbar zone and the backpack zone
+ *    (also reachable as the menu's "Quick Move" action)
  *  - Escape cancels a pending pick
  *
  * Tooltips: the rich item-card tooltip (`RichTooltip.ts`, backed by the pure
- * `domain/ui/TooltipModel.ts`) replaces the old single-line `Tooltip.ts` for
- * every slot — reachable by hover, keyboard focus, and touch long-press;
- * every slot is a real, focusable, ARIA-labelled gridcell.
+ * `domain/ui/TooltipModel.ts`) replaces the old single-line Tooltip for every
+ * slot — reachable by hover, keyboard focus, and touch long-press; every slot
+ * is a real, focusable, ARIA-labelled gridcell.
  */
 
 import { isOk } from "../../domain/Result";
@@ -36,10 +40,12 @@ import {
   splitCount,
   type GridUiState,
 } from "../../domain/ui/InventoryGridState";
+import { itemActions, type ItemActionId } from "../../domain/ui/ItemActions";
 import { buildTooltipModel } from "../../domain/ui/TooltipModel";
 import type { Localizer } from "../../application/i18n/Localizer";
 import { itemDisplayName } from "../i18n/itemNames";
 import { createItemIconEl } from "../icons/ItemIconElement";
+import { attachContextMenu, type ContextMenuHandle } from "./ContextMenu";
 import { RichTooltip, type RichTooltipHandle } from "./RichTooltip";
 import { injectStyles } from "../styles";
 
@@ -66,6 +72,14 @@ export interface InventoryGridOptions {
    *  the composition root applies the transfer (unused until a second grid
    *  exists, e.g. a storage chest). */
   onExternalDrop?(sourceGridId: string, sourceIndex: number, targetIndex: number): void;
+  /** The context menu's "Eat"/"Equip" actions (E8.4) — shown whenever the
+   *  slot's item is tagged "food"/"weapon", but otherwise unwired here (no
+   *  eat-from-arbitrary-slot or equip-slot system exists yet; eating today
+   *  is GameHud's hotbar-only `eatSelected`, and equipment is E9's). Left as
+   *  an extension seam the composition root fills in once those land —
+   *  mirrors `onExternalDrop`'s "unused until a second grid exists". */
+  onUseItem?(index: number): void;
+  onEquipItem?(index: number): void;
   /** Item-filter rules (Workstream E4.2) applied to every rendered slot as a
    *  `data-filter-action` attribute ("highlight"/"dim"/"hide"); omitted or
    *  empty renders every slot normally. */
@@ -106,6 +120,7 @@ export function InventoryGrid(opts: InventoryGridOptions): InventoryGridHandle {
   let filterRules: readonly FilterRule[] = opts.filterRules ?? [];
   const slotEls: HTMLDivElement[] = [];
   const tooltips: RichTooltipHandle[] = [];
+  const contextMenus: (ContextMenuHandle | undefined)[] = [];
 
   function applyChange(result: { readonly ok: true; readonly value: Inventory } | { readonly ok: false; readonly error: InventoryError }): void {
     if (!isOk(result)) return; // rejected mutation (e.g. no room) — silently keeps state
@@ -123,6 +138,8 @@ export function InventoryGrid(opts: InventoryGridOptions): InventoryGridHandle {
     slotEls.length = 0;
     tooltips.forEach((t) => t.dispose());
     tooltips.length = 0;
+    contextMenus.forEach((m) => m?.dispose());
+    contextMenus.length = 0;
 
     const rows = Math.ceil(capacity / cols);
     for (let r = 0; r < rows; r++) {
@@ -154,7 +171,6 @@ export function InventoryGrid(opts: InventoryGridOptions): InventoryGridHandle {
         cell.addEventListener("click", () => onActivate(index));
         cell.addEventListener("keydown", (e) => onKeyDown(e as KeyboardEvent, index));
         cell.addEventListener("dblclick", () => onQuickMove(index));
-        cell.addEventListener("contextmenu", (e) => onSplit(e as MouseEvent, index));
         cell.addEventListener("dragstart", (e) => onDragStart(e as DragEvent, index));
         cell.addEventListener("dragover", (e) => e.preventDefault());
         cell.addEventListener("drop", (e) => onDrop(e as DragEvent, index));
@@ -179,6 +195,10 @@ export function InventoryGrid(opts: InventoryGridOptions): InventoryGridHandle {
       cell.draggable = slot !== null && !opts.readOnly;
 
       tooltips[index]?.dispose();
+      contextMenus[index]?.dispose();
+
+      let displayName = "";
+      let tags: readonly string[] = [];
 
       if (!slot) {
         iconWrap?.replaceChildren();
@@ -190,41 +210,48 @@ export function InventoryGrid(opts: InventoryGridOptions): InventoryGridHandle {
           opts.loc.t("inventory.slot.aria.empty", { n: index + 1 }),
         );
         cell.removeAttribute("aria-describedby");
-        return;
+      } else {
+        const filterAction = evaluateItemId(opts.registry, filterRules, slot.itemId);
+        if (filterAction) cell.dataset.filterAction = filterAction;
+        else cell.removeAttribute("data-filter-action");
+        displayName = nameFor(slot.itemId);
+        const defResult = opts.registry.get(slot.itemId);
+        tags = isOk(defResult) ? defResult.value.tags : [];
+        iconWrap?.replaceChildren(createItemIconEl(doc, slot.itemId, displayName, tags));
+        if (nameEl) nameEl.textContent = displayName;
+        if (countEl) countEl.textContent = slot.count > 1 ? String(slot.count) : "";
+        cell.setAttribute(
+          "aria-label",
+          opts.loc.t("inventory.slot.aria", { n: index + 1, name: displayName, count: slot.count }),
+        );
+        const keyhints: string[] = [];
+        if (!opts.readOnly && slot.count >= 2) keyhints.push(opts.loc.t("inventory.hint.split"));
+        if (!opts.readOnly && hotbarSize > 0) keyhints.push(opts.loc.t("inventory.hint.quickmove"));
+        const model = buildTooltipModel({
+          itemId: slot.itemId,
+          registry: opts.registry,
+          t: (key, params) => opts.loc.t(key, params),
+          quantity: slot.count,
+          keyhints: keyhints.length > 0 ? keyhints : undefined,
+        });
+        if (isOk(model)) {
+          tooltips[index] = RichTooltip({ doc, anchor: cell, model: model.value });
+        }
       }
-      const filterAction = evaluateItemId(opts.registry, filterRules, slot.itemId);
-      if (filterAction) cell.dataset.filterAction = filterAction;
-      else cell.removeAttribute("data-filter-action");
-      const displayName = nameFor(slot.itemId);
-      const defResult = opts.registry.get(slot.itemId);
-      iconWrap?.replaceChildren(
-        createItemIconEl(
-          doc,
-          slot.itemId,
-          displayName,
-          isOk(defResult) ? defResult.value.tags : [],
-        ),
-      );
-      if (nameEl) nameEl.textContent = displayName;
-      if (countEl) countEl.textContent = slot.count > 1 ? String(slot.count) : "";
-      cell.setAttribute(
-        "aria-label",
-        opts.loc.t("inventory.slot.aria", { n: index + 1, name: displayName, count: slot.count }),
-      );
 
-      const keyhints: string[] = [];
-      if (!opts.readOnly && slot.count >= 2) keyhints.push(opts.loc.t("inventory.hint.split"));
-      if (!opts.readOnly && hotbarSize > 0) keyhints.push(opts.loc.t("inventory.hint.quickmove"));
-      const model = buildTooltipModel({
-        itemId: slot.itemId,
-        registry: opts.registry,
-        t: (key, params) => opts.loc.t(key, params),
-        quantity: slot.count,
-        keyhints: keyhints.length > 0 ? keyhints : undefined,
+      // Empty slot / readOnly grid -> no actions, but ContextMenu still
+      // suppresses the native right-click menu (matches the old handler).
+      const actions =
+        slot && !opts.readOnly
+          ? itemActions({ itemId: slot.itemId, count: slot.count, tags, canQuickMove: hotbarSize > 0 })
+          : [];
+      contextMenus[index] = attachContextMenu(cell, {
+        doc,
+        actions,
+        loc: opts.loc,
+        ariaLabel: opts.loc.t("contextMenu.aria", { name: displayName }),
+        onSelect: (id) => onContextAction(index, id),
       });
-      if (isOk(model)) {
-        tooltips[index] = RichTooltip({ doc, anchor: cell, model: model.value });
-      }
     });
   }
 
@@ -288,12 +315,39 @@ export function InventoryGrid(opts: InventoryGridOptions): InventoryGridHandle {
     }
   }
 
-  function onSplit(e: MouseEvent, index: number): void {
-    e.preventDefault();
+  /** Dispatches a `ContextMenu` selection (E8.4). Split/Quick-Move/Drop are
+   *  fully wired against the existing domain operations; Use/Equip forward to
+   *  the optional composition-root hooks (see `onUseItem`/`onEquipItem`'s
+   *  doc); Info is a no-op — closing the menu already returns focus to the
+   *  cell, which re-triggers the existing hover/focus Tooltip. */
+  function onContextAction(index: number, id: ItemActionId): void {
     if (opts.readOnly) return;
     const slot = inventory.slots[index];
-    if (!slot || slot.count < 2) return;
-    applyChange(inventory.split(index, splitCount(slot.count)));
+    if (!slot) return;
+    switch (id) {
+      case "split":
+        if (slot.count < 2) return;
+        applyChange(inventory.split(index, splitCount(slot.count)));
+        return;
+      case "quickMove":
+        onQuickMove(index);
+        return;
+      case "drop": {
+        const next = inventory.slots.map((s, i) => (i === index ? null : s));
+        applyChange(Inventory.fromSlots(opts.registry, next));
+        return;
+      }
+      case "use":
+        opts.onUseItem?.(index);
+        return;
+      case "equip":
+        opts.onEquipItem?.(index);
+        return;
+      case "info":
+        return;
+      default:
+        return;
+    }
   }
 
   function onQuickMove(index: number): void {
@@ -338,6 +392,7 @@ export function InventoryGrid(opts: InventoryGridOptions): InventoryGridHandle {
     },
     dispose(): void {
       tooltips.forEach((t) => t.dispose());
+      contextMenus.forEach((m) => m?.dispose());
       el.remove();
     },
   };

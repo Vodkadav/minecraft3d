@@ -1604,6 +1604,44 @@ ${THEME_CSS_VARS}
   font-size: var(--lw-font-xs);
   color: var(--lw-fg-muted);
 }
+
+/* ===== E8.4 context menu ===== */
+.lw-context-menu {
+  position: fixed;
+  z-index: 70;
+  display: flex;
+  flex-direction: column;
+  min-width: 10rem;
+  padding: var(--lw-space-1);
+  background: var(--lw-surface-3);
+  border: 1px solid var(--lw-ornament);
+  border-radius: var(--lw-radius-md);
+  box-shadow: 0 1px 0 rgba(255,255,255,0.05) inset, 0 14px 30px -14px rgba(0,0,0,0.7);
+}
+.lw-context-menu-item {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  padding: var(--lw-space-2) var(--lw-space-3);
+  background: transparent;
+  color: var(--lw-fg);
+  border: none;
+  border-radius: var(--lw-radius-sm);
+  font-size: var(--lw-font-sm);
+  text-align: left;
+  cursor: pointer;
+}
+.lw-context-menu-item:hover,
+.lw-context-menu-item:focus-visible {
+  background: var(--lw-inset);
+}
+.lw-context-menu-item[aria-disabled="true"] {
+  color: var(--lw-fg-muted);
+  cursor: default;
+}
+.lw-context-menu-item[aria-disabled="true"]:hover {
+  background: transparent;
+}
 `;
 
 export function injectStyles(doc: Document): void {

@@ -554,6 +554,14 @@ export const UI_STRINGS: Catalog = {
     "tooltip.damageType.frost": "Frost",
     "tooltip.damageType.nature": "Nature",
     "tooltip.damageType.boom": "Boom",
+    // ---- E8.4 context menu ----
+    "contextMenu.aria": "Actions for {name}",
+    "contextMenu.action.use": "Eat",
+    "contextMenu.action.equip": "Equip",
+    "contextMenu.action.split": "Split Stack",
+    "contextMenu.action.quickMove": "Quick Move",
+    "contextMenu.action.drop": "Drop",
+    "contextMenu.action.info": "Item Info",
   },
   es: {
     "app.title": "Diggy World",
@@ -1100,6 +1108,14 @@ export const UI_STRINGS: Catalog = {
     "tooltip.damageType.frost": "Escarcha",
     "tooltip.damageType.nature": "Naturaleza",
     "tooltip.damageType.boom": "Explosión",
+    // ---- E8.4 context menu ----
+    "contextMenu.aria": "Acciones para {name}",
+    "contextMenu.action.use": "Comer",
+    "contextMenu.action.equip": "Equipar",
+    "contextMenu.action.split": "Dividir pila",
+    "contextMenu.action.quickMove": "Mover rápido",
+    "contextMenu.action.drop": "Soltar",
+    "contextMenu.action.info": "Info del objeto",
   },
   da: {
     "app.title": "Diggy World",
@@ -1646,6 +1662,14 @@ export const UI_STRINGS: Catalog = {
     "tooltip.damageType.frost": "Frost",
     "tooltip.damageType.nature": "Natur",
     "tooltip.damageType.boom": "Eksplosion",
+    // ---- E8.4 context menu ----
+    "contextMenu.aria": "Handlinger for {name}",
+    "contextMenu.action.use": "Spis",
+    "contextMenu.action.equip": "Udrust",
+    "contextMenu.action.split": "Del bunke",
+    "contextMenu.action.quickMove": "Hurtig flytning",
+    "contextMenu.action.drop": "Smid",
+    "contextMenu.action.info": "Genstandsinfo",
   },
 };
 

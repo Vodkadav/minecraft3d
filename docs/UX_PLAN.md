@@ -105,3 +105,11 @@ overlays sit over the lit world at ~45%, so a pure-black preview reads far darke
   (`ItemIconElement` optional `rarityTier`; `ItemBadges.ts`); wiring them onto the actual inventory/
   hotbar slots was deferred to the E8 integration step because `InventoryGrid.ts`/`Hotbar.ts` were
   being edited in parallel by the E8.3/E8.4 slices — done at integration to avoid a three-way conflict.
+- **E8.4 ContextMenu's Use/Equip actions are UI-only stubs.** `ItemActions.ts` offers "Eat" for
+  food-tagged items and "Equip" for weapon-tagged items (enabled whenever the tag applies), and
+  `InventoryGrid.ts` exposes `onUseItem`/`onEquipItem` extension hooks — but nothing wires them yet:
+  eating today is `GameHud`'s hotbar-only `eatSelected` (no eat-from-arbitrary-slot exists), and
+  there's no equip-slot system before E9's equipment work. Mirrors `onExternalDrop`'s existing
+  "unused until a second grid exists" pattern. Split/Quick-Move/Drop/Info are fully wired against
+  existing domain operations. Revisit once E9 (equipment) or a generalized eat-from-inventory flow
+  lands.
