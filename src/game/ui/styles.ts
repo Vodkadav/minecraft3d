@@ -1642,6 +1642,148 @@ ${THEME_CSS_VARS}
 .lw-context-menu-item[aria-disabled="true"]:hover {
   background: transparent;
 }
+
+/* ===== E8.5 inputs & chat ===== */
+/* Field — the one styled label+input primitive (components/Field.ts). */
+.lw-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lw-space-1);
+  text-align: left;
+}
+.lw-field-label {
+  color: var(--lw-fg);
+  font-size: var(--lw-font-sm);
+}
+.lw-field-input {
+  background: var(--lw-bg-track);
+  color: var(--lw-fg);
+  border: 1px solid var(--lw-border);
+  border-radius: var(--lw-radius-sm);
+  padding: var(--lw-space-1) var(--lw-space-2);
+  min-height: 44px;
+}
+.lw-field-hint {
+  margin: 0;
+  color: var(--lw-fg-muted);
+  font-size: var(--lw-font-xs);
+}
+.lw-field-error {
+  margin: 0;
+  color: var(--lw-danger);
+  font-size: var(--lw-font-xs);
+  font-weight: 600;
+}
+
+/* Chat composer layout (ChatBox.ts). */
+.lw-chat-compose-row {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--lw-space-2);
+}
+.lw-chat-compose-row .lw-field {
+  flex: 1;
+}
+
+/* Channel pills — accessible radiogroup replacing the old <select>. */
+.lw-chat-channels {
+  display: flex;
+  gap: var(--lw-space-1);
+}
+.lw-chat-channel-pill {
+  background: var(--lw-surface-1);
+  color: var(--lw-fg-muted);
+  border: 1px solid var(--lw-border);
+  border-radius: var(--lw-radius-pill);
+  padding: var(--lw-space-1) var(--lw-space-3);
+  font-size: var(--lw-font-sm);
+  cursor: pointer;
+}
+.lw-chat-channel-pill[aria-checked="true"] {
+  background: var(--lw-accent);
+  color: var(--lw-bg);
+  border-color: var(--lw-accent);
+  font-weight: 600;
+}
+
+/* Kid-safe canned emote palette — fixed localized phrases, never free text. */
+.lw-chat-emotes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--lw-space-1);
+}
+.lw-chat-emote-btn {
+  background: var(--lw-surface-1);
+  color: var(--lw-fg);
+  border: 1px solid var(--lw-border);
+  border-radius: var(--lw-radius-sm);
+  padding: var(--lw-space-1) var(--lw-space-2);
+  font-size: var(--lw-font-xs);
+  cursor: pointer;
+}
+.lw-chat-emote-btn:hover,
+.lw-chat-emote-btn:focus-visible {
+  background: var(--lw-inset);
+}
+
+/* Unread badge — shown only while the composer is collapsed. */
+.lw-chat-unread-badge {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.25rem;
+  height: 1.25rem;
+  padding: 0 var(--lw-space-1);
+  background: var(--lw-danger);
+  color: var(--lw-fg);
+  border-radius: var(--lw-radius-pill);
+  font-size: var(--lw-font-xs);
+  font-weight: 700;
+  pointer-events: none;
+}
+
+/* Item-link chip — rarity-colored, validated against ItemRegistry before it
+   ever renders (domain/social/ChatItemLink.ts); an unresolved token stays
+   plain text and never reaches this class. */
+.lw-chat-item-link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--lw-space-1);
+  padding: 0 var(--lw-space-2);
+  background: var(--lw-surface-1);
+  border: 1px solid var(--lw-border);
+  border-radius: var(--lw-radius-sm);
+  font-size: inherit;
+  font-weight: 600;
+  vertical-align: middle;
+  cursor: pointer;
+}
+.lw-chat-item-link .lw-item-icon {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+}
+.lw-chat-item-link[data-rarity="common"] {
+  color: var(--lw-rarity-common-text);
+  border-color: var(--lw-rarity-common-frame);
+}
+.lw-chat-item-link[data-rarity="uncommon"] {
+  color: var(--lw-rarity-uncommon-text);
+  border-color: var(--lw-rarity-uncommon-frame);
+}
+.lw-chat-item-link[data-rarity="rare"] {
+  color: var(--lw-rarity-rare-text);
+  border-color: var(--lw-rarity-rare-frame);
+}
+.lw-chat-item-link[data-rarity="epic"] {
+  color: var(--lw-rarity-epic-text);
+  border-color: var(--lw-rarity-epic-frame);
+}
+.lw-chat-item-link[data-rarity="legendary"] {
+  color: var(--lw-rarity-legendary-text);
+  border-color: var(--lw-rarity-legendary-frame);
+}
 `;
 
 export function injectStyles(doc: Document): void {
