@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { beforeEach, describe, expect, it } from "vitest";
-import { injectStyles, UI_STYLES } from "./styles";
+import { defaultSettings } from "../domain/settings/Settings";
+import { applyAccessibility, injectStyles, UI_STYLES } from "./styles";
 
 /**
  * Regression guard for the boot-time "stacked overlays over a black screen"
@@ -46,5 +47,43 @@ describe("UI_STYLES structural integrity", () => {
     const open = (UI_STYLES.match(/\{/g) ?? []).length;
     const close = (UI_STYLES.match(/\}/g) ?? []).length;
     expect(open).toBe(close);
+  });
+});
+
+/** E8.8 colorblind rarity palette + E8.6 reduce-flair. */
+describe("applyAccessibility (colorblind rarity / reduce flair)", () => {
+  beforeEach(() => {
+    document.head.replaceChildren();
+    document.body.replaceChildren();
+    document.documentElement.removeAttribute("data-reduce-flair");
+  });
+
+  it("reflects colorblindRarity onto the root dataset", () => {
+    const root = document.createElement("section");
+    root.className = "laas-ui";
+    document.body.appendChild(root);
+    applyAccessibility(root, { ...defaultSettings(), colorblindRarity: true });
+    expect(root.dataset.colorblindRarity).toBe("true");
+  });
+
+  it("reflects reduceFlair onto documentElement, mirroring reducedMotion", () => {
+    const root = document.createElement("section");
+    root.className = "laas-ui";
+    document.body.appendChild(root);
+    applyAccessibility(root, { ...defaultSettings(), reduceFlair: true });
+    expect(document.documentElement.dataset.reduceFlair).toBe("true");
+  });
+
+  it("ships a colorblind-rarity rule remapping every rarity token to its cb pair", () => {
+    for (const tier of ["common", "uncommon", "rare", "epic", "legendary"]) {
+      const re = new RegExp(
+        `--lw-rarity-${tier}-frame:\\s*var\\(--lw-rarity-cb-${tier}-frame\\)`,
+      );
+      expect(UI_STYLES).toMatch(re);
+    }
+  });
+
+  it("ships a reduce-flair rule keyed off documentElement", () => {
+    expect(UI_STYLES).toMatch(/:root\[data-reduce-flair="true"\]/);
   });
 });

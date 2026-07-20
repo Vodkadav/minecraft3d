@@ -35,6 +35,9 @@ function validInput(overrides: Partial<SettingsInput> = {}): SettingsInput {
     autolootRadiusM: 3,
     creatureSpawnRate: 1,
     resourceSpawnRate: 1,
+    colorblindRarity: false,
+    tooltipVerbosity: "full",
+    reduceFlair: false,
     ...overrides,
   };
 }
@@ -308,6 +311,41 @@ describe("Settings", () => {
     if (isOk(r)) {
       expect(r.value.creatureSpawnRate).toBe(2);
       expect(r.value.resourceSpawnRate).toBe(0.5);
+    }
+  });
+
+  // E8.6/E8.8
+  it("defaults colorblindRarity/tooltipVerbosity/reduceFlair to no-op values", () => {
+    const s = defaultSettings();
+    expect(s.colorblindRarity).toBe(false);
+    expect(s.tooltipVerbosity).toBe("full");
+    expect(s.reduceFlair).toBe(false);
+  });
+
+  it("accepts every declared tooltip verbosity", () => {
+    for (const tooltipVerbosity of ["full", "compact"] as const) {
+      expect(isOk(makeSettings(validInput({ tooltipVerbosity })))).toBe(true);
+    }
+  });
+
+  it("rejects an unknown tooltip verbosity", () => {
+    const r = makeSettings(validInput({ tooltipVerbosity: "essay" as never }));
+    expect(isErr(r)).toBe(true);
+    if (isErr(r)) expect(r.error.kind).toBe("UnknownTooltipVerbosity");
+  });
+
+  it("updates colorblindRarity/tooltipVerbosity/reduceFlair while keeping the rest", () => {
+    const r = updateSettings(defaultSettings(), {
+      colorblindRarity: true,
+      tooltipVerbosity: "compact",
+      reduceFlair: true,
+    });
+    expect(isOk(r)).toBe(true);
+    if (isOk(r)) {
+      expect(r.value.colorblindRarity).toBe(true);
+      expect(r.value.tooltipVerbosity).toBe("compact");
+      expect(r.value.reduceFlair).toBe(true);
+      expect(r.value.graphicsPreset).toBe(defaultSettings().graphicsPreset);
     }
   });
 

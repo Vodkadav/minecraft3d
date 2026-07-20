@@ -56,6 +56,14 @@ describe("LobbyView", () => {
     expect(el.querySelectorAll(".laas-world-row")).toHaveLength(0);
   });
 
+  // E8.6: "play together" surface — panel emblem/heading treatment
+  it("renders the heading behind a panel emblem, plus a play-together subtitle", async () => {
+    const { el } = await build();
+    expect(el.querySelector(".lw-panel-title-wrap h1")?.textContent).toBe("Online worlds");
+    expect(el.querySelector(".lw-panel-title-wrap .lw-panel-emblem")).toBeTruthy();
+    expect(el.querySelector(".laas-lobby-subtitle")?.textContent).toContain("Play together");
+  });
+
   it("has a Back button wired to the back handler", async () => {
     const { el, backCount } = await build();
     buttonByText(el, "Back").click();
