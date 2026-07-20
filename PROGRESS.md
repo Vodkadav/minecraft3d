@@ -189,12 +189,15 @@ inspection per merge; mandatory `claude-infra:security` review on every networki
   account-wide bank (K, IndexedDB) — multiplayer bank path deferred behind seed-trust revisit
 - [~] E5 Social (in flight): party/frames/invite/kick/lookup/party-meter, trade escrow, kid-safe
   chat — all host-authoritative intents; security reviews mandatory before merge
-- [~] E6 World content (in flight): caves, research tree dispatched; E6.7 iconography DONE
-  (procedural item icons keyed by kind/tags, distinct map-marker glyph shapes, panel-header
-  emblems — all inline SVG, AA-contrast-checked, aria-hidden decorative pairing with existing
-  text labels); structures, biome/time spawning, asset library growth pending. Achievements for
-  the new systems deferred — not expressible as a pure-data registry addition (see
-  `docs/EXPANSION_PLAN.md` deferrals)
+- [~] E6 World content (mostly landed): E6.1 caves (seeded 3D-noise carving unioned into the
+  voxel SDF, worldgen-version-gated — pre-existing worlds regenerate byte-identical), E6.4
+  research tree (13-node starter tree over ProgressionEvents-derived points, J screen, per-owner
+  persistence), E6.5 asset library (+5 creatures, +17 items incl. the coin/gem/relic latent-gap
+  fix, +9 recipes, beehive/silver-vein nodes, +5 build parts), E6.7 iconography (procedural item
+  icons, distinct map-marker glyph shapes, panel emblems — inline SVG, contrast-checked,
+  aria-hidden alongside text labels). In flight: E6.2 structures, E6.3 biome/time spawning +
+  spawn-rate settings. Achievements for the new systems deferred — not expressible as a
+  pure-data registry addition (see `docs/EXPANSION_PLAN.md` deferrals)
 - [ ] Expansion playtest gate (structured session — owner schedules)
 
 ## Notes
