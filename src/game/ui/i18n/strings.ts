@@ -182,6 +182,14 @@ export const UI_STRINGS: Catalog = {
     "item.iron-spear.name": "Iron Spear",
     "item.battle-hammer.name": "Battle Hammer",
 
+    // ---- E7.2 ammo ----
+    "item.arrow.name": "Arrow",
+    "item.pebble.name": "Pebble",
+    "item.dart.name": "Dart",
+    "item.bow.name": "Hunting Bow",
+    "item.sling.name": "Sling",
+    "item.dart-thrower.name": "Dart Thrower",
+
     "creature.deer.name": "Deer",
     "creature.wolf.name": "Wolf",
     "creature.elk.name": "Elk",
@@ -682,6 +690,14 @@ export const UI_STRINGS: Catalog = {
     "item.iron-spear.name": "Lanza de hierro",
     "item.battle-hammer.name": "Martillo de guerra",
 
+    // ---- E7.2 ammo ----
+    "item.arrow.name": "Flecha",
+    "item.pebble.name": "Guijarro",
+    "item.dart.name": "Dardo",
+    "item.bow.name": "Arco de caza",
+    "item.sling.name": "Honda",
+    "item.dart-thrower.name": "Lanzadardos",
+
     "creature.deer.name": "Ciervo",
     "creature.wolf.name": "Lobo",
     "creature.elk.name": "Alce",
@@ -1181,6 +1197,14 @@ export const UI_STRINGS: Catalog = {
     "item.flint-dagger.name": "Flintdolk",
     "item.iron-spear.name": "Jernspyd",
     "item.battle-hammer.name": "Kamphammer",
+
+    // ---- E7.2 ammo ----
+    "item.arrow.name": "Pil",
+    "item.pebble.name": "Sten",
+    "item.dart.name": "Kastepil",
+    "item.bow.name": "Jagtbue",
+    "item.sling.name": "Slynge",
+    "item.dart-thrower.name": "Kastepilkaster",
 
     "creature.deer.name": "Hjort",
     "creature.wolf.name": "Ulv",

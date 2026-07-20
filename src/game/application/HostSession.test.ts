@@ -20,6 +20,10 @@ const REGISTRY = (() => {
     { id: "wood", displayName: "Wood", maxStackSize: 64, tags: [], tier: 0 },
     { id: "stone", displayName: "Stone", maxStackSize: 16, tags: [], tier: 0 },
     { id: "bread", displayName: "Bread", maxStackSize: 8, tags: [], tier: 0 },
+    // E7.2: ammo the ranged-combat test suite below debits from a peer's
+    // authoritative inventory (the real `arrow` id, matching `WEAPON_REGISTRY`'s
+    // starter `bow` entry's `ammoItemId`).
+    { id: "arrow", displayName: "Arrow", maxStackSize: 64, tags: [], tier: 0 },
   ]);
   if (!isOk(r)) throw new Error("registry setup failed");
   return r.value;
@@ -1580,5 +1584,175 @@ describe("HostSession", () => {
 
       expect(partiesOf(bobInbox).at(-1)?.leaderId).toBe("bob");
     });
+  });
+});
+
+describe("HostSession — E7.2 ranged + ammo", () => {
+  function aliceInventory(arrowCount: number): { capacity: number; slots: ({ itemId: string; count: number } | null)[] } {
+    const slots: ({ itemId: string; count: number } | null)[] = Array(27).fill(null);
+    if (arrowCount > 0) slots[0] = { itemId: "arrow", count: arrowCount };
+    return { capacity: 27, slots };
+  }
+
+  function projectilesMessages(inbox: unknown[]): { kind: string; entities: unknown[] }[] {
+    return inbox.filter((m) => (m as { kind: string }).kind === "projectiles") as {
+      kind: string;
+      entities: unknown[];
+    }[];
+  }
+
+  function makeSession(
+    hooks: Partial<HostSessionHooks> = {},
+  ): { net: ReturnType<typeof makeTransportNetwork>; session: HostSession; now: { value: number } } {
+    const net2 = makeTransportNetwork();
+    const nowBox = { value: 1000 };
+    const session2 = new HostSession(
+      net2.host,
+      () => SNAPSHOT,
+      { onWorldEdit: () => {}, ...hooks },
+      { registry: REGISTRY, clock: () => nowBox.value },
+    );
+    return { net: net2, session: session2, now: nowBox };
+  }
+
+  function joinEquipAndAim(
+    net2: ReturnType<typeof makeTransportNetwork>,
+    arrowCount: number,
+    opts: { sendPose?: boolean; equip?: string } = {},
+  ): ReturnType<ReturnType<typeof makeTransportNetwork>["addPeer"]> {
+    const alice = net2.addPeer("alice");
+    alice.broadcast({ kind: "join", playerName: "Alice", inventory: aliceInventory(arrowCount) });
+    if (opts.sendPose !== false) alice.broadcast({ kind: "pose", state: pose(0, 1, 0) });
+    if (opts.equip !== "" ) alice.broadcast({ kind: "equipItem", slot: "weapon", itemId: opts.equip ?? "bow" });
+    return alice;
+  }
+
+  it("drops aimedAttack when the sender has never sent a pose (security #3, null-pose gate)", () => {
+    const { net: net2, session } = makeSession();
+    const bob = net2.addPeer("bob");
+    const bobInbox = collect(bob);
+    const alice = joinEquipAndAim(net2, 5, { sendPose: false });
+    alice.broadcast({ kind: "aimedAttack", origin: [0, 1, 0], dir: [0, 0, 1], weaponSlot: "weapon" });
+    session.tick(16);
+    expect(projectilesMessages(bobInbox).flatMap((m) => m.entities)).toEqual([]);
+  });
+
+  it("drops aimedAttack when nothing is equipped", () => {
+    const { net: net2, session } = makeSession();
+    const bob = net2.addPeer("bob");
+    const bobInbox = collect(bob);
+    const alice = joinEquipAndAim(net2, 5, { equip: "" });
+    alice.broadcast({ kind: "aimedAttack", origin: [0, 1, 0], dir: [0, 0, 1], weaponSlot: "weapon" });
+    session.tick(16);
+    expect(projectilesMessages(bobInbox).flatMap((m) => m.entities)).toEqual([]);
+  });
+
+  it("equipItem drops an unknown item id, so a later aimedAttack has nothing equipped (security #4)", () => {
+    const { net: net2, session } = makeSession();
+    const bob = net2.addPeer("bob");
+    const bobInbox = collect(bob);
+    const alice = joinEquipAndAim(net2, 5, { equip: "not-a-real-item" });
+    alice.broadcast({ kind: "aimedAttack", origin: [0, 1, 0], dir: [0, 0, 1], weaponSlot: "weapon" });
+    session.tick(16);
+    expect(projectilesMessages(bobInbox).flatMap((m) => m.entities)).toEqual([]);
+  });
+
+  it("a valid bow shot debits one arrow and streams the projectile after a tick (security #5)", () => {
+    const { net: net2, session } = makeSession();
+    const bob = net2.addPeer("bob");
+    const bobInbox = collect(bob);
+    const alice = joinEquipAndAim(net2, 5);
+    const aliceInbox = collect(alice);
+    alice.broadcast({
+      kind: "aimedAttack",
+      origin: [0, 1, 0],
+      dir: [0, 0, 1],
+      weaponSlot: "weapon",
+      chargeMs: 1000,
+    });
+
+    expect(inventoryStateOf(aliceInbox)?.slots[0]).toEqual({ itemId: "arrow", count: 4 });
+
+    session.tick(16);
+    const msgs = projectilesMessages(bobInbox);
+    expect(msgs.length).toBeGreaterThan(0);
+    const last = msgs.at(-1)!;
+    expect(last.entities).toHaveLength(1);
+    expect(last.entities[0]).toMatchObject({ projectileId: "arrow", ownerId: "alice" });
+  });
+
+  it("a shot with no ammo is dropped — never conjures a projectile", () => {
+    const { net: net2, session } = makeSession();
+    const bob = net2.addPeer("bob");
+    const bobInbox = collect(bob);
+    const alice = joinEquipAndAim(net2, 0);
+    alice.broadcast({ kind: "aimedAttack", origin: [0, 1, 0], dir: [0, 0, 1], weaponSlot: "weapon" });
+    session.tick(16);
+    expect(projectilesMessages(bobInbox).flatMap((m) => m.entities)).toEqual([]);
+  });
+
+  it("caps live projectiles per peer (security #2)", () => {
+    const { net: net2, session, now } = makeSession();
+    const bob = net2.addPeer("bob");
+    const bobInbox = collect(bob);
+    const alice = joinEquipAndAim(net2, 30);
+    for (let i = 0; i < 14; i++) {
+      now.value += 5000; // refill the token bucket to full before every shot
+      alice.broadcast({ kind: "aimedAttack", origin: [0, 1, 0], dir: [0, 0, 1], weaponSlot: "weapon" });
+    }
+    session.tick(1);
+    const last = projectilesMessages(bobInbox).at(-1)!;
+    expect(last.entities).toHaveLength(12); // MAX_ACTIVE_PROJECTILES_PER_PEER
+  });
+
+  it("rate-limits rapid-fire launches (security #1)", () => {
+    const { net: net2, session } = makeSession();
+    const bob = net2.addPeer("bob");
+    const bobInbox = collect(bob);
+    const alice = joinEquipAndAim(net2, 30);
+    for (let i = 0; i < 8; i++) {
+      alice.broadcast({ kind: "aimedAttack", origin: [0, 1, 0], dir: [0, 0, 1], weaponSlot: "weapon" });
+    }
+    session.tick(1);
+    const last = projectilesMessages(bobInbox).at(-1)!;
+    expect(last.entities).toHaveLength(6); // AIMED_ATTACK_RATE_LIMIT.capacity, no refill elapsed
+  });
+
+  it("tick() resolves a host-side hit via findHittableEntities/onProjectileHit and removes the shot", () => {
+    const onProjectileHit = vi.fn();
+    const { net: net2, session } = makeSession({
+      findHittableEntities: () => [{ id: "creature:1", x: 0, y: 1, z: 0.3, radius: 0.5 }],
+      onProjectileHit,
+    });
+    const bob = net2.addPeer("bob");
+    const bobInbox = collect(bob);
+    const alice = joinEquipAndAim(net2, 5);
+    alice.broadcast({
+      kind: "aimedAttack",
+      origin: [0, 1, 0],
+      dir: [0, 0, 1],
+      weaponSlot: "weapon",
+      chargeMs: 1000,
+    });
+
+    session.tick(10); // arrow @ 40 m/s moves 0.4 m in 10ms — overlaps the target's sphere
+
+    expect(onProjectileHit).toHaveBeenCalledTimes(1);
+    expect(onProjectileHit).toHaveBeenCalledWith("creature:1", 12, "physical", "arrowHit", "alice");
+    const last = projectilesMessages(bobInbox).at(-1)!;
+    expect(last.entities).toEqual([]); // no pierce — the shot is gone on hit
+  });
+
+  it("tick() expires a projectile at its lifetime even without a hit", () => {
+    const { net: net2, session } = makeSession();
+    const bob = net2.addPeer("bob");
+    const bobInbox = collect(bob);
+    const alice = joinEquipAndAim(net2, 5);
+    alice.broadcast({ kind: "aimedAttack", origin: [0, 1, 0], dir: [0, 0, 1], weaponSlot: "weapon" });
+
+    session.tick(3000); // matches the arrow spec's lifetimeMs
+
+    const last = projectilesMessages(bobInbox).at(-1)!;
+    expect(last.entities).toEqual([]);
   });
 });

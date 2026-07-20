@@ -17,18 +17,26 @@
 import { isErr, isOk } from "../domain/Result";
 import { Inventory } from "../domain/inventory/Inventory";
 import { ItemRegistry } from "../domain/items/ItemRegistry";
+import type { DamageType } from "../domain/items/ItemDefinition";
 import {
+  AIMED_ATTACK_RATE_LIMIT,
+  MAX_ACTIVE_PROJECTILES_PER_PEER,
   remoteAllowedPlaceableAction,
+  tryConsumeToken,
+  validateAimedAttack,
   validateDig,
   validateInventoryOp,
   validatePlaceableInteract,
   validatePose,
   validateTradePropose,
+  type RateLimitState,
 } from "../domain/net/IntentRules";
 import {
   parseMessage,
+  type AimedAttackMsg,
   type ChatMsg,
   type DigMsg,
+  type EquipSlot,
   type FillMsg,
   type InteractAction,
   type InventoryOp,
@@ -42,10 +50,21 @@ import {
   type PlaceableAction,
   type PlaceableInteractMsg,
   type PoseMsg,
+  type ProjectileEntity,
   type SerializedInventoryWire,
   type TradeStackWire,
   type WorldEdit,
 } from "../domain/net/Protocol";
+import {
+  findHit,
+  spawnProjectile,
+  stepProjectile,
+  velocityDirection,
+  type ProjectileState,
+} from "../domain/combat/Projectile";
+import { chargeMultiplier } from "../domain/combat/RangedCharge";
+import { PROJECTILE_REGISTRY } from "../domain/combat/ProjectileRegistry";
+import { WEAPON_REGISTRY } from "../domain/combat/WeaponRegistry";
 import { buildChatMessage, type ChatChannel, type ChatMessage } from "../domain/social/Chat";
 import {
   bothConfirmed,
@@ -95,6 +114,18 @@ export interface WorldSnapshot {
   readonly name: string;
   readonly modifiedChunks: readonly ChunkDelta[];
   readonly entities: Readonly<Record<string, unknown>>;
+}
+
+/** E7.2: one candidate target the host's projectile simulation tests each
+ *  tick — the presentation layer (SpawnFieldView today) is the only party
+ *  that knows live creature positions, so it's queried through a hook rather
+ *  than HostSession importing anything Three.js-adjacent. */
+export interface HittableEntity {
+  readonly id: string;
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
+  readonly radius: number;
 }
 
 /** A resolved placeable interaction (E0.4): the new placeable state to
@@ -159,6 +190,26 @@ export interface HostSessionHooks {
    *  `transport.send`; this hook is the local-delivery path the composition
    *  root's own party UI reads from instead. */
   onHostPartyMessage?(msg: PartyMsg | PartyInviteMsg | PartyInventoryStateMsg): void;
+  /** E7.2: the live candidate targets for THIS tick's projectile collision
+   *  test. Omitted ⇒ no hook wired ⇒ projectiles never register a hit (they
+   *  simply fly until they expire) — a safe default, never a crash. */
+  findHittableEntities?(): readonly HittableEntity[];
+  /** E7.2: a host-resolved projectile hit — damage/target/type are ALL
+   *  computed by the host's own simulation from its own weapon record
+   *  (security item 5), never a client claim. The hook applies it against its
+   *  own authoritative creature record. */
+  onProjectileHit?(
+    targetId: string,
+    damage: number,
+    damageType: DamageType,
+    feelEvent: string,
+    attackerId: string,
+  ): void;
+  /** E7.2: fired after each simulation tick with the full active projectile
+   *  set — lets the HOST's own client render its local tracer view from the
+   *  same source of truth that's also broadcast to joiners (mirrors
+   *  `onPeerPose`'s "host sees its own truth locally too" pattern). */
+  onProjectilesSnapshot?(entities: readonly ProjectileEntity[]): void;
 }
 
 export interface HostSessionDeps {
@@ -202,6 +253,29 @@ interface PeerRecord {
   /** Last self-reported vitals/combat tally (E5.1/E5.6), or null before the
    *  first `partyVitals` report. */
   vitals: PartyVitalsReport | null;
+  /** E7.0/E7.2: the sender's claimed-and-registry-verified equipped item per
+   *  slot (security item 4 — only ever set to an id `WEAPON_REGISTRY` knows). */
+  equipped: Partial<Record<EquipSlot, string>>;
+  /** E7.2 security follow-up #1: per-peer token bucket for `aimedAttack`. */
+  aimedAttackRate: RateLimitState;
+}
+
+/** E7.2: one live, host-simulated projectile. `state` steps every `tick()`;
+ *  `damage`/`damageType`/`feelEvent` were resolved ONCE at launch from the
+ *  host's own weapon + charge record (security item 5) and never change. */
+interface HostProjectile {
+  readonly id: string;
+  readonly projectileId: string;
+  readonly ownerId: string;
+  readonly gravity: number;
+  readonly lifetimeMs: number;
+  readonly radius: number;
+  /** Remaining pass-throughs before the projectile is removed on a hit. */
+  pierces: number;
+  readonly damage: number;
+  readonly damageType: DamageType;
+  readonly feelEvent: string;
+  state: ProjectileState;
 }
 
 export class HostSession {
@@ -230,6 +304,10 @@ export class HostSession {
    *  peer, so it isn't in `this.peers`) — see `HOST_PEER_ID`. */
   private hostVitals: PartyVitalsReport | null = null;
 
+  // ---- E7.2 ranged projectile simulation ----
+  private readonly activeProjectiles = new Map<string, HostProjectile>();
+  private nextProjectileId = 1;
+
   constructor(
     private readonly transport: NetTransport,
     private readonly snapshot: () => WorldSnapshot,
@@ -248,6 +326,8 @@ export class HostSession {
         playerName: "",
         inventoryShared: false,
         vitals: null,
+        equipped: {},
+        aimedAttackRate: { tokens: AIMED_ATTACK_RATE_LIMIT.capacity, lastRefillMs: this.clock() },
       }),
     );
     transport.onPeerLeave((peerId) => {
@@ -354,6 +434,12 @@ export class HostSession {
         return;
       case "partyInventoryLookup":
         this.handlePartyInventoryLookup(peerId, msg.targetPeerId);
+        return;
+      case "equipItem":
+        this.handleEquipItem(peerId, msg.slot, msg.itemId);
+        return;
+      case "aimedAttack":
+        this.handleAimedAttack(peerId, msg);
         return;
       default:
         // host->joiner kinds echoed back at the host: no-op.
@@ -1089,5 +1175,140 @@ export class HostSession {
     const names = new Map<string, string>();
     for (const [peerId, peer] of this.peers) names.set(peerId, peer.playerName);
     return names;
+  }
+
+  // ---- E7.2 ranged + ammo ----
+
+  /** A joiner's claimed equip choice (E7.0/E7.2). Security item #4: only
+   *  ever recorded when `WEAPON_REGISTRY` actually knows the item — an
+   *  unknown/garbage id is dropped, never stored "optimistically". Spell-slot
+   *  equips aren't this stream's scope (no `AbilityRegistry` lookup exists
+   *  yet) and are dropped the same way until E7.3 wires it. */
+  private handleEquipItem(peerId: string, slot: EquipSlot, itemId: string): void {
+    const peer = this.peers.get(peerId);
+    if (!peer) return;
+    if (slot !== "weapon" || !WEAPON_REGISTRY.has(itemId)) return;
+    peer.equipped[slot] = itemId;
+  }
+
+  /** A joiner's ranged launch (E7.2, ADR 0004 §2). Every guard below drops
+   *  the intent silently on failure — never a throw, never a partial effect
+   *  (matches every other intent handler in this file). See the stream's
+   *  security checklist for which guard satisfies which E7.0-sec follow-up. */
+  private handleAimedAttack(peerId: string, msg: AimedAttackMsg): void {
+    const peer = this.peers.get(peerId);
+    if (!peer) return;
+
+    // security #3: null-pose gate — never trust an origin with no validated
+    // recent pose on record for this sender.
+    if (!validateAimedAttack(peer.lastPose?.state ?? null, msg)) return;
+
+    // security #1: per-peer token bucket (was scaffolded, unwired until now).
+    const limited = tryConsumeToken(peer.aimedAttackRate, AIMED_ATTACK_RATE_LIMIT, this.clock());
+    peer.aimedAttackRate = limited.next;
+    if (!limited.allowed) return;
+
+    // This stream only resolves the "weapon" slot's RANGED weapons — melee
+    // (E7.1) and spells (E7.3) share the same wire shape but are each their
+    // own stream's job; anything else here is a safe no-op, not an error.
+    if (msg.weaponSlot !== "weapon") return;
+    const equippedId = peer.equipped.weapon;
+    if (!equippedId) return;
+
+    // security #4: resolve the claimed equip through the registry — drop on
+    // Unknown* rather than trusting the sender's earlier equip claim at face
+    // value a second time.
+    const weaponResult = WEAPON_REGISTRY.get(equippedId);
+    if (!isOk(weaponResult)) return;
+    const weapon = weaponResult.value;
+    if (weapon.kind !== "ranged" || !weapon.projectile) return;
+
+    const specResult = PROJECTILE_REGISTRY.get(weapon.projectile);
+    if (!isOk(specResult)) return;
+    const spec = specResult.value;
+
+    // security #2: per-peer active-projectile DoS cap.
+    let activeForPeer = 0;
+    for (const p of this.activeProjectiles.values()) {
+      if (p.ownerId === peerId) activeForPeer++;
+    }
+    if (activeForPeer >= MAX_ACTIVE_PROJECTILES_PER_PEER) return;
+
+    // security #5: ammo is debited from the host's OWN authoritative
+    // inventory — a peer with no ammo simply gets no shot, never a
+    // conjured/duplicated arrow.
+    if (weapon.ammoItemId) {
+      const debited = peer.inventory.remove(weapon.ammoItemId, 1);
+      if (!isOk(debited)) return;
+      peer.inventory = debited.value;
+      this.sendInventoryState(peerId, peer.inventory);
+    }
+
+    // security #5 (cont'd): damage is computed from the host's OWN weapon
+    // record + its own clamp of the claimed hold duration — the client never
+    // names a damage number, only how long it held the draw (parsed/bounded
+    // already at `Protocol.parseMessage`).
+    const damage = weapon.damage * chargeMultiplier(msg.chargeMs ?? 0);
+
+    const id = `proj:${this.nextProjectileId++}`;
+    this.activeProjectiles.set(id, {
+      id,
+      projectileId: spec.id,
+      ownerId: peerId,
+      gravity: spec.gravity,
+      lifetimeMs: spec.lifetimeMs,
+      radius: spec.radius,
+      pierces: spec.pierces ?? 0,
+      damage,
+      damageType: weapon.damageType,
+      feelEvent: weapon.feelEvent,
+      state: spawnProjectile(msg.origin, msg.dir, spec.speed),
+    });
+  }
+
+  /** Advance every live projectile one tick, resolve collisions against
+   *  `hooks.findHittableEntities()`, and stream the resulting set. Called by
+   *  the composition root's frame loop (mirrors `SpawnFieldView.update`'s own
+   *  per-frame stepping, just hosted here since the sim itself is pure/
+   *  Three.js-free — see ADR 0004 §3). A no-op call when nothing is active
+   *  costs nothing. */
+  tick(dtMs: number): void {
+    if (this.activeProjectiles.size === 0) return;
+    const targets = this.hooks.findHittableEntities?.() ?? [];
+    for (const [id, proj] of this.activeProjectiles) {
+      const outcome = stepProjectile(proj.state, proj, dtMs);
+      proj.state = outcome.state;
+      const hit = targets.length > 0 ? findHit(proj.state, proj.radius, targets) : null;
+      if (hit) {
+        this.hooks.onProjectileHit?.(hit.id, proj.damage, proj.damageType, proj.feelEvent, proj.ownerId);
+        if (proj.pierces > 0) {
+          proj.pierces -= 1;
+        } else {
+          this.activeProjectiles.delete(id);
+          continue;
+        }
+      }
+      if (outcome.expired) this.activeProjectiles.delete(id);
+    }
+    this.broadcastProjectiles();
+  }
+
+  private broadcastProjectiles(): void {
+    const entities: ProjectileEntity[] = [...this.activeProjectiles.values()].map((p) => {
+      const [dirX, dirY, dirZ] = velocityDirection(p.state);
+      return {
+        id: p.id,
+        projectileId: p.projectileId,
+        ownerId: p.ownerId,
+        x: p.state.x,
+        y: p.state.y,
+        z: p.state.z,
+        dirX,
+        dirY,
+        dirZ,
+      };
+    });
+    this.transport.broadcast({ kind: "projectiles", entities });
+    this.hooks.onProjectilesSnapshot?.(entities);
   }
 }

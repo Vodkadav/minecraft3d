@@ -202,8 +202,20 @@ describe("validateTradePropose", () => {
 describe("E7.0 combat contracts: origin-near-pose bound", () => {
   const lastPose = pose(0, 0, 0);
 
-  it("accepts the first intent when no pose is on record yet", () => {
-    expect(validateAimedAttack(null, { kind: "aimedAttack", origin: [500, 0, 0], dir: [1, 0, 0], weaponSlot: "weapon" })).toBe(true);
+  // E7.2 security follow-up #3 (E7.0-sec review): a combat origin is never
+  // trusted without a validated recent pose to compare it against — a peer
+  // with no pose on record yet is rejected, not waved through.
+  it("rejects when no pose is on record yet (null-pose gate)", () => {
+    expect(validateAimedAttack(null, { kind: "aimedAttack", origin: [500, 0, 0], dir: [1, 0, 0], weaponSlot: "weapon" })).toBe(false);
+  });
+
+  it("rejects castSpell/deployItem the same way with no pose on record", () => {
+    expect(
+      validateCastSpell(null, { kind: "castSpell", abilityId: "sparkle-bolt", origin: [0, 0, 0], dir: [1, 0, 0] }),
+    ).toBe(false);
+    expect(
+      validateDeployItem(null, { kind: "deployItem", deployableId: "bumble-trap", position: [0, 0, 0] }),
+    ).toBe(false);
   });
 
   it("validateAimedAttack accepts an origin near the sender's last pose", () => {

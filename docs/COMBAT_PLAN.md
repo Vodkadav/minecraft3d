@@ -30,7 +30,7 @@ status: the `## Combat (E7)` checklist in [`PROGRESS.md`](../PROGRESS.md). Archi
 |---|---|---|
 | E7.0 Contracts | WeaponMetadata/DamageType, weapon/projectile/ability/aoe/deployable registries, wire intents + host streams, FeelEvents combat ids | Done |
 | E7.1 Melee | Per-weapon stats, attack-strength cooldown meter, cone assist, heavy sweep | Done |
-| E7.2 Ranged | Draw-to-charge, host-simulated projectiles, ammo items, quiver HUD | Pending |
+| E7.2 Ranged | Draw-to-charge, host-simulated projectiles, ammo items, quiver HUD | Done |
 | E7.3 Spells | Sparkle Bolt / Frost Puff / Healing Bloom / Vine Snare, focus resource, cast bar | Pending |
 | E7.4 AoE | Shared radius/falloff resolver, block-safe flag, boom VFX | Done |
 | E7.5 Deployables | Grenade / proximity mine / bumble-trap, host arm+trigger | Pending |
@@ -66,7 +66,20 @@ E7.1, E7.7, E7.8 fully independent.
 
 ## Security follow-ups (recorded as reviews land)
 
-- (populated per-review)
+- **E7.0 protocol growth** (reviewed): host-stream validator hardening applied (bounded ids +
+  finite coords); intent parse bounds confirmed at the trust boundary.
+- **E7.4 AoE** (APPROVED): no wire surface — `effect` cue carries an id only; `resolveAoe` pure &
+  host-only. Nit folded in: rejects non-finite (Infinity) radius.
+- **E7.2 Ranged** (APPROVED): host-authoritative intent-only wire holds (client sends
+  origin/dir/slot/chargeMs only; host computes damage from its own `WEAPON_REGISTRY`, debits own
+  ammo, resolves own hits). All 6 E7.0-sec guards verified. Two deferrals to track, NOT skipped:
+  - **Equip-possession not verified.** `handleEquipItem` accepts any id `WEAPON_REGISTRY` knows
+    without checking the peer actually holds that item — low impact today (tier-0 weapons, PvE-only
+    targets, no PvP), but becomes **must-fix** the moment weapon tiers gate progression or any
+    PvP/player-damage target is introduced (ADR 0004 §2 records ownership validation as later work).
+  - **Projectile broadcast cadence** (perf, not security): `broadcastProjectiles` fires every host
+    tick while any projectile is live; bounded by the 12/peer cap. Throttle to the 10 Hz creature
+    cadence later.
 
 ## Standing deferrals (recorded, not skipped)
 

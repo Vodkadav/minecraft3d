@@ -132,8 +132,18 @@ export function validateTradePropose(senderPeerId: string, targetPeerId: string)
  */
 const MAX_ORIGIN_POSE_DISTANCE_M = 5;
 
+/**
+ * E7.2 security follow-up #3 (E7.0-sec review): a combat origin is only ever
+ * accepted against a VALIDATED recent pose on record for the sender — a peer
+ * that has never sent (or hasn't yet had accepted) a `pose` message has
+ * nothing to compare its claimed origin against, so it fails closed instead
+ * of trusting the claim outright. In practice every connected peer's pose
+ * loop (10 Hz, M7.4) has already landed at least one accepted pose long
+ * before combat is possible; this only rejects a still-booting/hostile peer
+ * skipping straight to a combat intent.
+ */
 function originNearPose(lastPose: PlayerState | null, origin: Vec3Wire): boolean {
-  if (lastPose === null) return true; // no pose on record yet; nothing to compare against
+  if (lastPose === null) return false;
   const dx = origin[0] - lastPose.position[0];
   const dy = origin[1] - lastPose.position[1];
   const dz = origin[2] - lastPose.position[2];
@@ -183,6 +193,23 @@ export function tryConsumeToken(
   if (refilled < 1) return { allowed: false, next: { tokens: refilled, lastRefillMs: nowMs } };
   return { allowed: true, next: { tokens: refilled - 1, lastRefillMs: nowMs } };
 }
+
+/**
+ * E7.2 security follow-up #1 (E7.0-sec review): the token-bucket seam above
+ * was scaffolded but unwired — `HostSession` now consumes a token per
+ * `aimedAttack` against this config. Generous over any legitimate draw-fire
+ * cadence (the fastest starter ranged weapon's `attackSpeed` is 1.5/s) but
+ * bounded so a hostile peer can't flood launch intents.
+ */
+export const AIMED_ATTACK_RATE_LIMIT: RateLimitConfig = { capacity: 6, refillPerSecond: 4 };
+
+/**
+ * E7.2 security follow-up #2 (E7.0-sec review): a DoS bound on live
+ * projectiles per peer, mirroring the `MAX_WIRE_*` discipline in `Protocol`
+ * — a peer at the cap has further `aimedAttack` launches dropped until an
+ * existing shot expires or hits.
+ */
+export const MAX_ACTIVE_PROJECTILES_PER_PEER = 12;
 
 export function validateInventoryOp(op: InventoryOp, capacity: number): boolean {
   switch (op.op) {

@@ -219,8 +219,9 @@ slice (E7.0 protocol growth, E7.2–E7.6).
 - [x] E7.1 Melee variety: per-weapon damage/speed/reach/cone, attack-strength cooldown meter,
   forward-cone soft-lock assist, heavy-weapon sweep (MeleeResolve.ts, AttackMeter HUD, 4 weapons)
   — host-only, no wire growth; joiner attack stays bare-hands until equip-sync (E7.2 follow-up)
-- [ ] E7.2 Ranged + ammo: draw-to-charge, host-simulated arcing projectiles, ammo consumption,
-  cosmetic client tracers, quiver HUD
+- [x] E7.2 Ranged + ammo: draw-to-charge, host-simulated arcing projectiles, ammo consumption,
+  cosmetic client tracers (bow/sling/dart-thrower + arrow/pebble/dart) — host-authoritative
+  aimedAttack wire with all 6 E7.0-sec guards; security-reviewed (APPROVED), merged
 - [ ] E7.3 Spellcasting: Sparkle Bolt / Frost Puff / Healing Bloom / Vine Snare, regenerating
   focus resource, cast bar
 - [x] E7.4 AoE/explosives: shared `resolveAoe` radius/falloff resolver (domain/combat/Aoe.ts, pure,

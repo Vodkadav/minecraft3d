@@ -67,12 +67,12 @@ import { NIGHT_AGGRO_RANGE_MULT, NIGHT_DAMAGE_MULT } from "../game/domain/time/D
 import type { ItemStack } from "../game/domain/inventory/Inventory";
 import type { AudioPort } from "../game/application/ports/AudioPort";
 import type { FeelPort } from "../game/application/ports/FeelPort";
+import type { FeelEventId } from "../game/domain/feel/FeelEvents";
 import type { ProgressionEventId } from "../game/domain/progression/ProgressionEvents";
 import type { MapMarker } from "../game/domain/map/MinimapModel";
 import { SPECIES_VISUAL, validGround, type SpawnGround } from "./SpawnPlacement";
 import { isOk } from "../game/domain/Result";
 import type { WeaponMetadata } from "../game/domain/items/ItemDefinition";
-import type { FeelEventId } from "../game/domain/feel/FeelEvents";
 import { WEAPON_REGISTRY } from "../game/domain/combat/WeaponRegistry";
 import {
   chargeFraction as meleeChargeFraction,
@@ -85,6 +85,10 @@ const STEP_INTERVAL_S = 1.0;
 /** Interaction reach (m) for harvest/feed/mount (E/T/G) — melee attack (F)
  *  reads its reach from the weapon instead, see BARE_HANDS_WEAPON/WEAPON_REGISTRY. */
 const REACH_M = 3.5;
+/** E7.2: a live creature's collision sphere radius for the host's projectile
+ *  hit test — generous over any species' actual visual footprint (cozy, not
+ *  pixel-precise hitboxes). */
+const HITTABLE_RADIUS_M = 0.7;
 /** Deterministic crit chance on a player attack — feel-only (Workstream 2). */
 const CRIT_CHANCE = 0.15;
 /** E7.1: unarmed attack-speed (hits/s ceiling) — bare hands didn't have a
@@ -282,6 +286,16 @@ export interface SpawnFieldHandle {
    *  Client-side presentation only (feeds the cooldown-meter HUD); the host
    *  still independently re-derives the real charge when it resolves a hit. */
   attackChargeFraction(): number;
+  /** E7.2: every live (non-dying) creature's collision sphere, read fresh
+   *  each tick by the host's projectile simulation (`HostSession.tick` via
+   *  the `findHittableEntities` hook) — host/solo mode only, a joiner has no
+   *  authoritative positions to offer. */
+  hittableEntities(): readonly { id: string; x: number; y: number; z: number; radius: number }[];
+  /** E7.2: apply a HOST-RESOLVED projectile hit (damage already computed by
+   *  `HostSession` from its own weapon/charge record) against the target
+   *  creature, if it still exists. Returns false if there was nothing to
+   *  hit (already dead/removed) — never throws. */
+  applyProjectileHit(targetId: string, damage: number, feelEventId?: FeelEventId): boolean;
 }
 
 interface CreatureEntry {
@@ -628,12 +642,16 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
   // progression is local-player state (Workstream 6): the host resolving a
   // joiner's remote intent here must never advance the host's own tracker.
 
-  /** Applies one resolved melee hit (weapon-driven damage from `resolveMelee`
-   *  for the local player, or the flat bare-hands hit below for a joiner's
-   *  intent) to `target`: health, audio/feel, loot + death animation on a
-   *  kill. `saltIndex` keeps a sweep's several simultaneous crit rolls
-   *  independent of each other (index 0 reproduces the pre-E7.1 single-hit
-   *  roll exactly). Returns true iff this hit killed the target. */
+  /** Applies one resolved hit to `target`: health, audio/feel, loot + death
+   *  animation on a kill. Weapon-driven damage from `resolveMelee` for the
+   *  local player's melee, the flat bare-hands hit below for a joiner's
+   *  intent, or a HOST-computed projectile hit (E7.2, via `applyProjectileHit`)
+   *  — every kind shares the same kill/loot/removal/mount-release path.
+   *  `weapon.feelEvent` drives the themed flourish (a projectile passes a
+   *  synthesized weapon carrying its own feel event). `saltIndex` keeps a
+   *  sweep's several simultaneous crit rolls independent of each other
+   *  (index 0 reproduces the pre-E7.1 single-hit roll exactly). Returns true
+   *  iff this hit killed the target. */
   function applyMeleeHit(
     target: CreatureEntry,
     damage: number,
@@ -1248,6 +1266,31 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
     attackChargeFraction(): number {
       const weapon = currentWeapon();
       return meleeChargeFraction((clockMs - lastAttackClockMs) / 1000, weapon.attackSpeed);
+    },
+
+    hittableEntities(): readonly { id: string; x: number; y: number; z: number; radius: number }[] {
+      const out: { id: string; x: number; y: number; z: number; radius: number }[] = [];
+      for (const c of creatures.values()) {
+        if (c.dying !== null) continue;
+        out.push({
+          id: c.entity.id,
+          x: c.obj.position.x,
+          y: c.obj.position.y,
+          z: c.obj.position.z,
+          radius: HITTABLE_RADIUS_M,
+        });
+      }
+      return out;
+    },
+
+    applyProjectileHit(targetId: string, damage: number, feelEventId: FeelEventId = "arrowHit"): boolean {
+      const c = creatures.get(targetId);
+      if (!c) return false;
+      // Reuse the shared resolved-hit path (E7.1's applyMeleeHit): the host
+      // already computed `damage`; a synthesized weapon carries the projectile's
+      // own feel event so the flourish reads as an arrow/pebble impact, not a
+      // melee swing. Only `weapon.feelEvent` is consulted for a non-lethal hit.
+      return applyMeleeHit(c, damage, { ...BARE_HANDS_WEAPON, feelEvent: feelEventId });
     },
   };
 }

@@ -365,4 +365,62 @@ export const STARTER_RECIPES: readonly Recipe[] = [
     unlockTier: 3,
     station: "workbench",
   },
+
+  // ---- E7.2 ammo ----
+  {
+    id: "arrow",
+    ingredients: [
+      { itemId: "stick", count: 1 },
+      { itemId: "flint", count: 1 },
+      { itemId: "feather", count: 1 },
+    ],
+    output: { itemId: "arrow", count: 4 },
+    unlockTier: 0,
+  },
+  {
+    id: "pebble",
+    ingredients: [{ itemId: "stone", count: 1 }],
+    output: { itemId: "pebble", count: 4 },
+    unlockTier: 0,
+  },
+  {
+    id: "dart",
+    ingredients: [
+      { itemId: "stick", count: 1 },
+      { itemId: "flint", count: 1 },
+    ],
+    output: { itemId: "dart", count: 4 },
+    unlockTier: 0,
+  },
+  {
+    id: "bow",
+    ingredients: [
+      { itemId: "stick", count: 3 },
+      { itemId: "rope", count: 1 },
+      { itemId: "feather", count: 2 },
+    ],
+    output: { itemId: "bow", count: 1 },
+    unlockTier: 0,
+    station: "workbench",
+  },
+  {
+    id: "sling",
+    ingredients: [
+      { itemId: "rope", count: 2 },
+      { itemId: "hide", count: 1 },
+    ],
+    output: { itemId: "sling", count: 1 },
+    unlockTier: 0,
+    station: "workbench",
+  },
+  {
+    id: "dart-thrower",
+    ingredients: [
+      { itemId: "stick", count: 2 },
+      { itemId: "rope", count: 1 },
+    ],
+    output: { itemId: "dart-thrower", count: 1 },
+    unlockTier: 0,
+    station: "workbench",
+  },
 ];

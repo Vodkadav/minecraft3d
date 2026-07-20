@@ -47,8 +47,9 @@ export class WeaponRegistry {
 /** Composition-root singleton — mirrors `CREATURE_REGISTRY`/`PROJECTILE_REGISTRY`:
  *  every item with a `combat` block in `STARTER_ITEMS` (the single source of
  *  truth), indexed once here. Consumed host-side by melee resolution
- *  (`SpawnFieldView`, E7.1) and by the AoE/thrown "bomb" item (E7.4); reads
- *  `STARTER_ITEMS`, so both streams' weapon items are included automatically. */
+ *  (`SpawnFieldView`, E7.1), ranged/aimed attacks (E7.2), and the AoE/thrown
+ *  "bomb" item (E7.4); reads `STARTER_ITEMS`, so every stream's weapon items
+ *  are included automatically. */
 export const WEAPON_REGISTRY: WeaponRegistry = unwrap(WeaponRegistry.create(STARTER_ITEMS));
 
 function unwrap(result: Result<WeaponRegistry, WeaponError>): WeaponRegistry {
