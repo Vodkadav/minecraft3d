@@ -32,3 +32,19 @@ describe("UI_STYLES [hidden] guard", () => {
     expect(UI_STYLES).toMatch(/\[hidden\]\s*\{\s*display:\s*none\s*!important/);
   });
 });
+
+/**
+ * Regression guard for a dropped `}` on `.laas-room-code` (introduced when the
+ * E2.5 combat-meter rule was inserted right after it): the unbalanced brace
+ * made CSS nesting swallow the entire remainder of the sheet as descendants of
+ * `.laas-room-code`, so global rules (button sizing, minimap/chat positioning,
+ * reduced-motion) silently stopped applying whenever no room-code badge existed
+ * (i.e. all of solo play). Braces must balance.
+ */
+describe("UI_STYLES structural integrity", () => {
+  it("has balanced braces (no rule left unclosed)", () => {
+    const open = (UI_STYLES.match(/\{/g) ?? []).length;
+    const close = (UI_STYLES.match(/\}/g) ?? []).length;
+    expect(open).toBe(close);
+  });
+});

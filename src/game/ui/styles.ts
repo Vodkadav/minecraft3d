@@ -1048,6 +1048,8 @@ ${THEME_CSS_VARS}
   border: 1px solid var(--lw-border);
   border-radius: var(--lw-radius-md);
   user-select: text;
+}
+
 /* Combat meter panel (E2.5) — opt-in, L-toggled, OFF by default */
 .lw-combat-meter {
   position: fixed;
