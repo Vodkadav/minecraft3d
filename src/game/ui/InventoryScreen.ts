@@ -46,6 +46,10 @@ export interface InventoryScreenOptions {
   /** Fired after a successful craft/craft-all — threads through to the
    *  composition root's progression event stream (Workstream 6). */
   onCraft?(): void;
+  /** E8.5: shift-click / "Link to chat" on a slot links the item into the
+   *  chat composer — threaded to the grid, wired by the composition root that
+   *  owns the chat box (`GameHud` ← TerrainScene). */
+  onLinkItem?(itemId: string): void;
   readonly doc?: Document;
 }
 
@@ -129,6 +133,7 @@ export function mountInventoryScreen(opts: InventoryScreenOptions): InventoryScr
       opts.onInventoryChange?.(next);
       craftScreen.render(inventory);
     },
+    ...(opts.onLinkItem ? { onLinkItem: opts.onLinkItem } : {}),
   });
 
   // ---- sort toolbar (Workstream E4.1) ----

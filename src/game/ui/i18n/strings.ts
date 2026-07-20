@@ -242,6 +242,7 @@ export const UI_STRINGS: Catalog = {
     "inventory.slot.tooltip": "{name} x{count}",
     "inventory.hint.split": "Right-click to split the stack",
     "inventory.hint.quickmove": "Double-click to quick-move",
+    "inventory.hint.link": "Shift-click to link in chat",
     "inventory.hint.keyboard": "Arrow keys to move, Enter to pick up/place",
     "inventory.sort": "Sort",
     "inventory.sort.aria": "Autosort and merge stacks",
@@ -576,6 +577,7 @@ export const UI_STRINGS: Catalog = {
     "contextMenu.action.equip": "Equip",
     "contextMenu.action.split": "Split Stack",
     "contextMenu.action.quickMove": "Quick Move",
+    "contextMenu.action.linkToChat": "Link to chat",
     "contextMenu.action.drop": "Drop",
     "contextMenu.action.info": "Item Info",
 
@@ -823,6 +825,7 @@ export const UI_STRINGS: Catalog = {
     "inventory.slot.tooltip": "{name} x{count}",
     "inventory.hint.split": "Clic derecho para dividir la pila",
     "inventory.hint.quickmove": "Doble clic para mover rápido",
+    "inventory.hint.link": "Mayús+clic para enlazar en el chat",
     "inventory.hint.keyboard": "Flechas para mover, Enter para recoger/colocar",
     "inventory.sort": "Ordenar",
     "inventory.sort.aria": "Ordenar y combinar pilas automáticamente",
@@ -1157,6 +1160,7 @@ export const UI_STRINGS: Catalog = {
     "contextMenu.action.equip": "Equipar",
     "contextMenu.action.split": "Dividir pila",
     "contextMenu.action.quickMove": "Mover rápido",
+    "contextMenu.action.linkToChat": "Enlazar en el chat",
     "contextMenu.action.drop": "Soltar",
     "contextMenu.action.info": "Info del objeto",
 
@@ -1404,6 +1408,7 @@ export const UI_STRINGS: Catalog = {
     "inventory.slot.tooltip": "{name} x{count}",
     "inventory.hint.split": "Højreklik for at dele bunken",
     "inventory.hint.quickmove": "Dobbeltklik for hurtig flytning",
+    "inventory.hint.link": "Shift-klik for at linke i chat",
     "inventory.hint.keyboard": "Piletaster for at flytte, Enter for at samle op/placere",
     "inventory.sort": "Sortér",
     "inventory.sort.aria": "Autosortér og saml bunker automatisk",
@@ -1738,6 +1743,7 @@ export const UI_STRINGS: Catalog = {
     "contextMenu.action.equip": "Udrust",
     "contextMenu.action.split": "Del bunke",
     "contextMenu.action.quickMove": "Hurtig flytning",
+    "contextMenu.action.linkToChat": "Link i chat",
     "contextMenu.action.drop": "Smid",
     "contextMenu.action.info": "Genstandsinfo",
 

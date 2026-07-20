@@ -885,6 +885,10 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
         survivalBar.setLevel(next.level.level);
       },
       setInputEnabled: (on) => ctx.hooks.flyCamEnabled?.(on),
+      // E8.5: shift-click / "Link to chat" on an inventory slot links the item
+      // into the chat composer. `chatBox` is created later in this same scope;
+      // the closure only fires on a runtime click, long after it's assigned.
+      onLinkItemToChat: (itemId) => chatBox.insertItemLink(itemId),
       onEat: (food) => {
         const healedBefore = vitals.health;
         const r = eat(vitals, survival, food);

@@ -185,6 +185,11 @@ export interface GameHudOptions {
   /** E6.4: fired whenever a research node is unlocked — the composition
    *  root's seam to persist it (`ResearchPersistence`). */
   onResearchChange?(next: ResearchState): void;
+  /** E8.5: shift-click / "Link to chat" on an inventory slot links the item
+   *  into the chat composer. Wired by the scene composition root that owns the
+   *  chat box (TerrainScene → `chatBox.insertItemLink`); omitted where no chat
+   *  exists. Adds no wire surface (see UX_PLAN.md link-authority invariant). */
+  onLinkItemToChat?(itemId: string): void;
 }
 
 export interface GameHudHandle {
@@ -319,6 +324,7 @@ export function mountGameHud(opts: GameHudOptions): GameHudHandle {
       renderActionBar();
     },
     onCraft: () => recordProgress("craft"),
+    ...(opts.onLinkItemToChat ? { onLinkItem: opts.onLinkItemToChat } : {}),
   });
 
   // Best-effort async load (mirrors composeGameUi's settings.load()) — the

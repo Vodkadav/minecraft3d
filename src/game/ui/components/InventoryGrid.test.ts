@@ -63,6 +63,38 @@ describe("InventoryGrid", () => {
     expect(next.slots[3]).toEqual({ itemId: "wood", count: 5 });
   });
 
+  it("shift-click on a filled slot links the item to chat instead of picking (E8.5)", () => {
+    const reg = registry();
+    const onLinkItem = vi.fn();
+    const onChange = vi.fn();
+    const grid = InventoryGrid({ registry: reg, loc: createLocalizer("en"), ariaLabel: "Inventory", onLinkItem, onChange });
+    grid.render(invWith(reg, [[0, "wood", 5]]));
+    const cells = grid.el.querySelectorAll<HTMLElement>('[role="gridcell"]');
+    cells[0]?.dispatchEvent(new MouseEvent("click", { bubbles: true, shiftKey: true }));
+    expect(onLinkItem).toHaveBeenCalledWith("wood");
+    expect(cells[0]?.dataset.picked).toBe("false");
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("shift-click on an empty slot links nothing and falls through (E8.5)", () => {
+    const reg = registry();
+    const onLinkItem = vi.fn();
+    const grid = InventoryGrid({ registry: reg, loc: createLocalizer("en"), ariaLabel: "Inventory", onLinkItem });
+    grid.render(Inventory.empty(reg, 27));
+    const cells = grid.el.querySelectorAll<HTMLElement>('[role="gridcell"]');
+    cells[0]?.dispatchEvent(new MouseEvent("click", { bubbles: true, shiftKey: true }));
+    expect(onLinkItem).not.toHaveBeenCalled();
+  });
+
+  it("without an onLinkItem handler, shift-click is an ordinary pick (E8.5)", () => {
+    const reg = registry();
+    const grid = InventoryGrid({ registry: reg, loc: createLocalizer("en"), ariaLabel: "Inventory" });
+    grid.render(invWith(reg, [[0, "wood", 5]]));
+    const cells = grid.el.querySelectorAll<HTMLElement>('[role="gridcell"]');
+    cells[0]?.dispatchEvent(new MouseEvent("click", { bubbles: true, shiftKey: true }));
+    expect(cells[0]?.dataset.picked).toBe("true");
+  });
+
   it("readOnly: a click never mutates and never picks (E5.4 party lookup)", () => {
     const reg = registry();
     const onChange = vi.fn();

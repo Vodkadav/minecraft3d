@@ -81,6 +81,14 @@ export interface InventoryGridOptions {
    *  mirrors `onExternalDrop`'s "unused until a second grid exists". */
   onUseItem?(index: number): void;
   onEquipItem?(index: number): void;
+  /** Shift+click a filled slot (or the "Link to chat" context action) links
+   *  the item into the chat composer (E8.5). Wired only by the play HUD's grid,
+   *  which is the sole grid that can reach the chat box — omitted elsewhere,
+   *  so the gesture falls through to the normal pick/place. Adds no wire
+   *  surface: the handler inserts a `[[item:id]]` draft token that travels the
+   *  existing, unmodified host-side chat filter (see UX_PLAN.md's link-authority
+   *  invariant). */
+  onLinkItem?(itemId: string): void;
   /** Item-filter rules (Workstream E4.2) applied to every rendered slot as a
    *  `data-filter-action` attribute ("highlight"/"dim"/"hide"); omitted or
    *  empty renders every slot normally. */
@@ -169,7 +177,7 @@ export function InventoryGrid(opts: InventoryGridOptions): InventoryGridHandle {
           rowEl.classList.add("lw-inv-row-divider");
         }
 
-        cell.addEventListener("click", () => onActivate(index));
+        cell.addEventListener("click", (e) => onSlotClick(e as MouseEvent, index));
         cell.addEventListener("keydown", (e) => onKeyDown(e as KeyboardEvent, index));
         cell.addEventListener("dblclick", () => onQuickMove(index));
         cell.addEventListener("dragstart", (e) => onDragStart(e as DragEvent, index));
@@ -229,6 +237,7 @@ export function InventoryGrid(opts: InventoryGridOptions): InventoryGridHandle {
         const keyhints: string[] = [];
         if (!opts.readOnly && slot.count >= 2) keyhints.push(opts.loc.t("inventory.hint.split"));
         if (!opts.readOnly && hotbarSize > 0) keyhints.push(opts.loc.t("inventory.hint.quickmove"));
+        if (!opts.readOnly && opts.onLinkItem) keyhints.push(opts.loc.t("inventory.hint.link"));
         const model = buildTooltipModel({
           itemId: slot.itemId,
           registry: opts.registry,
@@ -246,7 +255,7 @@ export function InventoryGrid(opts: InventoryGridOptions): InventoryGridHandle {
       // suppresses the native right-click menu (matches the old handler).
       const actions =
         slot && !opts.readOnly
-          ? itemActions({ itemId: slot.itemId, count: slot.count, tags, canQuickMove: hotbarSize > 0 })
+          ? itemActions({ itemId: slot.itemId, count: slot.count, tags, canQuickMove: hotbarSize > 0, canLink: opts.onLinkItem !== undefined })
           : [];
       contextMenus[index] = attachContextMenu(cell, {
         doc,
@@ -260,6 +269,19 @@ export function InventoryGrid(opts: InventoryGridOptions): InventoryGridHandle {
 
   function focusCursor(): void {
     slotEls[ui.cursor]?.focus();
+  }
+
+  /** Shift+click links the slot's item into chat (E8.5) when a handler is
+   *  wired and the slot is filled; otherwise it's an ordinary pick/place. */
+  function onSlotClick(e: MouseEvent, index: number): void {
+    if (!opts.readOnly && e.shiftKey && opts.onLinkItem) {
+      const slot = inventory.slots[index];
+      if (slot) {
+        opts.onLinkItem(slot.itemId);
+        return;
+      }
+    }
+    onActivate(index);
   }
 
   function onActivate(index: number): void {
@@ -345,6 +367,9 @@ export function InventoryGrid(opts: InventoryGridOptions): InventoryGridHandle {
         return;
       case "equip":
         opts.onEquipItem?.(index);
+        return;
+      case "linkToChat":
+        opts.onLinkItem?.(slot.itemId);
         return;
       case "info":
         return;

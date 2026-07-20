@@ -15,7 +15,7 @@
  * the prior handler's silent no-op on an empty right-click.
  */
 
-export type ItemActionId = "use" | "equip" | "split" | "quickMove" | "drop" | "info";
+export type ItemActionId = "use" | "equip" | "split" | "quickMove" | "linkToChat" | "drop" | "info";
 
 export interface ItemAction {
   readonly id: ItemActionId;
@@ -32,6 +32,10 @@ export interface ItemActionContext {
   /** Whether the grid this slot lives in has a hotbar/backpack zone split to
    *  quick-move between (i.e. `hotbarSize > 0` in `InventoryGrid`). */
   readonly canQuickMove: boolean;
+  /** Whether an item→chat link handler is wired (E8.5) — only the play HUD's
+   *  grid can reach the chat composer, so isolated grids (chest/bank/trade,
+   *  tests) leave this unset and never offer the action. */
+  readonly canLink?: boolean;
 }
 
 export function itemActions(ctx: ItemActionContext): readonly ItemAction[] {
@@ -47,6 +51,9 @@ export function itemActions(ctx: ItemActionContext): readonly ItemAction[] {
   actions.push({ id: "split", labelKey: "contextMenu.action.split", enabled: ctx.count > 1 });
   if (ctx.canQuickMove) {
     actions.push({ id: "quickMove", labelKey: "contextMenu.action.quickMove", enabled: true });
+  }
+  if (ctx.canLink) {
+    actions.push({ id: "linkToChat", labelKey: "contextMenu.action.linkToChat", enabled: true });
   }
   actions.push({ id: "drop", labelKey: "contextMenu.action.drop", enabled: true });
   actions.push({ id: "info", labelKey: "contextMenu.action.info", enabled: true });

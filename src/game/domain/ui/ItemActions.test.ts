@@ -56,6 +56,37 @@ describe("itemActions", () => {
     expect(withoutZone.some((a) => a.id === "quickMove")).toBe(false);
   });
 
+  it("linkToChat only appears when a chat-link handler is wired (canLink)", () => {
+    const withLink = itemActions({ itemId: "wood", count: 1, tags: [], canQuickMove: false, canLink: true });
+    expect(withLink.find((a) => a.id === "linkToChat")).toEqual({
+      id: "linkToChat",
+      labelKey: "contextMenu.action.linkToChat",
+      enabled: true,
+    });
+
+    const withoutLink = itemActions({ itemId: "wood", count: 1, tags: [], canQuickMove: false });
+    expect(withoutLink.some((a) => a.id === "linkToChat")).toBe(false);
+  });
+
+  it("linkToChat sits after Quick Move and before Drop", () => {
+    const actions = itemActions({
+      itemId: "iron-sword",
+      count: 3,
+      tags: ["tool", "weapon", "food"],
+      canQuickMove: true,
+      canLink: true,
+    });
+    expect(actions.map((a) => a.id)).toEqual([
+      "use",
+      "equip",
+      "split",
+      "quickMove",
+      "linkToChat",
+      "drop",
+      "info",
+    ]);
+  });
+
   it("orders actions Use/Equip, Split, Quick Move, Drop, Info", () => {
     const actions = itemActions({
       itemId: "iron-sword",
