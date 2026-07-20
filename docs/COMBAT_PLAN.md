@@ -55,6 +55,12 @@ E7.1, E7.7, E7.8 fully independent.
 - **A spell:** an `AbilityRegistry` entry (+ projectile/aoe spec ids as needed) + FeelEvent binding.
 - **A trap/mine/grenade:** a `DeployableRegistry` entry referencing an `AoeSpec`.
 - **A monster ability:** an `abilities` entry on the creature in `starterCreatures.ts`.
+- **An AoE blast** (E7.4): an `AoeSpec` entry in `AoeRegistry.ts` (radius/falloff/blockSafe/vfx),
+  referenced by id from a weapon's `combat.aoe`, an ability's `aoe`, or a deployable's `aoe`. The
+  host resolves who's hit via `resolveAoe(spec, center, targets)` (domain/combat/Aoe.ts, pure —
+  never called by a joiner) and emits the existing `effect` wire message; the presentation side
+  plays it via `attachAoeField(...).spawnBoom(spec, worldPos)` (spawn/AoeField.ts). Block-destroying
+  booms stay off by default (`AoeFieldDeps.blockDestructionEnabled`) per the standing deferral below.
 - (Each stream's merge updates this section with the concrete, exercised recipe — same discipline
   as EXPANSION_PLAN's "How to add content".)
 

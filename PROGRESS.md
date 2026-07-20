@@ -222,8 +222,10 @@ slice (E7.0 protocol growth, E7.2–E7.6).
   cosmetic client tracers, quiver HUD
 - [ ] E7.3 Spellcasting: Sparkle Bolt / Frost Puff / Healing Bloom / Vine Snare, regenerating
   focus resource, cast bar
-- [ ] E7.4 AoE/explosives: shared radius/falloff resolver, block-safe by default, poof+confetti
-  boom VFX
+- [x] E7.4 AoE/explosives: shared `resolveAoe` radius/falloff resolver (domain/combat/Aoe.ts, pure,
+  host-only), starter "bomb-boom" AoeSpec + thrown "bomb" item/recipe, ring+confetti+flash boom VFX
+  (spawn/AoeField.ts) with a deferred, off-by-default block-dig seam — no wire/protocol changes
+  (E7.0's `effect` message already covers this); awaiting security review before merge
 - [ ] E7.5 Deployables: timed grenade, proximity mine, telegraphed bumble-trap; host-owned
   arm/trigger
 - [ ] E7.6 Monster abilities: telegraphed windups (spit/cast/stomp), stand-and-cast /
