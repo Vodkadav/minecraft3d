@@ -46,6 +46,18 @@
  * (`CharacterPersistence`) and applying its `effective*Multiplier`s to
  * `PlayerVitals`/`Survival`/`SpawnFieldView` remain the composition root's
  * job — see `onCharacterChange` and PROGRESS.md for the exact remaining gap.
+ *
+ * E6.4: this HUD also owns the session's `ResearchState`, mounts
+ * `ResearchScreen` (`J` to open, mirroring `CharacterScreen`'s self-bound
+ * `C`) with a mouse-only open button. Research points are *derived* live
+ * from `progression` (never stored) via `earnedResearchPoints`, so no extra
+ * recordProgress hook is needed — the tree just re-reads the same
+ * progression state this HUD already owns. Its `unlockTier` effects unify
+ * with the crafting-tier gate: the max of the objective-tier and
+ * research-tier sources feeds the one `InventoryScreen` gate, never a second
+ * parallel one. Research is single-player/host-local only for now — see
+ * `onResearchChange` and PROGRESS.md for the explicit multiplayer-sync
+ * deferral (joiners don't broadcast research today).
  */
 
 import { isOk } from "../game/domain/Result";
@@ -78,6 +90,8 @@ import { dropOnDeath } from "../game/domain/survival/Respawn";
 import { HOTBAR_SIZE } from "../game/domain/ui/HotbarSelection";
 import type { CrosshairState } from "../game/domain/ui/CrosshairState";
 import { Bank, type BankOptions } from "../game/domain/storage/Bank";
+import { emptyResearchState, researchUnlockedTierFor, type ResearchState } from "../game/domain/research/ResearchTree";
+import { RESEARCH_NODES } from "../game/domain/research/starterResearchTree";
 import type { AudioPort } from "../game/application/ports/AudioPort";
 import type { FeelPort } from "../game/application/ports/FeelPort";
 import type { Localizer } from "../game/application/i18n/Localizer";
@@ -92,6 +106,7 @@ import { createToastHost } from "../game/ui/components/Toast";
 import { mountCharacterScreen } from "../game/ui/CharacterScreen";
 import { mountInventoryScreen } from "../game/ui/InventoryScreen";
 import { mountBankScreen } from "../game/ui/BankScreen";
+import { mountResearchScreen } from "../game/ui/ResearchScreen";
 
 const INVENTORY_CAPACITY = 27;
 export const DEFAULT_BANK_OPTIONS: BankOptions = { sharedCapacity: 45, tabCapacity: 27 };
@@ -146,6 +161,13 @@ export interface GameHudOptions {
   /** Fired after any successful bank deposit/withdraw/move — the composition
    *  root persists the resulting bank via `BankPersistence` (not yet wired). */
   onBankChange?(next: Bank): void;
+  /** E6.4: seeds the session's research tree from a prior save
+   *  (`ResearchPersistence.load`) — undefined starts at `emptyResearchState()`,
+   *  identical to a research-less save. */
+  readonly initialResearch?: ResearchState;
+  /** E6.4: fired whenever a research node is unlocked — the composition
+   *  root's seam to persist it (`ResearchPersistence`). */
+  onResearchChange?(next: ResearchState): void;
 }
 
 export interface GameHudHandle {
@@ -187,6 +209,7 @@ export interface GameHudHandle {
   readonly keyhints: KeyhintState;
   readonly character: CharacterState;
   readonly bank: Bank;
+  readonly research: ResearchState;
   dispose(): void;
 }
 
@@ -198,10 +221,20 @@ export function mountGameHud(opts: GameHudOptions): GameHudHandle {
   let progression = opts.initialProgression ?? emptyProgression();
   let keyhints = opts.initialKeyhints ?? emptyKeyhintState();
   let character = opts.initialCharacter ?? newCharacter();
+  let research = opts.initialResearch ?? emptyResearchState();
 
   const filterStore = opts.filterStore ?? new LocalStorageItemFilterStore();
   let filterRules: readonly FilterRule[] = defaultFilterRules();
   let bank = opts.initialBank ?? Bank.empty(registry, opts.bankOptions ?? DEFAULT_BANK_OPTIONS);
+
+  // E6.4: the one seam that unifies the research-tree's unlockTier effects
+  // with the crafting-tier gate — never a second parallel gate.
+  function combinedUnlockedTier(): number {
+    return Math.max(
+      unlockedTierFor(progression.completedObjectives, TUTORIAL_OBJECTIVES),
+      researchUnlockedTierFor(RESEARCH_NODES, research.unlockedNodeIds),
+    );
+  }
 
   const hotbar = Hotbar({
     registry,
@@ -231,7 +264,7 @@ export function mountGameHud(opts: GameHudOptions): GameHudHandle {
     loc,
     registry,
     recipes: opts.recipes ?? STARTER_RECIPES,
-    unlockedTier: unlockedTierFor(progression.completedObjectives, TUTORIAL_OBJECTIVES),
+    unlockedTier: combinedUnlockedTier(),
     achievements: ACHIEVEMENTS,
     filterRules,
     onFilterRulesChange: (next) => {
@@ -319,6 +352,30 @@ export function mountGameHud(opts: GameHudOptions): GameHudHandle {
   bankScreen.setPlayerInventory(inventory);
   bankScreen.setBank(bank);
 
+  // E6.4: mount the research tree the same way — `J` is ResearchScreen's own
+  // self-bound shortcut (mirrors CharacterScreen's self-bound `C`), this
+  // button is the discoverable mouse-only entry point.
+  const researchScreen = mountResearchScreen({
+    loc,
+    research,
+    progression,
+    ...(opts.setInputEnabled ? { setInputEnabled: opts.setInputEnabled } : {}),
+    doc,
+    onResearchChange: (next) => {
+      research = next;
+      inventoryScreen.setUnlockedTier(combinedUnlockedTier());
+      opts.onResearchChange?.(research);
+    },
+  });
+  const researchButton = Button({
+    label: loc.t("research.title"),
+    ariaLabel: loc.t("research.open.aria"),
+    variant: "quiet",
+    onClick: () => researchScreen.toggle(),
+  });
+  researchButton.classList.add("lw-character-open-button", "lw-research-open-button");
+  doc.body.appendChild(researchButton);
+
   function renderTracker(): void {
     const excluded = progression.tutorialSkipped ? TUTORIAL_EXCLUDE : undefined;
     const objective = currentObjective(progression, TUTORIAL_OBJECTIVES, excluded);
@@ -343,9 +400,10 @@ export function mountGameHud(opts: GameHudOptions): GameHudHandle {
         OBJECTIVE_TOAST_TTL_MS,
       );
     }
-    inventoryScreen.setUnlockedTier(unlockedTierFor(progression.completedObjectives, TUTORIAL_OBJECTIVES));
+    inventoryScreen.setUnlockedTier(combinedUnlockedTier());
     inventoryScreen.setUnlockedAchievements(progression.unlockedAchievements);
     renderTracker();
+    researchScreen.setProgression(progression);
 
     // E1.4b: this IS the runtime XP-to-leveling flow — every dig/craft/kill/
     // harvest/tame call site already threads its event through here.
@@ -480,6 +538,9 @@ export function mountGameHud(opts: GameHudOptions): GameHudHandle {
     get bank() {
       return bank;
     },
+    get research() {
+      return research;
+    },
     dispose(): void {
       (doc.defaultView ?? window).removeEventListener("keydown", onEatKeyDown);
       hotbar.dispose();
@@ -491,6 +552,8 @@ export function mountGameHud(opts: GameHudOptions): GameHudHandle {
       characterButton.remove();
       bankScreen.dispose();
       bankButton.remove();
+      researchScreen.dispose();
+      researchButton.remove();
       const win = doc.defaultView ?? window;
       for (const timer of activeKeyhintTimers) win.clearTimeout(timer);
       activeKeyhintTimers.clear();

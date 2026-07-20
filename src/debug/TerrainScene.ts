@@ -82,6 +82,8 @@ import {
   newCharacter,
 } from '../game/domain/character/Character';
 import { CharacterPersistence } from '../game/application/CharacterPersistence';
+import { emptyResearchState, type ResearchState } from '../game/domain/research/ResearchTree';
+import { ResearchPersistence } from '../game/application/ResearchPersistence';
 import { eat } from '../game/domain/survival/Eating';
 import type { ProgressionEventId } from '../game/domain/progression/ProgressionEvents';
 import { STARTER_RECIPES } from '../game/domain/crafting/starterRecipes';
@@ -612,6 +614,17 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
       const loadedCharacter = await characterPersistence.load(worldIdForSave, 'local');
       if (isOk(loadedCharacter)) character = loadedCharacter.value;
     }
+    // E6.4: the research tree persists per-owner exactly like the character
+    // does — single-player/host-local only for now (see GameHud.ts's doc
+    // comment for the explicit joiner-sync deferral).
+    const researchPersistence = saveStoreForPersistence
+      ? new ResearchPersistence(saveStoreForPersistence)
+      : null;
+    let research: ResearchState = emptyResearchState();
+    if (researchPersistence) {
+      const loadedResearch = await researchPersistence.load(worldIdForSave, 'local');
+      if (isOk(loadedResearch)) research = loadedResearch.value;
+    }
     let maxHealthEff = PLAYER_MAX_HEALTH * effectiveMaxHealthMultiplier(character);
     let maxEnergyEff = STAMINA_MAX * effectiveMaxEnergyMultiplier(character);
 
@@ -721,6 +734,10 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
         void bankPersistence?.save(next);
       },
       initialCharacter: character,
+      initialResearch: research,
+      onResearchChange: (next) => {
+        research = next;
+      },
       onCharacterChange: (next) => {
         // E1.4b: multipliers apply live — a stat spend mid-session changes
         // maxima/power immediately; persistence rides the pagehide save below.
@@ -778,6 +795,7 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
       const saveGameState = (): void => {
         void gameStatePersistence.save(worldIdForSave, 'local', hud.inventory, hud.progression, hud.keyhints);
         void characterPersistence?.save(worldIdForSave, 'local', hud.character);
+        void researchPersistence?.save(worldIdForSave, 'local', hud.research);
         if (explorationPersistence) {
           void explorationPersistence.save(worldIdForSave, 'local', exploration);
         }
