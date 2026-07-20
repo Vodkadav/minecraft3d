@@ -315,4 +315,17 @@ export const STARTER_RECIPES: readonly Recipe[] = [
     output: { itemId: "relic-charm", count: 1 },
     unlockTier: 4,
   },
+
+  // --- E7.4 explosives ---
+  {
+    id: "bomb",
+    ingredients: [
+      { itemId: "charcoal", count: 2 },
+      { itemId: "flint", count: 1 },
+      { itemId: "clay", count: 1 },
+    ],
+    output: { itemId: "bomb", count: 1 },
+    unlockTier: 1,
+    station: "workbench",
+  },
 ];

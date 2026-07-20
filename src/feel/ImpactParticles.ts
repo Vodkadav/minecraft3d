@@ -20,6 +20,11 @@ const BURST_COLOR: Record<string, readonly [number, number, number]> = {
   dig: [0.29, 0.24, 0.17], // soil brown
   place: [0.62, 0.56, 0.44],
   tame: [0.85, 0.56, 0.24], // accent/ember
+  // E7.4 — the "boom" FeelEventId (declared E7.0) had no visual yet; without
+  // this entry it would silently fall back to the "hit" danger-red, reading
+  // as violent. Ember/gold instead, matching AoeField's confetti palette —
+  // cozy charter (ADR 0004 §4), no blood/gore.
+  boom: [0.95, 0.65, 0.25],
 };
 
 interface Slot {

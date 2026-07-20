@@ -206,4 +206,25 @@ export const STARTER_ITEMS: readonly ItemDefinition[] = [
   { id: "wolf-fang", displayName: "Wolf Fang", maxStackSize: 64, tags: ["natural", "material"], tier: 1 },
   { id: "sparkle-gem", displayName: "Sparkle Gem", maxStackSize: 64, tags: ["natural", "treasure"], tier: 2 },
   { id: "golden-acorn", displayName: "Golden Acorn", maxStackSize: 64, tags: ["natural", "treasure"], tier: 3 },
+
+  // --- E7.4 explosives ---
+  // The starter thrown weapon exercising the shared AoeRegistry resolver
+  // (Aoe.ts) — `combat.aoe` points at the "bomb-boom" AoeSpec. No `projectile`
+  // yet: the arc/throw simulation is E7.2's host-projectile stream to wire;
+  // this item just carries the data a future intent handler will consume.
+  {
+    id: "bomb",
+    displayName: "Bomb",
+    maxStackSize: 16,
+    tags: ["weapon", "thrown", "crafted"],
+    tier: 1,
+    combat: {
+      kind: "thrown",
+      damage: 30,
+      attackSpeed: 0.8,
+      aoe: "bomb-boom",
+      damageType: "boom",
+      feelEvent: "boom",
+    },
+  },
 ];
