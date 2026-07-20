@@ -60,6 +60,12 @@ export interface WorldSaveData {
    *  `ExplorationPersistence` treats an absent record as "nothing explored
    *  yet" rather than corrupt data. */
   readonly exploration?: Readonly<Record<string, unknown>>;
+  /** Per-owner research-tree blobs (Phase E6.4) — same optional open-record
+   *  shape as `.character`/`.exploration`, so every save literal written
+   *  before this field existed keeps compiling and loading unchanged;
+   *  `ResearchPersistence` treats an absent record as "nothing researched
+   *  yet" rather than corrupt data. */
+  readonly research?: Readonly<Record<string, unknown>>;
 }
 
 /** Lightweight index entry for the world-list / lobby, without the chunk blobs. */
