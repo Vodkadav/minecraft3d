@@ -17,6 +17,9 @@ status: the `## Expansion` checklist in [`PROGRESS.md`](../PROGRESS.md).
 - **Orbs are a reskin** of the existing vitals (hudStyle setting), not a parallel HUD.
 - **Mandatory security reviews** (`claude-infra:security`) for inventory authority, trade, chat,
   and every other slice touching networking.
+- **Amended 2026-07-20 (owner decision, ADR 0004):** cozy whimsical abilities are allowed — the
+  E7 combat wave adds spells/AoE/traps under the same charter: additive-only power, no debuff
+  builds, celebratory VFX, no gore. See [`COMBAT_PLAN.md`](COMBAT_PLAN.md).
 
 ## Phases
 

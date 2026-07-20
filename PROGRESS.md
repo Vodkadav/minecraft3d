@@ -205,6 +205,34 @@ inspection per merge; mandatory `claude-infra:security` review on every networki
   expressible as a pure-data registry addition (see `docs/EXPANSION_PLAN.md` deferrals)
 - [ ] Expansion playtest gate (structured session — owner schedules)
 
+## Combat (E7)
+
+Combat & encounters wave (plan: [`docs/COMBAT_PLAN.md`](docs/COMBAT_PLAN.md)): hybrid aimed +
+melee-assist targeting, cozy-whimsical abilities (charter amended — see ADR 0004), host-owned
+projectile/deployable simulation. Mandatory `claude-infra:security` review on every wire-touching
+slice (E7.0 protocol growth, E7.2–E7.6).
+
+- [~] E7.0 Contracts: WeaponMetadata/DamageType on ItemDefinition, 5 combat registries
+  (weapon/projectile/ability/aoe/deployable, completeness-tested), wire intents
+  equipItem/aimedAttack/castSpell/deployItem + host streams projectiles/deployables/effect,
+  FeelEvents combat ids
+- [ ] E7.1 Melee variety: per-weapon damage/speed/reach/cone, attack-strength cooldown meter,
+  forward-cone soft-lock assist, heavy-weapon sweep
+- [ ] E7.2 Ranged + ammo: draw-to-charge, host-simulated arcing projectiles, ammo consumption,
+  cosmetic client tracers, quiver HUD
+- [ ] E7.3 Spellcasting: Sparkle Bolt / Frost Puff / Healing Bloom / Vine Snare, regenerating
+  focus resource, cast bar
+- [ ] E7.4 AoE/explosives: shared radius/falloff resolver, block-safe by default, poof+confetti
+  boom VFX
+- [ ] E7.5 Deployables: timed grenade, proximity mine, telegraphed bumble-trap; host-owned
+  arm/trigger
+- [ ] E7.6 Monster abilities: telegraphed windups (spit/cast/stomp), stand-and-cast /
+  retreat-and-fire brain decisions
+- [ ] E7.7 Defeat VFX: poof + confetti + loot fountain, gentle player-down (no item loss)
+- [ ] E7.8 Loot pools: weighted rarity tiers, difficulty/encounter multiplier, deterministic
+  single-roll
+- [ ] Combat playtest gate (structured session — owner schedules)
+
 ## Notes
 
 - Prime directive: never regress the finished desktop LAAS render — all new work is additive and
