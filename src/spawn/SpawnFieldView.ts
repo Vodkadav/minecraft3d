@@ -67,6 +67,7 @@ import { NIGHT_AGGRO_RANGE_MULT, NIGHT_DAMAGE_MULT } from "../game/domain/time/D
 import type { ItemStack } from "../game/domain/inventory/Inventory";
 import type { AudioPort } from "../game/application/ports/AudioPort";
 import type { FeelPort } from "../game/application/ports/FeelPort";
+import type { FeelEventId } from "../game/domain/feel/FeelEvents";
 import type { ProgressionEventId } from "../game/domain/progression/ProgressionEvents";
 import type { MapMarker } from "../game/domain/map/MinimapModel";
 import { SPECIES_VISUAL, validGround, type SpawnGround } from "./SpawnPlacement";
@@ -77,6 +78,10 @@ const STEP_INTERVAL_S = 1.0;
 const REACH_M = 3.5;
 /** Player hit damage per attack press (tools/weapons arrive later). */
 const ATTACK_DAMAGE = 10;
+/** E7.2: a live creature's collision sphere radius for the host's projectile
+ *  hit test — generous over any species' actual visual footprint (cozy, not
+ *  pixel-precise hitboxes). */
+const HITTABLE_RADIUS_M = 0.7;
 /** Deterministic crit chance on a player attack — feel-only (Workstream 2). */
 const CRIT_CHANCE = 0.15;
 /** How close an aggressive creature must get to bite the player (m). */
@@ -243,6 +248,16 @@ export interface SpawnFieldHandle {
    *  pluggable `MapMarker` shape `MinimapModel` consumes. Pull-based (no
    *  new per-frame cost of its own — the caller decides how often to ask). */
   liveMarkers(): readonly MapMarker[];
+  /** E7.2: every live (non-dying) creature's collision sphere, read fresh
+   *  each tick by the host's projectile simulation (`HostSession.tick` via
+   *  the `findHittableEntities` hook) — host/solo mode only, a joiner has no
+   *  authoritative positions to offer. */
+  hittableEntities(): readonly { id: string; x: number; y: number; z: number; radius: number }[];
+  /** E7.2: apply a HOST-RESOLVED projectile hit (damage already computed by
+   *  `HostSession` from its own weapon/charge record) against the target
+   *  creature, if it still exists. Returns false if there was nothing to
+   *  hit (already dead/removed) — never throws. */
+  applyProjectileHit(targetId: string, damage: number, feelEventId?: FeelEventId): boolean;
 }
 
 interface CreatureEntry {
@@ -560,10 +575,20 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
   // tame) so the *local-only* call sites below can fire `onProgress` —
   // progression is local-player state (Workstream 6): the host resolving a
   // joiner's remote intent here must never advance the host's own tracker.
-  function resolveAttack(target: CreatureEntry): boolean {
+  /** `damageOverride`/`feelId` (E7.2): a ranged/weapon hit resolved by
+   *  `HostSession`'s own projectile simulation carries its OWN host-computed
+   *  damage + feel event (`WeaponMetadata.damage * chargeMultiplier`,
+   *  `WeaponMetadata.feelEvent`) instead of the flat player-punch default —
+   *  everything else about resolving a kill (loot/removal/mount release) is
+   *  unchanged and shared by every weapon kind. */
+  function resolveAttack(
+    target: CreatureEntry,
+    damageOverride?: number,
+    feelId: FeelEventId = "attackHit",
+  ): boolean {
     if (target.dying !== null) return false;
     lastCombatMs = clockMs;
-    const attackDamage = ATTACK_DAMAGE * (deps.attackPowerMult?.() ?? 1);
+    const attackDamage = damageOverride ?? ATTACK_DAMAGE * (deps.attackPowerMult?.() ?? 1);
     const r = applyDamage(target.combat, attackDamage);
     target.combat = r.state;
     const pos: [number, number, number] = [
@@ -575,7 +600,7 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
     // deterministic crit roll (same shape as the loot roll below) — a
     // presentation flourish only, never affects the damage actually dealt
     const crit = hashUnitFloat(deps.seed, clockMs | 0, 0x6f10) < CRIT_CHANCE;
-    deps.feel?.trigger("attackHit", { worldPos: pos, numberValue: attackDamage, crit });
+    deps.feel?.trigger(feelId, { worldPos: pos, numberValue: attackDamage, crit });
     if (!r.died) return false;
     deps.feel?.trigger("kill", { worldPos: pos, numberValue: attackDamage, crit });
     const roll = hashUnitFloat(deps.seed, clockMs | 0, 0x6f00);
@@ -1114,6 +1139,28 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
         out.push({ id: n.entity.id, kind: "resourceNode", x: n.obj.position.x, z: n.obj.position.z });
       }
       return out;
+    },
+
+    hittableEntities(): readonly { id: string; x: number; y: number; z: number; radius: number }[] {
+      const out: { id: string; x: number; y: number; z: number; radius: number }[] = [];
+      for (const c of creatures.values()) {
+        if (c.dying !== null) continue;
+        out.push({
+          id: c.entity.id,
+          x: c.obj.position.x,
+          y: c.obj.position.y,
+          z: c.obj.position.z,
+          radius: HITTABLE_RADIUS_M,
+        });
+      }
+      return out;
+    },
+
+    applyProjectileHit(targetId: string, damage: number, feelEventId: FeelEventId = "attackHit"): boolean {
+      const c = creatures.get(targetId);
+      if (!c) return false;
+      resolveAttack(c, damage, feelEventId);
+      return true;
     },
   };
 }

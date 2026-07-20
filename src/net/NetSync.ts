@@ -19,30 +19,36 @@
  */
 
 import type { Object3D } from "three";
-import { HOST_PEER_ID, HostSession, type PartyVitalsReport, type WorldSnapshot } from "../game/application/HostSession";
+import { HOST_PEER_ID, HostSession, type HittableEntity, type PartyVitalsReport, type WorldSnapshot } from "../game/application/HostSession";
 import { JoinSession } from "../game/application/JoinSession";
 import type { NetTransport } from "../game/application/ports/NetTransport";
 import type { WorldSaveStore } from "../game/application/ports/WorldSaveStore";
 import type { ItemRegistry } from "../game/domain/items/ItemRegistry";
+import type { DamageType } from "../game/domain/items/ItemDefinition";
 import type {
   CreatureEntity,
+  EquipSlot,
   GroundItemEntity,
   InventoryOp,
   PartyActionOp,
   PartyInventoryStateMsg,
   PartyInviteMsg,
   PartyMsg,
+  ProjectileEntity,
   SerializedInventoryWire,
   TradeStackWire,
   TradeStateMsg,
+  Vec3Wire,
   WelcomeMsg,
   WorldEdit,
 } from "../game/domain/net/Protocol";
 import { makeRoomCode } from "../game/domain/net/RoomCode";
 import type { ChatChannel, ChatMessage } from "../game/domain/social/Chat";
+import type { FeelEventId } from "../game/domain/feel/FeelEvents";
 import type { PlayerState } from "../game/domain/world/WorldSaveData";
 import { makeTrysteroTransport } from "../game/infrastructure/net/TrysteroTransport";
 import type { GroundItemFieldHandle } from "../spawn/GroundItemField";
+import type { ProjectileFieldHandle } from "../spawn/ProjectileField";
 import type { SpawnFieldHandle } from "../spawn/SpawnFieldView";
 import type { PlaceableInteractionHandle } from "../voxel/placement/PlaceableInteractionTool";
 import { RemotePlayers } from "./RemotePlayers";
@@ -86,6 +92,9 @@ export interface HostNetDeps {
   /** The host's ground-drop loot field (E0.5) — streamed to joiners; pickup
    *  intents resolve through it via HostSession's ground-item hooks. */
   readonly groundItems?: GroundItemFieldHandle | null;
+  /** The host's own cosmetic tracer pool (E7.2) — mirrors the SAME
+   *  `projectiles` stream broadcast to joiners, via `onProjectilesSnapshot`. */
+  readonly projectiles?: ProjectileFieldHandle | null;
   /** The host's functional placeables (Workstream 8.1, S7b) — joiner
    *  placeableInteract intents resolve against it. */
   readonly placeables?: PlaceableInteractionHandle | null;
@@ -171,6 +180,13 @@ export async function attachHostNet(deps: HostNetDeps): Promise<HostNetHandle> {
         deps.spawns?.releaseRider(peerId);
       },
       onInteract: (action, targetId, peerId) => deps.spawns?.applyInteract(action, targetId, peerId),
+      // E7.2: the host's projectile tick queries the SAME live spawn field
+      // its melee attack already resolves against — collision candidates and
+      // hit application both flow through SpawnFieldView, never duplicated.
+      findHittableEntities: (): readonly HittableEntity[] => deps.spawns?.hittableEntities() ?? [],
+      onProjectileHit: (targetId, damage, _damageType: DamageType, feelEvent, _attackerId) =>
+        deps.spawns?.applyProjectileHit(targetId, damage, feelEvent as FeelEventId),
+      onProjectilesSnapshot: (entities) => deps.projectiles?.applySnapshot(entities),
       onPlaceableInteract: (action, placeableId, peerId, itemId, count) =>
         deps.placeables?.resolveHostIntent(action, placeableId, peerId, itemId, count),
       onGroundItemPeek: (targetId) => deps.groundItems?.peek(targetId),
@@ -230,6 +246,10 @@ export async function attachHostNet(deps: HostNetDeps): Promise<HostNetHandle> {
         snapAcc = 0;
         void refreshSnapshot();
       }
+      // E7.2: advance the host's projectile simulation every frame (pure,
+      // Three.js-free — see ADR 0004 §3); a no-op call when nothing is
+      // in flight costs nothing (HostSession.tick's own early-out).
+      session.tick(dt * 1000);
       remote.update(dt);
     },
     dispose(): void {
@@ -265,6 +285,9 @@ export interface JoinWorldDeps {
   /** The joiner's ground-drop loot field (E0.5) — puppeted by the host's
    *  stream; pickup/autoloot become intents, never local mutation. */
   readonly groundItems?: GroundItemFieldHandle | null;
+  /** The joiner's cosmetic tracer pool (E7.2) — puppeted by the host's
+   *  `projectiles` stream; never simulated locally. */
+  readonly projectiles?: ProjectileFieldHandle | null;
   /** The joiner's functional placeables (Workstream 8.1, S7b) — `E` sends an
    *  intent instead of resolving locally; broadcast state reconciles it. */
   readonly placeables?: PlaceableInteractionHandle | null;
@@ -305,6 +328,12 @@ export interface JoinNetHandle {
   sendFill(x: number, y: number, z: number, radius: number, materialId: number): void;
   /** Direct manipulation of the joiner's own authoritative inventory (E0.4). */
   sendInventoryOp(op: InventoryOp): void;
+  /** Claim an equip choice (E7.0/E7.2) — the host only records it once its
+   *  own weapon registry resolves the item. */
+  sendEquipItem(slot: EquipSlot, itemId: string): void;
+  /** A ranged aim + optional draw-to-charge hold duration (E7.2) — the host
+   *  computes the actual damage/hit itself (ADR 0004 §2). */
+  sendAimedAttack(origin: Vec3Wire, dir: Vec3Wire, weaponSlot: EquipSlot, chargeMs?: number): void;
   /** E5.3 trading — every mutation is an intent; `onTradeState` (via
    *  `attachWorld`) is the only path a trade UI ever updates from. */
   sendTradePropose(targetPeerId: string): void;
@@ -357,6 +386,7 @@ export function createJoinNet(code: string, opts: JoinNetOptions = {}): JoinNetH
     readonly voxels: EditableVoxels | null;
     readonly spawns: SpawnFieldHandle | null;
     readonly groundItems: GroundItemFieldHandle | null;
+    readonly projectiles: ProjectileFieldHandle | null;
     readonly placeables: PlaceableInteractionHandle | null;
     readonly remote: RemotePlayers;
     readonly onHostGone?: () => void;
@@ -439,6 +469,10 @@ export function createJoinNet(code: string, opts: JoinNetOptions = {}): JoinNetH
     // the next tick re-sends the full active set (E0.5, mirrors onCreatures).
     onGroundItems: (entities: readonly GroundItemEntity[]): void =>
       world?.groundItems?.applySnapshot(entities),
+    // E7.2: projectile snapshots arriving before attachWorld are dropped too
+    // — the host's next tick re-sends the full active set (mirrors onCreatures).
+    onProjectiles: (entities: readonly ProjectileEntity[]): void =>
+      world?.projectiles?.applySnapshot(entities),
     onHostClosing: onHostLost,
     onPlaceableState: (placeableId: string, state: unknown): void =>
       world?.placeables?.applyRemoteState(placeableId, state),
@@ -507,6 +541,7 @@ export function createJoinNet(code: string, opts: JoinNetOptions = {}): JoinNetH
         voxels: deps.voxels,
         spawns: deps.spawns ?? null,
         groundItems: deps.groundItems ?? null,
+        projectiles: deps.projectiles ?? null,
         placeables: deps.placeables ?? null,
         remote,
         ...(deps.onHostGone ? { onHostGone: deps.onHostGone } : {}),
@@ -596,6 +631,12 @@ export function createJoinNet(code: string, opts: JoinNetOptions = {}): JoinNetH
     },
     sendInventoryOp(op): void {
       session?.sendInventoryOp(op);
+    },
+    sendEquipItem(slot, itemId): void {
+      session?.sendEquipItem(slot, itemId);
+    },
+    sendAimedAttack(origin, dir, weaponSlot, chargeMs): void {
+      session?.sendAimedAttack(origin, dir, weaponSlot, chargeMs);
     },
     sendTradePropose(targetPeerId): void {
       session?.sendTradePropose(targetPeerId);
