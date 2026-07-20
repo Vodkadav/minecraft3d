@@ -863,30 +863,37 @@ function isDirVec3(v: unknown): v is Vec3Wire {
   return mag > 1 - DIR_MAGNITUDE_TOLERANCE && mag < 1 + DIR_MAGNITUDE_TOLERANCE;
 }
 
+/** Finite-only numeric guard for stream coordinates (security review E7.0-sec
+ *  finding #2): a malformed/compromised host stream must not smuggle
+ *  NaN/Infinity into joiner-side rendering. */
+function isFiniteNum(v: unknown): v is number {
+  return isNum(v) && Number.isFinite(v);
+}
+
 function isProjectileEntity(v: unknown): v is ProjectileEntity {
   return (
     isRecord(v) &&
-    isStr(v.id) &&
-    isStr(v.projectileId) &&
-    isStr(v.ownerId) &&
-    isNum(v.x) &&
-    isNum(v.y) &&
-    isNum(v.z) &&
-    isNum(v.dirX) &&
-    isNum(v.dirY) &&
-    isNum(v.dirZ)
+    isBoundedId(v.id, MAX_WIRE_ID_LEN) &&
+    isBoundedId(v.projectileId, MAX_WIRE_ID_LEN) &&
+    isWirePeerId(v.ownerId) &&
+    isFiniteNum(v.x) &&
+    isFiniteNum(v.y) &&
+    isFiniteNum(v.z) &&
+    isFiniteNum(v.dirX) &&
+    isFiniteNum(v.dirY) &&
+    isFiniteNum(v.dirZ)
   );
 }
 
 function isDeployableEntity(v: unknown): v is DeployableEntity {
   return (
     isRecord(v) &&
-    isStr(v.id) &&
-    isStr(v.deployableId) &&
-    isStr(v.ownerId) &&
-    isNum(v.x) &&
-    isNum(v.y) &&
-    isNum(v.z) &&
+    isBoundedId(v.id, MAX_WIRE_ID_LEN) &&
+    isBoundedId(v.deployableId, MAX_WIRE_ID_LEN) &&
+    isWirePeerId(v.ownerId) &&
+    isFiniteNum(v.x) &&
+    isFiniteNum(v.y) &&
+    isFiniteNum(v.z) &&
     typeof v.armed === "boolean"
   );
 }
@@ -1004,7 +1011,10 @@ const VALIDATORS: Record<string, (m: Record<string, unknown>) => boolean> = {
     m.entities.length <= MAX_WIRE_DEPLOYABLES &&
     m.entities.every(isDeployableEntity),
   effect: (m) =>
-    isBoundedId(m.effectId, MAX_WIRE_ID_LEN) && isNum(m.x) && isNum(m.y) && isNum(m.z),
+    isBoundedId(m.effectId, MAX_WIRE_ID_LEN) &&
+    isFiniteNum(m.x) &&
+    isFiniteNum(m.y) &&
+    isFiniteNum(m.z),
 };
 
 /** Validate an untrusted wire payload into a typed message, or an error value. */
