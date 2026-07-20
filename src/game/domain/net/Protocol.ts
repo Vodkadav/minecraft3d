@@ -260,12 +260,17 @@ export type Vec3Wire = readonly [number, number, number];
 /** Melee-cone, ranged, and thrown attacks all share this shape (plan §3.3):
  *  the host raytraces/simulates from `origin`+`dir` against ITS OWN
  *  authoritative equipped-item record for `weaponSlot` — the client never
- *  claims a hit or a damage number. */
+ *  claims a hit or a damage number. `chargeMs` (E7.2 draw-to-charge) is the
+ *  same kind of claimed INPUT as `dir` — how long the draw was held, never a
+ *  multiplier or damage value — the host clamps it (see `MAX_WIRE_CHARGE_MS`)
+ *  and runs it through its own `RangedCharge.chargeMultiplier` curve; a
+ *  melee/instant attack simply omits it. */
 export interface AimedAttackMsg {
   readonly kind: "aimedAttack";
   readonly origin: Vec3Wire;
   readonly dir: Vec3Wire;
   readonly weaponSlot: EquipSlot;
+  readonly chargeMs?: number;
 }
 
 /** Cast a spell (E7.3) — aimed either at a direction (projectile/cone) or a
@@ -837,6 +842,12 @@ function isPartyMemberInfo(v: unknown): v is PartyMemberInfo {
 const MAX_WIRE_PROJECTILES = 256;
 const MAX_WIRE_DEPLOYABLES = 128;
 
+/** E7.2 DoS/sanity bound on a claimed draw-hold duration — generous over
+ *  `RangedCharge.FULL_CHARGE_MS` (1000 ms "strong" threshold) so a legitimate
+ *  long hold is never clipped mid-curve, but bounded so a hostile peer can't
+ *  smuggle an absurd/NaN-adjacent value past the parse boundary. */
+const MAX_WIRE_CHARGE_MS = 5000;
+
 const EQUIP_SLOTS: readonly string[] = ["weapon", "spell"];
 
 function isEquipSlot(v: unknown): v is EquipSlot {
@@ -994,7 +1005,11 @@ const VALIDATORS: Record<string, (m: Record<string, unknown>) => boolean> = {
   partyInventoryState: (m) =>
     isWirePeerId(m.targetPeerId) && isSerializedInventoryWire({ capacity: m.capacity, slots: m.slots }),
   equipItem: (m) => isEquipSlot(m.slot) && isWireItemId(m.itemId),
-  aimedAttack: (m) => isVec3(m.origin) && isDirVec3(m.dir) && isEquipSlot(m.weaponSlot),
+  aimedAttack: (m) =>
+    isVec3(m.origin) &&
+    isDirVec3(m.dir) &&
+    isEquipSlot(m.weaponSlot) &&
+    (m.chargeMs === undefined || isBoundedNonNegative(m.chargeMs, MAX_WIRE_CHARGE_MS)),
   castSpell: (m) =>
     isBoundedId(m.abilityId, MAX_WIRE_ID_LEN) &&
     isVec3(m.origin) &&

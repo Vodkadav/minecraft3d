@@ -49,6 +49,17 @@ describe("WireCodec — E7.0 combat contract shapes round-trip", () => {
     expect(roundTrip(msg)).toEqual(msg);
   });
 
+  it("round-trips aimedAttack with a draw-to-charge chargeMs (E7.2)", () => {
+    const msg = {
+      kind: "aimedAttack",
+      origin: [1, 2, 3],
+      dir: [0, 0, 1],
+      weaponSlot: "weapon",
+      chargeMs: 850,
+    };
+    expect(roundTrip(msg)).toEqual(msg);
+  });
+
   it("round-trips castSpell with a dir", () => {
     const msg = { kind: "castSpell", abilityId: "sparkle-bolt", origin: [0, 1, 0], dir: [1, 0, 0] };
     expect(roundTrip(msg)).toEqual(msg);

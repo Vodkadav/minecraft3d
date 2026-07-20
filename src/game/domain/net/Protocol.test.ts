@@ -181,6 +181,9 @@ const HAPPY: NetMessage[] = [
   { kind: "equipItem", slot: "spell", itemId: "sparkle-bolt" },
   { kind: "aimedAttack", origin: [1, 2, 3], dir: [0, 0, 1], weaponSlot: "weapon" },
   { kind: "aimedAttack", origin: [1, 2, 3], dir: [0.577, 0.577, 0.577], weaponSlot: "spell" },
+  // E7.2: an optional draw-to-charge hold duration
+  { kind: "aimedAttack", origin: [1, 2, 3], dir: [0, 0, 1], weaponSlot: "weapon", chargeMs: 850 },
+  { kind: "aimedAttack", origin: [1, 2, 3], dir: [0, 0, 1], weaponSlot: "weapon", chargeMs: 0 },
   { kind: "castSpell", abilityId: "sparkle-bolt", origin: [0, 1, 0], dir: [1, 0, 0] },
   { kind: "castSpell", abilityId: "vine-snare", origin: [0, 1, 0], groundPoint: [5, 0, 5] },
   { kind: "deployItem", deployableId: "bumble-trap", position: [3, 0, 3] },
@@ -443,6 +446,9 @@ describe("parseMessage — malformed input is an error value", () => {
     { kind: "aimedAttack", origin: [1, 2, 3], dir: [0, 0, 5], weaponSlot: "weapon" }, // dir out of [-1,1]
     { kind: "aimedAttack", origin: [1, 2, 3], dir: [0.1, 0, 0], weaponSlot: "weapon" }, // dir not unit-length
     { kind: "aimedAttack", origin: [NaN, 2, 3], dir: [0, 0, 1], weaponSlot: "weapon" }, // non-finite origin
+    { kind: "aimedAttack", origin: [1, 2, 3], dir: [0, 0, 1], weaponSlot: "weapon", chargeMs: -1 }, // negative chargeMs
+    { kind: "aimedAttack", origin: [1, 2, 3], dir: [0, 0, 1], weaponSlot: "weapon", chargeMs: 999999 }, // chargeMs over the DoS bound
+    { kind: "aimedAttack", origin: [1, 2, 3], dir: [0, 0, 1], weaponSlot: "weapon", chargeMs: "850" }, // wrong type
     { kind: "castSpell", abilityId: "sparkle-bolt", origin: [0, 1, 0] }, // neither dir nor groundPoint
     {
       kind: "castSpell",
