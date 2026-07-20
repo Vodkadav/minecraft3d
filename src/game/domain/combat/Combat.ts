@@ -3,10 +3,18 @@
  * application with a single death event, and deterministic loot rolls
  * (roll ∈ [0,1) is supplied by the caller — the engine derives it from the
  * world hash so peers agree). Effects/animation are the [F] half.
+ *
+ * E7.8: `lootFor` also grants one bonus rarity-tier drop for species listed
+ * in `CreatureLootPools` — the flat per-species `loot` rules above stay
+ * completely unchanged (a species with no pool entry is byte-identical to
+ * pre-E7.8 behavior), so this is additive, not a rebalance.
  */
 
 import type { ItemStack } from "../inventory/Inventory";
 import { CREATURE_REGISTRY } from "../creatures/CreatureRegistry";
+import { CREATURE_LOOT_POOLS } from "../creatures/CreatureLootPools";
+import { creatureTierFromStats, dangerScore, rollLootPool } from "../loot/LootTable";
+import type { Difficulty } from "../settings/Difficulty";
 
 export interface CreatureStats {
   readonly maxHealth: number;
@@ -49,14 +57,46 @@ export function applyDamage(state: CombatState, amount: number): DamageResult {
   return { state: { ...state, health }, died: health === 0 };
 }
 
-/** Deterministic loot for a death; roll ∈ [0,1) drives every count. */
-export function lootFor(species: string, roll: number): ItemStack[] {
+/** E7.8: difficulty/encounter inputs for the bonus loot-pool roll. Optional —
+ *  omitting it (the pre-E7.8 call shape) resolves against normal difficulty,
+ *  daytime, no biome danger, which is exactly today's baseline. */
+export interface LootRollContext {
+  readonly difficulty: Difficulty;
+  readonly isNight: boolean;
+  readonly biomeDangerMult?: number;
+}
+
+const DEFAULT_LOOT_CONTEXT: LootRollContext = { difficulty: "normal", isNight: false };
+
+/**
+ * Deterministic loot for a death; roll ∈ [0,1) drives every count. Species
+ * with a `CreatureLootPools` entry get one additional bonus drop, rarity-
+ * shifted by `context` (LootTable.dangerScore) — everyone else is unchanged
+ * from the pre-E7.8 flat-rule behavior.
+ */
+export function lootFor(
+  species: string,
+  roll: number,
+  context: LootRollContext = DEFAULT_LOOT_CONTEXT,
+): ItemStack[] {
   const stats = CREATURE_STATS[species];
   if (!stats) return [];
-  return stats.loot.map((rule, i) => {
+  const base = stats.loot.map((rule, i) => {
     const span = rule.max - rule.min + 1;
     // spread one roll across rules so a single float decides the whole drop
     const r = (roll * 7919 * (i + 1)) % 1;
     return { itemId: rule.itemId, count: rule.min + Math.min(span - 1, Math.floor(r * span)) };
   });
+  const pool = CREATURE_LOOT_POOLS[species];
+  if (!pool) return base;
+  const danger = dangerScore({
+    difficulty: context.difficulty,
+    creatureTier: creatureTierFromStats(stats),
+    isNight: context.isNight,
+    biomeDangerMult: context.biomeDangerMult,
+  });
+  // decorrelated from the base rolls above via a distinct large-prime salt
+  const bonusRoll = (roll * 1_299_827) % 1;
+  const bonus = rollLootPool(pool, bonusRoll, danger);
+  return bonus ? [...base, bonus] : base;
 }

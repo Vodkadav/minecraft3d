@@ -197,4 +197,13 @@ export const STARTER_ITEMS: readonly ItemDefinition[] = [
   { id: "gilded-sword", displayName: "Gilded Sword", maxStackSize: 1, tags: ["tool", "weapon", "crafted"], tier: 4 },
   { id: "gilded-pickaxe", displayName: "Gilded Pickaxe", maxStackSize: 1, tags: ["tool", "crafted"], tier: 4 },
   { id: "relic-charm", displayName: "Relic Charm", maxStackSize: 1, tags: ["crafted", "gear"], tier: 4 },
+
+  // --- E7.8 reward items ---
+  // Bonus loot-pool drops (domain/loot/LootTable, domain/creatures/CreatureLootPools).
+  // Tagged "natural" (creature drops use this convention even though nothing
+  // grows them — matches bear-claw/coin/gem/relic above), so RecipeGraph.test.ts's
+  // reachability walk treats them as roots without inventing a fake recipe.
+  { id: "wolf-fang", displayName: "Wolf Fang", maxStackSize: 64, tags: ["natural", "material"], tier: 1 },
+  { id: "sparkle-gem", displayName: "Sparkle Gem", maxStackSize: 64, tags: ["natural", "treasure"], tier: 2 },
+  { id: "golden-acorn", displayName: "Golden Acorn", maxStackSize: 64, tags: ["natural", "treasure"], tier: 3 },
 ];
