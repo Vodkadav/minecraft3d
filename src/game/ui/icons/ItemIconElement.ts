@@ -15,6 +15,7 @@
  */
 
 import { itemIconSpec, type IconColorToken, type IconShape, type ItemIconSpec } from "./ItemIconSpec";
+import { THEME, type RarityTier } from "../theme/tokens";
 
 const COLOR_VAR: Readonly<Record<IconColorToken, string>> = {
   accent: "var(--lw-accent)",
@@ -39,9 +40,38 @@ const SHAPE_PATH: Readonly<Record<IconShape, string>> = {
   square: "M3 3 H21 V21 H3 Z",
 };
 
+/**
+ * Rarity frame ring (E8.2) — a colored border in the tier's `frame` token PLUS
+ * a per-tier corner MOTIF drawn from `THEME.rarityPattern`, so rarity is
+ * carried by shape as well as color (the shape-not-color-only doctrine — a
+ * colorblind player still tells epic from legendary by the motif). Frame color
+ * is a live `var(--lw-rarity-*-frame)` so it re-themes without a re-render.
+ */
+function rarityRingMarkup(tier: RarityTier): string {
+  const frame = `var(--lw-rarity-${tier}-frame)`;
+  const ring =
+    `<rect x="1.1" y="1.1" width="21.8" height="21.8" rx="4" fill="none" ` +
+    `stroke="${frame}" stroke-width="1.6"/>`;
+  // Corner motif at top-right (~19,5). Filled in the frame color with a thin
+  // dark keyline so it reads on any icon fill beneath it.
+  const key = `stroke="rgba(0,0,0,0.5)" stroke-width="0.6"`;
+  const motif: Readonly<Record<string, string>> = {
+    none: "",
+    dot: `<circle cx="19" cy="5" r="2.4" fill="${frame}" ${key}/>`,
+    stripe:
+      `<path d="M16.6 6.4 L20 3 M17.8 7.6 L21.2 4.2" stroke="${frame}" ` +
+      `stroke-width="1.4" stroke-linecap="round"/>`,
+    diamond: `<path d="M19 2.4 L21.6 5 L19 7.6 L16.4 5 Z" fill="${frame}" ${key}/>`,
+    starburst:
+      `<path d="M19 1.8 L19.9 4.1 L22.2 5 L19.9 5.9 L19 8.2 L18.1 5.9 ` +
+      `L15.8 5 L18.1 4.1 Z" fill="${frame}" ${key}/>`,
+  };
+  return ring + (motif[THEME.rarityPattern[tier]] ?? "");
+}
+
 const markupCache = new Map<string, string>();
 
-function buildSvgMarkup(spec: ItemIconSpec): string {
+function buildSvgMarkup(spec: ItemIconSpec, rarityTier?: RarityTier): string {
   const color = COLOR_VAR[spec.colorToken];
   const path =
     spec.shape === "sprout" || spec.shape === "bar"
@@ -55,16 +85,29 @@ function buildSvgMarkup(spec: ItemIconSpec): string {
     `<text x="12" y="16" text-anchor="middle" font-size="9" font-weight="700" ` +
     `fill="rgba(0,0,0,0.65)" style="paint-order:stroke;stroke:rgba(255,255,255,0.35);stroke-width:2px">` +
     spec.glyphLetter +
-    `</text></svg>`
+    `</text>` +
+    (rarityTier ? rarityRingMarkup(rarityTier) : "") +
+    `</svg>`
   );
 }
 
-/** Cached SVG markup for a registered item; same id -> identical string. */
-export function getItemIconMarkup(itemId: string, displayName: string, tags: readonly string[]): string {
-  const cached = markupCache.get(itemId);
+/** Optional per-icon extras (E8.2). `rarityTier` draws the rarity frame ring. */
+export interface ItemIconOptions {
+  readonly rarityTier?: RarityTier;
+}
+
+/** Cached SVG markup for a registered item; same id (+ rarity) -> identical string. */
+export function getItemIconMarkup(
+  itemId: string,
+  displayName: string,
+  tags: readonly string[],
+  opts: ItemIconOptions = {},
+): string {
+  const cacheKey = opts.rarityTier ? `${itemId}|r:${opts.rarityTier}` : itemId;
+  const cached = markupCache.get(cacheKey);
   if (cached) return cached;
-  const markup = buildSvgMarkup(itemIconSpec(itemId, displayName, tags));
-  markupCache.set(itemId, markup);
+  const markup = buildSvgMarkup(itemIconSpec(itemId, displayName, tags), opts.rarityTier);
+  markupCache.set(cacheKey, markup);
   return markup;
 }
 
@@ -74,11 +117,12 @@ export function createItemIconEl(
   itemId: string,
   displayName: string,
   tags: readonly string[],
+  opts: ItemIconOptions = {},
 ): HTMLSpanElement {
   const wrap = doc.createElement("span");
   wrap.className = "lw-item-icon";
   wrap.setAttribute("aria-hidden", "true");
-  wrap.innerHTML = getItemIconMarkup(itemId, displayName, tags);
+  wrap.innerHTML = getItemIconMarkup(itemId, displayName, tags, opts);
   return wrap;
 }
 

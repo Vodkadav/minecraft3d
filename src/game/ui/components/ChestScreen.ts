@@ -183,6 +183,7 @@ export function mountChestScreen(opts: ChestScreenOptions): ChestScreenHandle {
   const frame = WindowFrame({
     doc,
     title: opts.loc.t("placeable.chest.title"),
+    emblem: "chest",
     close: {
       label: opts.loc.t("inventory.close"),
       ariaLabel: opts.loc.t("inventory.close.aria"),

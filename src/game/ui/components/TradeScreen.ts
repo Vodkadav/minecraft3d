@@ -184,6 +184,7 @@ export function mountTradeScreen(opts: TradeScreenOptions): TradeScreenHandle {
   const frame = WindowFrame({
     doc,
     title: opts.loc.t("trade.title"),
+    emblem: "trade",
     close: {
       label: opts.loc.t("inventory.close"),
       ariaLabel: opts.loc.t("inventory.close.aria"),

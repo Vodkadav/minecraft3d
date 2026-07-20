@@ -94,5 +94,12 @@ overlays sit over the lit world at ~45%, so a pure-black preview reads far darke
 
 ## Standing deferrals (recorded, not skipped)
 
-- None recorded yet — this doc is created ahead of E8.0 landing; deferrals get recorded here as
-  each phase's implementer finds them, matching `COMBAT_PLAN.md`'s discipline.
+- **E8.2 item rarity source** — items carry no explicit `rarity` field, only a progression `tier`
+  (`domain/items/ItemDefinition`). E8.2 derives rarity from tier (`ui/icons/ItemRarity.ts`:
+  0→common … 4+→legendary) as the honest proxy and single source. A real per-item rarity field is
+  a future content pass (E9-ish) that only has to replace that one function.
+- **E8.2 slot-wiring of rarity rings + badges** — the ring/badge *capabilities* landed
+  (`ItemIconElement` gained an optional `rarityTier`; `ItemBadges.ts`), but wiring them onto the
+  actual inventory/hotbar slots was deferred to the E8 integration step because `InventoryGrid.ts`/
+  `Hotbar.ts` were being edited in parallel by the E8.3/E8.4 slices; done at integration to avoid a
+  three-way conflict.

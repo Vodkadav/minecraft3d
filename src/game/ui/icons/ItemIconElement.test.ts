@@ -38,3 +38,31 @@ describe("createItemIconEl", () => {
     expect(el.querySelector("svg")).not.toBeNull();
   });
 });
+
+describe("rarity frame ring (E8.2)", () => {
+  it("omits the ring by default (unchanged legacy call sites)", () => {
+    const plain = getItemIconMarkup("wood", "Wood", ["natural"]);
+    expect(plain).not.toContain("--lw-rarity-");
+  });
+
+  it("draws a frame ring in the tier's frame token when a rarity is given", () => {
+    const legendary = getItemIconMarkup("relic", "Relic", ["treasure"], { rarityTier: "legendary" });
+    expect(legendary).toContain("var(--lw-rarity-legendary-frame)");
+    expect(legendary).toContain("<rect"); // the ring border
+  });
+
+  it("caches ringed and plain variants of the same id separately", () => {
+    const plain = getItemIconMarkup("relic", "Relic", ["treasure"]);
+    const ringed = getItemIconMarkup("relic", "Relic", ["treasure"], { rarityTier: "rare" });
+    expect(plain).not.toBe(ringed);
+    expect(getItemIconMarkup("relic", "Relic", ["treasure"], { rarityTier: "rare" })).toBe(ringed);
+  });
+
+  it("carries a distinct per-tier motif shape (colorblind-safe channel)", () => {
+    // uncommon -> dot (circle), epic -> diamond, legendary -> starburst
+    expect(getItemIconMarkup("x", "X", [], { rarityTier: "uncommon" })).toContain("<circle");
+    const epic = getItemIconMarkup("y", "Y", [], { rarityTier: "epic" });
+    const legendary = getItemIconMarkup("z", "Z", [], { rarityTier: "legendary" });
+    expect(epic).not.toBe(legendary); // different motif geometry
+  });
+});

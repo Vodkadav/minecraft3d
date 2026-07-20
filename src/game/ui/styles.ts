@@ -1463,6 +1463,49 @@ ${THEME_CSS_VARS}
 .lw-chat[data-open="true"] .lw-chat-hint {
   display: none;
 }
+
+/* ===== E8.2 iconography v2 ===== */
+/* Party/faction crest (icons/Crest.ts). */
+.lw-crest {
+  display: inline-flex;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+}
+.lw-crest-svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+/* Item slot overlay badges (icons/ItemBadges.ts) — a small corner chip over a
+   slot. The slot is already position:relative (lw-inv-slot/lw-hotbar-slot). */
+.lw-item-badge {
+  position: absolute;
+  top: 1px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--lw-radius-pill);
+  border: 1px solid rgba(0, 0, 0, 0.55);
+  pointer-events: none;
+  z-index: 2;
+}
+.lw-item-badge-svg {
+  width: 10px;
+  height: 10px;
+  display: block;
+}
+.lw-item-badge[data-badge="equipped"] {
+  background: var(--lw-success);
+  color: var(--lw-bg);
+}
+.lw-item-badge[data-badge="new"] {
+  background: var(--lw-focus);
+  color: var(--lw-bg);
+}
 `;
 
 export function injectStyles(doc: Document): void {

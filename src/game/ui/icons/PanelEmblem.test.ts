@@ -1,8 +1,8 @@
 // @vitest-environment happy-dom
 import { describe, expect, it } from "vitest";
-import { createPanelEmblemEl, type PanelEmblemKind } from "./PanelEmblem";
+import { createPanelEmblemEl, PANEL_EMBLEM_KINDS } from "./PanelEmblem";
 
-const KINDS: readonly PanelEmblemKind[] = ["character", "bank", "map", "settings"];
+const KINDS = PANEL_EMBLEM_KINDS;
 
 describe("createPanelEmblemEl", () => {
   it("builds an aria-hidden emblem for every panel kind", () => {

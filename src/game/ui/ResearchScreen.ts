@@ -85,6 +85,7 @@ export function mountResearchScreen(opts: ResearchScreenOptions): ResearchScreen
   const frame = WindowFrame({
     doc,
     title: opts.loc.t("research.title"),
+    emblem: "research",
     headerExtra: pointsLine,
     close: {
       label: opts.loc.t("research.close"),
