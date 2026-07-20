@@ -250,9 +250,12 @@ token layer + shared components so all ~18 existing screens inherit the new look
 decision: ADR 0005. Mandatory `claude-infra:security` review for E8.5's chat item-links (the one
 wire-touching slice).
 
-- [ ] E8.0 Visual-language contract: rarity color scale + surface elevation tokens, window-chrome
-  spec, panel-background recipe, colorblind rarity alt palette (`ui/theme/tokens.ts`, types/tokens
-  only, no behavior change)
+- [x] E8.0 Visual-language contract (merged 17b00d4): rarity color scale (`THEME.rarity`, AA-verified
+  text ≥4.5:1 / frame ≥3:1 on bg-panel AND surface-3) + colorblind alt palette (monotonic-lightness
+  ramp, `rarityColorblind`) + per-tier non-color `rarityPattern` hook, 4-step warm surface-elevation
+  scale (`surface-0..3` + scrim/ornament/inset), `WINDOW_CHROME_SPEC` + `PANEL_BACKGROUND_RECIPE`
+  typed doc-contracts, all `--lw-*` CSS vars — `ui/theme/tokens.ts`, types/tokens only, nothing
+  renders them yet (wiring is E8.1+). 192-line contract test
 - [ ] E8.1 Window chrome & procedural backgrounds: `WindowFrame` shared overlay shell; every overlay
   screen migrates onto it; layered-gradient + SVG-noise panel backgrounds replace flat rectangles
 - [ ] E8.2 Iconography v2: authored per-category glyph paths, rarity frame ring, overlay badges

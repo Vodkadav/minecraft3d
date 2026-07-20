@@ -40,7 +40,7 @@ the token/primitive level is low-risk and propagates automatically.
 
 | Phase | Content | Status |
 |---|---|---|
-| E8.0 Visual-language contract | Rarity color scale + surface elevation tokens, window-chrome spec, panel-background recipe, colorblind rarity alt palette — types/tokens only, no behavior | Pending |
+| E8.0 Visual-language contract | Rarity color scale + surface elevation tokens, window-chrome spec, panel-background recipe, colorblind rarity alt palette — types/tokens only, no behavior | ✅ Done (17b00d4) |
 | E8.1 Window chrome & procedural backgrounds | `WindowFrame` shared overlay shell; every overlay screen migrates onto it; layered-gradient + SVG-noise panel backgrounds replace flat rectangles | Pending |
 | E8.2 Iconography v2 | Authored per-category glyph paths, rarity frame ring, overlay badges (equipped/new/qty); `PanelEmblem` grows into a per-screen emblem library + party/faction crest generator | Pending |
 | E8.3 Rich tooltip system | Pure `domain/ui/TooltipModel.ts` item-card model; `RichTooltip` component (hover/focus/long-press) replaces single-line hovers for items everywhere | Pending |
