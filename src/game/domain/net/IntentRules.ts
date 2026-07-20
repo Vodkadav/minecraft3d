@@ -211,17 +211,6 @@ export const AIMED_ATTACK_RATE_LIMIT: RateLimitConfig = { capacity: 6, refillPer
  */
 export const MAX_ACTIVE_PROJECTILES_PER_PEER = 12;
 
-/**
- * E7.3 spellcasting (mirrors the E7.2 security follow-up #1 pattern above):
- * a per-peer token bucket for `castSpell`, wired the same way as
- * `AIMED_ATTACK_RATE_LIMIT` (`HostSession.handleCastSpell`). Generous over
- * any legitimate cast cadence (the focus resource itself already gates
- * spam — the fastest starter spell costs 15/100 focus, ~7s to fully refill)
- * but bounded so a hostile peer can't flood cast intents even while focus
- * regenerates.
- */
-export const CAST_SPELL_RATE_LIMIT: RateLimitConfig = { capacity: 6, refillPerSecond: 4 };
-
 export function validateInventoryOp(op: InventoryOp, capacity: number): boolean {
   switch (op.op) {
     case "move":

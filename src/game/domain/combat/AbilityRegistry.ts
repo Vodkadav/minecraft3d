@@ -69,58 +69,6 @@ export class AbilityRegistry {
  *  (see `ProjectileRegistry.ts`'s doc comment for the append convention). */
 export const STARTER_ABILITIES: readonly AbilitySpec[] = [
   // ---- E7.3 Spellcasting (Sparkle Bolt, Frost Puff, Healing Bloom, Vine Snare) ----
-  // A gentle aimed bolt — reuses the E7.2 host-simulated Projectile flow via
-  // the "sparkle-bolt" ProjectileRegistry entry (see ProjectileRegistry.ts).
-  {
-    id: "sparkle-bolt",
-    displayName: "Sparkle Bolt",
-    targeting: "projectile",
-    resourceCost: 15,
-    cooldownMs: 800,
-    damage: 12,
-    projectile: "sparkle-bolt",
-    damageType: "spark",
-    feelEvent: "spellSpark",
-  },
-  // A short, brief forward cone — cozy/gentle slow, no damage. The actual
-  // creature-speed status effect is a follow-up (see COMBAT_PLAN.md's
-  // deferrals): this spec + HostSession resolve WHO is hit, host-authoritative.
-  {
-    id: "frost-puff",
-    displayName: "Frost Puff",
-    targeting: "cone",
-    resourceCost: 20,
-    cooldownMs: 3000,
-    aoe: "frost-puff-cone",
-    damageType: "frost",
-    feelEvent: "spellFrost",
-  },
-  // Self/ally AoE heal, reuses the shared E7.4 `resolveAoe` — the caster is
-  // always inside its own radius (center = caster origin) so this is always
-  // at least a self-heal even with no allies nearby.
-  {
-    id: "healing-bloom",
-    displayName: "Healing Bloom",
-    targeting: "selfAoe",
-    resourceCost: 30,
-    cooldownMs: 6000,
-    healing: 25,
-    aoe: "healing-bloom",
-    damageType: "nature",
-    feelEvent: "spellNature",
-  },
-  // Ground-target root — no damage, a pure control effect (see Frost Puff's
-  // note above: the actual creature-root status is a follow-up).
-  {
-    id: "vine-snare",
-    displayName: "Vine Snare",
-    targeting: "groundTarget",
-    resourceCost: 18,
-    cooldownMs: 4000,
-    aoe: "vine-snare-root",
-    damageType: "nature",
-    feelEvent: "spellNature",
-  },
 ];
 
 export const ABILITY_REGISTRY: AbilityRegistry = unwrap(AbilityRegistry.create(STARTER_ABILITIES));

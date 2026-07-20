@@ -66,9 +66,6 @@ export const STARTER_PROJECTILES: readonly ProjectileSpec[] = [
   { id: "pebble", speed: 30, gravity: 9.8, lifetimeMs: 2000, radius: 0.12, tracerVfx: "pebbleTracer" },
   { id: "dart", speed: 35, gravity: 6, lifetimeMs: 2500, radius: 0.1, tracerVfx: "dartTracer" },
   // ---- E7.3 Spellcasting (Sparkle Bolt) ----
-  // A weightless magic bolt — no gravity arc (straight flight reads as a
-  // spell, not a lobbed projectile), fast and short-lived (cozy, precise).
-  { id: "sparkle-bolt", speed: 26, gravity: 0, lifetimeMs: 1500, radius: 0.18, tracerVfx: "sparkleBoltTracer" },
   // ---- E7.6 Monster abilities (ranged spit) ----
 ];
 
