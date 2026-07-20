@@ -655,7 +655,11 @@ export class HostSession {
 
     const completed = completeTrade(trade);
     const finalTrade = isOk(completed) ? completed.value : trade;
-    this.trades.set(trade.id, finalTrade);
+    // security follow-up TF1: a finished trade leaves the map entirely —
+    // keeping completed/cancelled records grew `trades` for the host's whole
+    // session. Every intent handler gates on `activeTradeByPeer` first, so a
+    // replayed intent for a deleted trade is a no-op, not a crash.
+    this.trades.delete(trade.id);
     this.activeTradeByPeer.delete(peerAId);
     this.activeTradeByPeer.delete(peerBId);
     this.sendTradeState(finalTrade);
@@ -668,7 +672,7 @@ export class HostSession {
   private failTrade(trade: TradeSession): void {
     const cancelled = cancelTrade(trade);
     const finalTrade = isOk(cancelled) ? cancelled.value : trade;
-    this.trades.set(trade.id, finalTrade);
+    this.trades.delete(trade.id);
     for (const p of trade.peers) this.activeTradeByPeer.delete(p);
     this.sendTradeState(finalTrade);
   }
@@ -678,7 +682,7 @@ export class HostSession {
     if (!trade || this.activeTradeByPeer.get(peerId) !== tradeId) return;
     const cancelled = cancelTrade(trade);
     if (!isOk(cancelled)) return;
-    this.trades.set(tradeId, cancelled.value);
+    this.trades.delete(tradeId);
     for (const p of trade.peers) this.activeTradeByPeer.delete(p);
     this.sendTradeState(cancelled.value);
   }
@@ -690,7 +694,7 @@ export class HostSession {
     if (!trade) return;
     const cancelled = cancelTrade(trade);
     const finalTrade = isOk(cancelled) ? cancelled.value : trade;
-    this.trades.set(tradeId, finalTrade);
+    this.trades.delete(tradeId);
     for (const p of trade.peers) this.activeTradeByPeer.delete(p);
     // the disconnecting peer's transport is already gone; sendTradeState
     // simply no-ops sending to a peer no longer in `this.peers`.
