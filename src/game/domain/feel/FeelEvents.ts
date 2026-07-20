@@ -19,7 +19,23 @@ export type FeelEventId =
   | "eat"
   | "starve"
   | "heal"
-  | "levelUp";
+  | "levelUp"
+  // E7.0 combat contracts — declared+typed here so the 8 combat streams can
+  // trigger them from commit one; no FeelDirector visual owns these yet
+  // (each stream ships its own [F] slice, plan §5). Firing an id with no
+  // visual mapped is a safe no-op today, same as any other declared event.
+  | "meleeSwing"
+  | "arrowHit"
+  | "spellSpark"
+  | "spellFrost"
+  | "spellNature"
+  | "boom"
+  | "trapArm"
+  | "trapTrigger"
+  | "monsterCast"
+  | "monsterTelegraph"
+  | "defeatPoof"
+  | "playerDown";
 
 /** Which floating-number theme (E2.4) a triggered event spawns, or `null` for
  *  none — a sibling kind to the pre-existing damage-only number so the same
@@ -148,6 +164,106 @@ export const FEEL_EVENTS = {
     numberKind: "xp",
     particleBurst: null,
     rumble: { intensity: 0.3, durationMs: 100 },
+  },
+  // ---- E7.0 combat contracts: bundles, no visual yet (plan §5) ----
+  meleeSwing: {
+    shakeTrauma: 0.05,
+    hitStopMs: 0,
+    vignette: null,
+    numberKind: null,
+    particleBurst: "meleeSwing",
+    rumble: { intensity: 0.15, durationMs: 30 },
+  },
+  arrowHit: {
+    shakeTrauma: 0.15,
+    hitStopMs: 30,
+    vignette: null,
+    numberKind: "damage",
+    particleBurst: "arrowHit",
+    rumble: { intensity: 0.3, durationMs: 70 },
+  },
+  spellSpark: {
+    shakeTrauma: 0.1,
+    hitStopMs: 20,
+    vignette: null,
+    numberKind: "damage",
+    particleBurst: "spellSpark",
+    rumble: { intensity: 0.25, durationMs: 60 },
+  },
+  spellFrost: {
+    shakeTrauma: 0.08,
+    hitStopMs: 15,
+    vignette: null,
+    numberKind: "damage",
+    particleBurst: "spellFrost",
+    rumble: { intensity: 0.2, durationMs: 50 },
+  },
+  spellNature: {
+    shakeTrauma: 0,
+    hitStopMs: 0,
+    vignette: null,
+    numberKind: null,
+    particleBurst: "spellNature",
+    rumble: { intensity: 0.15, durationMs: 40 },
+  },
+  boom: {
+    shakeTrauma: 0.4,
+    hitStopMs: 80,
+    vignette: null,
+    numberKind: "damage",
+    particleBurst: "boom",
+    rumble: { intensity: 0.7, durationMs: 150 },
+  },
+  trapArm: {
+    shakeTrauma: 0,
+    hitStopMs: 0,
+    vignette: null,
+    numberKind: null,
+    particleBurst: "trapArm",
+    rumble: null,
+  },
+  trapTrigger: {
+    shakeTrauma: 0.25,
+    hitStopMs: 40,
+    vignette: null,
+    numberKind: "damage",
+    particleBurst: "trapTrigger",
+    rumble: { intensity: 0.4, durationMs: 90 },
+  },
+  monsterCast: {
+    shakeTrauma: 0,
+    hitStopMs: 0,
+    vignette: null,
+    numberKind: null,
+    particleBurst: "monsterCast",
+    rumble: null,
+  },
+  monsterTelegraph: {
+    shakeTrauma: 0,
+    hitStopMs: 0,
+    vignette: null,
+    numberKind: null,
+    particleBurst: "monsterTelegraph",
+    rumble: null,
+  },
+  defeatPoof: {
+    shakeTrauma: 0.1,
+    hitStopMs: 0,
+    vignette: null,
+    numberKind: null,
+    particleBurst: "defeatPoof",
+    rumble: { intensity: 0.2, durationMs: 60 },
+  },
+  // Gentle: screen desaturate/fall are presentation-only additions a later
+  // stream owns (plan §4 E7.7) — this bundle only carries the shared-juice
+  // slice (hurt vignette + rumble), no shake so it never reads as violent.
+  playerDown: {
+    shakeTrauma: 0,
+    hitStopMs: 0,
+    vignette: { kind: "hurt", intensity: 0.7 },
+    numberKind: null,
+    particleBurst: null,
+    rumble: { intensity: 0.5, durationMs: 200 },
   },
 } as const satisfies Record<FeelEventId, FeedbackBundle>;
 
