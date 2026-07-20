@@ -93,6 +93,7 @@ import { isNight, MORNING_HOUR } from '../game/domain/time/DayNight';
 import { Crosshair } from '../game/ui/components/Crosshair';
 import { mountPerfHud } from '../game/ui/components/PerfHud';
 import { mountCombatMeterPanel } from '../game/ui/components/CombatMeterPanel';
+import { mountAttackMeter } from '../game/ui/components/AttackMeter';
 import {
   LOCAL_PLAYER_SOURCE_ID,
   dpsFor,
@@ -680,6 +681,10 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
     // hit/heal/kill stream (never routed through the intent path — purely
     // local presentation state, same posture as the perf HUD).
     const meterPanel = mountCombatMeterPanel(loc);
+    // E7.1: the attack-strength cooldown meter — client-side presentation
+    // only, hidden at full charge (AttackMeter.ts), driven from
+    // spawns.attackChargeFraction() in the crosshair update loop below.
+    const attackMeter = mountAttackMeter(loc);
     let combatLog: CombatLogState = emptyCombatLog();
     function recordCombatEvent(kind: CombatLogEventKind, amount: number): void {
       combatLog = foldCombatEvent(combatLog, {
@@ -1031,6 +1036,14 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
       attackPowerMult: () => effectiveAttackPowerMultiplier(character),
       gatherPowerMult: () => effectiveGatherPowerMultiplier(character),
       lootMult: () => effectiveLootMultiplier(character),
+      // E7.1: weapon-driven melee — the selected hotbar item is the "equip
+      // slot" (no separate equip system exists yet), and the forward aim
+      // direction (XZ plane) drives the cone soft-lock assist.
+      equippedWeaponId: () => hud.selectedHotbarItemId(),
+      getAimDir: () => {
+        AIM_DIR.set(0, 0, -1).applyQuaternion(engine.camera.quaternion).normalize();
+        return [AIM_DIR.x, AIM_DIR.z];
+      },
       onAttack: () => {
         survival = drainStaminaForAttack(survival, maxEnergyEff);
         survivalBar.setStamina(survival.stamina);
@@ -1289,6 +1302,7 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
       // Workstream 6.5: first time any tamable/feedable target is in reach,
       // surface the "[T] Feed" keyhint once (persists dismissed thereafter).
       if (hasInteractTarget) hud.maybeShowTameHint();
+      attackMeter.render(spawns.attackChargeFraction());
     });
   }
 

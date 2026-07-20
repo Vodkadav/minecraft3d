@@ -20,6 +20,11 @@ const BURST_COLOR: Record<string, readonly [number, number, number]> = {
   dig: [0.29, 0.24, 0.17], // soil brown
   place: [0.62, 0.56, 0.44],
   tame: [0.85, 0.56, 0.24], // accent/ember
+  // E7.1: the melee swing whoosh reads as a bright, cozy sparkle rather than
+  // reusing "hit"'s danger red — fires alongside every landed hit, in
+  // addition to "hit" (SpawnFieldView.applyMeleeHit), for a swing-specific
+  // flourish distinct from the plain damage-impact burst.
+  meleeSwing: [0.85, 0.85, 0.95], // silvery-white swoosh
 };
 
 interface Slot {
