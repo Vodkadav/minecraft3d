@@ -368,6 +368,67 @@ describe("mountGameHud", () => {
     hud.dispose();
   });
 
+  // E8.7: ActionBar + BuffStrip composition-root wiring.
+  it("mounts the action bar (hidden by default) and the buff strip (self-hidden empty)", () => {
+    const hud = mountGameHud({ loc: createLocalizer("en"), registry: registry() });
+    const actionBar = document.querySelector<HTMLElement>(".lw-action-bar");
+    expect(actionBar).toBeTruthy();
+    expect(actionBar?.style.display).toBe("none"); // opt-in-off — no-flags boot stays identical
+    const buffStrip = document.querySelector<HTMLElement>(".lw-buff-strip");
+    expect(buffStrip).toBeTruthy();
+    expect(buffStrip?.hidden).toBe(true); // no buff source yet
+    hud.dispose();
+  });
+
+  it("dispose also removes the action bar and buff strip", () => {
+    const hud = mountGameHud({ loc: createLocalizer("en"), registry: registry() });
+    hud.dispose();
+    expect(document.querySelector(".lw-action-bar")).toBeNull();
+    expect(document.querySelector(".lw-buff-strip")).toBeNull();
+  });
+
+  // Item slots render an SVG icon (no display-name text node) — the display
+  // name lives in the button's aria-label, so tests match on that.
+  function findActionSlot(name: string): HTMLButtonElement | undefined {
+    return [...document.querySelectorAll<HTMLButtonElement>(".lw-action-slot")].find((s) =>
+      s.getAttribute("aria-label")?.includes(name),
+    );
+  }
+
+  it("the action bar shows the starter abilities plus consumables re-rendered after loot is added", () => {
+    const hud = mountGameHud({ loc: createLocalizer("en"), registry: registry() });
+    const slotsBefore = document.querySelectorAll(".lw-action-slot");
+    expect(slotsBefore.length).toBeGreaterThan(0); // ability slots present from the start
+    expect(findActionSlot("Meat")).toBeUndefined();
+
+    hud.addLoot([{ itemId: "meat", count: 2 }]);
+    const meatSlot = findActionSlot("Meat");
+    expect(meatSlot).toBeTruthy();
+    expect(meatSlot?.querySelector(".lw-action-slot-count")?.textContent).toBe("2");
+    hud.dispose();
+  });
+
+  it("activating a consumable action-bar slot eats one and updates the inventory", () => {
+    const onEat = vi.fn();
+    const hud = mountGameHud({ loc: createLocalizer("en"), registry: registry(), onEat });
+    hud.addLoot([{ itemId: "meat", count: 2 }]);
+    findActionSlot("Meat")?.click();
+    expect(hud.inventory.count("meat")).toBe(1);
+    expect(onEat).toHaveBeenCalledWith({ hungerRestore: 25, healthRestore: 5 });
+    // the slot re-renders with the reduced count rather than disappearing.
+    expect(findActionSlot("Meat")?.querySelector(".lw-action-slot-count")?.textContent).toBe("1");
+    hud.dispose();
+  });
+
+  it("activating an ability action-bar slot is a no-op (no client-side cast path)", () => {
+    const hud = mountGameHud({ loc: createLocalizer("en"), registry: registry() });
+    const abilitySlot = document.querySelector<HTMLButtonElement>('.lw-action-slot[data-kind="ability"]');
+    expect(abilitySlot).toBeTruthy();
+    expect(() => abilitySlot?.click()).not.toThrow();
+    expect(hud.inventory.count("meat")).toBe(0); // nothing consumed, nothing crashed
+    hud.dispose();
+  });
+
   it("depositing into the bank overlay updates hud.bank and does not disturb the I-key inventory binding", () => {
     const hud = mountGameHud({ loc: createLocalizer("en"), registry: registry() });
     hud.addLoot([{ itemId: "wood", count: 4 }]);
