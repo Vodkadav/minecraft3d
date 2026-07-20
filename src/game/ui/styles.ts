@@ -748,10 +748,13 @@ ${THEME_CSS_VARS}
   flex-shrink: 0;
 }
 
-/* Objective tracker (Workstream 6.3) */
+/* Objective tracker (Workstream 6.3) — sits in the top-left column BELOW the
+   minimap (both are fixed top-left; without this offset the 160px minimap
+   paints over the tracker and buries its text). 16px top + 160px minimap +
+   12px gap; mobile's 96px minimap just leaves a larger, harmless gap. */
 .lw-objective-tracker {
   position: fixed;
-  top: var(--lw-space-4);
+  top: calc(var(--lw-space-4) + 160px + var(--lw-space-3));
   left: var(--lw-space-4);
   z-index: 20;
   min-width: 220px;
@@ -2097,6 +2100,46 @@ ${THEME_CSS_VARS}
     height: 96px;
   }
 }
+
+/* First-person hand/tool viewmodel (bottom-right). Decorative feedback layer:
+   below overlays/menus, above the world canvas, never intercepts input. */
+.lw-hand {
+  position: fixed;
+  right: -1.5vmin;
+  bottom: -2vmin;
+  width: 42vmin;
+  height: 42vmin;
+  max-width: 420px;
+  max-height: 420px;
+  z-index: 12;
+  pointer-events: none;
+  transform-origin: 100% 100%;
+  filter: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.45));
+}
+.lw-hand-svg { width: 100%; height: 100%; overflow: visible; }
+/* rest pose sits slightly tucked into the corner */
+.lw-hand-swing { transform-box: fill-box; transform-origin: 78% 92%; }
+.lw-hand-swinging { animation: lw-hand-swing var(--lw-hand-ms, 260ms) cubic-bezier(0.3, 0, 0.2, 1); }
+.lw-hand-swinging-place { animation: lw-hand-place var(--lw-hand-ms, 260ms) cubic-bezier(0.3, 0, 0.2, 1); }
+.lw-hand-pulse { animation: lw-hand-pulse var(--lw-hand-ms, 260ms) ease-out; }
+
+@keyframes lw-hand-swing {
+  0%   { transform: rotate(0deg) translate(0, 0); }
+  38%  { transform: rotate(-34deg) translate(-6%, 10%); }
+  100% { transform: rotate(0deg) translate(0, 0); }
+}
+@keyframes lw-hand-place {
+  0%   { transform: rotate(0deg) translate(0, 0); }
+  40%  { transform: rotate(0deg) translate(-9%, 9%) scale(0.97); }
+  100% { transform: rotate(0deg) translate(0, 0) scale(1); }
+}
+/* reduced-motion: a small settle, no sweeping arc */
+@keyframes lw-hand-pulse {
+  0%   { transform: translate(0, 0); }
+  45%  { transform: translate(0, 4%); }
+  100% { transform: translate(0, 0); }
+}
+:root[data-reduced-motion="true"] .lw-hand { filter: none; }
 `;
 
 export function injectStyles(doc: Document): void {

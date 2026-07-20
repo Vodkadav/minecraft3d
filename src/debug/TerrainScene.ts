@@ -95,6 +95,7 @@ import { Crosshair } from '../game/ui/components/Crosshair';
 import { mountPerfHud } from '../game/ui/components/PerfHud';
 import { mountCombatMeterPanel } from '../game/ui/components/CombatMeterPanel';
 import { mountAttackMeter } from '../game/ui/components/AttackMeter';
+import { mountHandViewmodel } from '../game/ui/components/HandViewmodel';
 import {
   LOCAL_PLAYER_SOURCE_ID,
   dpsFor,
@@ -526,6 +527,13 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
       (event) => progressHook?.(event),
     );
     crosshairRef = Crosshair();
+    // First-person hand/tool viewmodel: swings on every dig (LMB) / place (RMB)
+    // click so the player gets immediate confirmation the action fired. Self-
+    // wires its own pointer-locked mousedown on the canvas.
+    mountHandViewmodel({
+      dom: engine.renderer.domElement,
+      reducedMotion: () => reducedMotionRef?.() ?? false,
+    });
     window.addEventListener('pagehide', () => voxels.flushSave());
     // tooling probe handle (tools/voxel-shot.ts) — programmatic digs in CI-less runs
     (
