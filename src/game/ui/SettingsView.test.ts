@@ -45,6 +45,9 @@ describe("SettingsView", () => {
       "laas-contrast",
       "laas-textscale",
       "laas-motion",
+      "laas-colorblind",
+      "laas-tooltip-verbosity",
+      "laas-reduce-flair",
       "laas-vol-master",
       "laas-vol-music",
       "laas-vol-sfx",
@@ -203,6 +206,39 @@ describe("SettingsView", () => {
       expect(reloaded.value.creatureSpawnRate).toBeCloseTo(2);
       expect(reloaded.value.resourceSpawnRate).toBeCloseTo(0.5);
     }
+  });
+
+  it("flows the colorblind-rarity toggle through the controller and store (E8.8)", async () => {
+    const { el, controller, store } = await build();
+    const toggle = control<HTMLInputElement>(el, "laas-colorblind");
+    expect(toggle.checked).toBe(false);
+    toggle.checked = true;
+    toggle.dispatchEvent(new Event("change"));
+    await flush();
+    expect(controller.settings.colorblindRarity).toBe(true);
+    const reloaded = await store.load();
+    if (isOk(reloaded)) expect(reloaded.value.colorblindRarity).toBe(true);
+  });
+
+  it("defaults tooltip verbosity to full and flows a change through the controller (E8.6)", async () => {
+    const { el, controller } = await build();
+    const select = control<HTMLSelectElement>(el, "laas-tooltip-verbosity");
+    expect([...select.options].map((o) => o.value)).toEqual(["full", "compact"]);
+    expect(select.value).toBe("full");
+    select.value = "compact";
+    select.dispatchEvent(new Event("change"));
+    await flush();
+    expect(controller.settings.tooltipVerbosity).toBe("compact");
+  });
+
+  it("flows the reduce-flair toggle through the controller (E8.6)", async () => {
+    const { el, controller } = await build();
+    const toggle = control<HTMLInputElement>(el, "laas-reduce-flair");
+    expect(toggle.checked).toBe(false);
+    toggle.checked = true;
+    toggle.dispatchEvent(new Event("change"));
+    await flush();
+    expect(controller.settings.reduceFlair).toBe(true);
   });
 
   it("flows a music-volume change through the controller and store", async () => {

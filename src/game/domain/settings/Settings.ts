@@ -36,6 +36,12 @@ export type HudStyle = "bars" | "orbs";
 
 export const HUD_STYLES: readonly HudStyle[] = ["bars", "orbs"];
 
+/** E8.6: tooltip item-card detail level — full stat/affix rows, or a compact
+ *  one-liner. Defaults to "full" so a no-flags boot stays pixel-identical. */
+export type TooltipVerbosity = "full" | "compact";
+
+export const TOOLTIP_VERBOSITIES: readonly TooltipVerbosity[] = ["full", "compact"];
+
 export const TEXT_SCALE_MIN = 0.8;
 export const TEXT_SCALE_MAX = 2.0;
 
@@ -86,6 +92,12 @@ export interface Settings {
   readonly creatureSpawnRate: number;
   /** SPAWN_RATE_MIN..MAX; default 1 (no-op). */
   readonly resourceSpawnRate: number;
+  // ---- E8.8: colorblind-safe rarity palette (default off, no-op) ----
+  readonly colorblindRarity: boolean;
+  // ---- E8.6: tooltip item-card detail level (default "full", no-op) ----
+  readonly tooltipVerbosity: TooltipVerbosity;
+  // ---- E8.6: dial back non-essential decorative glow/animation (default off, no-op) ----
+  readonly reduceFlair: boolean;
 }
 
 /** Mutable/plain shape accepted by the factory before validation. */
@@ -114,6 +126,9 @@ export type SettingsInput = {
   readonly autolootRadiusM: number;
   readonly creatureSpawnRate: number;
   readonly resourceSpawnRate: number;
+  readonly colorblindRarity: boolean;
+  readonly tooltipVerbosity: TooltipVerbosity;
+  readonly reduceFlair: boolean;
 };
 
 export type SettingsError =
@@ -128,7 +143,8 @@ export type SettingsError =
   | { readonly kind: "UnknownHudStyle"; readonly value: string }
   | { readonly kind: "AutolootRadiusOutOfRange"; readonly value: number }
   | { readonly kind: "CreatureSpawnRateOutOfRange"; readonly value: number }
-  | { readonly kind: "ResourceSpawnRateOutOfRange"; readonly value: number };
+  | { readonly kind: "ResourceSpawnRateOutOfRange"; readonly value: number }
+  | { readonly kind: "UnknownTooltipVerbosity"; readonly value: string };
 
 function isGraphicsPreset(value: string): value is GraphicsPreset {
   return (GRAPHICS_PRESETS as readonly string[]).includes(value);
@@ -144,6 +160,10 @@ function isNameplateMode(value: string): value is NameplateMode {
 
 function isHudStyle(value: string): value is HudStyle {
   return (HUD_STYLES as readonly string[]).includes(value);
+}
+
+function isTooltipVerbosity(value: string): value is TooltipVerbosity {
+  return (TOOLTIP_VERBOSITIES as readonly string[]).includes(value);
 }
 
 export function makeSettings(input: SettingsInput): Result<Settings, SettingsError> {
@@ -215,6 +235,12 @@ export function makeSettings(input: SettingsInput): Result<Settings, SettingsErr
   ) {
     return err({ kind: "ResourceSpawnRateOutOfRange", value: input.resourceSpawnRate });
   }
+  if (!isTooltipVerbosity(input.tooltipVerbosity)) {
+    return err({
+      kind: "UnknownTooltipVerbosity",
+      value: String(input.tooltipVerbosity),
+    });
+  }
   return ok({
     graphicsPreset: input.graphicsPreset,
     animalDensity: input.animalDensity,
@@ -240,6 +266,9 @@ export function makeSettings(input: SettingsInput): Result<Settings, SettingsErr
     autolootRadiusM: input.autolootRadiusM,
     creatureSpawnRate: input.creatureSpawnRate,
     resourceSpawnRate: input.resourceSpawnRate,
+    colorblindRarity: input.colorblindRarity,
+    tooltipVerbosity: input.tooltipVerbosity,
+    reduceFlair: input.reduceFlair,
   });
 }
 
@@ -276,6 +305,9 @@ export function defaultSettings(): Settings {
     // E6.6: 1 = no-op, identical to pre-E6.6 SpawnField density behaviour.
     creatureSpawnRate: 1,
     resourceSpawnRate: 1,
+    colorblindRarity: false,
+    tooltipVerbosity: "full",
+    reduceFlair: false,
   };
 }
 

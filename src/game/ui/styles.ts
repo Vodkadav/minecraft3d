@@ -950,6 +950,11 @@ ${THEME_CSS_VARS}
   color: var(--lw-fg);
   margin: 0 0 var(--lw-space-2);
 }
+.laas-lobby-subtitle {
+  color: var(--lw-fg-muted);
+  font-size: var(--lw-font-sm);
+  margin: calc(-1 * var(--lw-space-2)) 0 0;
+}
 .laas-main-menu nav,
 .laas-lobby-footer {
   display: flex;
@@ -1677,6 +1682,42 @@ ${THEME_CSS_VARS}
   --lw-inset: #000000;
 }
 
+/* ===== E8.8: colorblind-safe rarity palette =====
+   Remaps every --lw-rarity-<tier>-* var to the parallel --lw-rarity-cb-<tier>-*
+   set already shipped in tokens.ts (E8.0). Shape/frame carries the primary
+   differentiation per the MarkerGlyphs doctrine; this only swaps the hue ramp
+   every rarity-aware component (RichTooltip, chat item-links, icon rings)
+   already reads through the same --lw-rarity-* vars. */
+.laas-ui[data-colorblind-rarity="true"] {
+  --lw-rarity-common-frame: var(--lw-rarity-cb-common-frame);
+  --lw-rarity-common-text: var(--lw-rarity-cb-common-text);
+  --lw-rarity-common-glow: var(--lw-rarity-cb-common-glow);
+  --lw-rarity-uncommon-frame: var(--lw-rarity-cb-uncommon-frame);
+  --lw-rarity-uncommon-text: var(--lw-rarity-cb-uncommon-text);
+  --lw-rarity-uncommon-glow: var(--lw-rarity-cb-uncommon-glow);
+  --lw-rarity-rare-frame: var(--lw-rarity-cb-rare-frame);
+  --lw-rarity-rare-text: var(--lw-rarity-cb-rare-text);
+  --lw-rarity-rare-glow: var(--lw-rarity-cb-rare-glow);
+  --lw-rarity-epic-frame: var(--lw-rarity-cb-epic-frame);
+  --lw-rarity-epic-text: var(--lw-rarity-cb-epic-text);
+  --lw-rarity-epic-glow: var(--lw-rarity-cb-epic-glow);
+  --lw-rarity-legendary-frame: var(--lw-rarity-cb-legendary-frame);
+  --lw-rarity-legendary-text: var(--lw-rarity-cb-legendary-text);
+  --lw-rarity-legendary-glow: var(--lw-rarity-cb-legendary-glow);
+}
+
+/* ===== E8.6: reduce flair =====
+   Dials back purely decorative glow/animation on .laas-ui chrome (rarity
+   glow shadows, the drifting menu-backdrop parallax) while every functional
+   signal — critical-vitals pulse, focus rings, rarity border/text color —
+   stays untouched. Set on documentElement, mirroring data-reduced-motion. */
+:root[data-reduce-flair="true"] .lw-rich-tooltip[data-rarity] {
+  box-shadow: 0 14px 30px -12px rgba(0, 0, 0, 0.65);
+}
+:root[data-reduce-flair="true"] .lw-menu-backdrop-layer {
+  animation: none;
+}
+
 /* ===== E8.5 inputs & chat ===== */
 /* Field — the one styled label+input primitive (components/Field.ts). */
 .lw-field {
@@ -1985,6 +2026,8 @@ export function injectStyles(doc: Document): void {
 export function applyAccessibility(root: HTMLElement, settings: Settings): void {
   root.style.setProperty("--laas-text-scale", String(settings.textScale));
   root.dataset.highContrast = String(settings.highContrast);
+  root.dataset.colorblindRarity = String(settings.colorblindRarity);
   const doc = root.ownerDocument;
   doc.documentElement.dataset.reducedMotion = String(settings.reducedMotion);
+  doc.documentElement.dataset.reduceFlair = String(settings.reduceFlair);
 }

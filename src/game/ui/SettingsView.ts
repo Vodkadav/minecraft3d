@@ -19,9 +19,11 @@ import {
   SPAWN_RATE_MIN,
   TEXT_SCALE_MAX,
   TEXT_SCALE_MIN,
+  TOOLTIP_VERBOSITIES,
   type GraphicsPreset,
   type HudStyle,
   type SettingsInput,
+  type TooltipVerbosity,
 } from "../domain/settings/Settings";
 import { NAMEPLATE_MODES, type NameplateMode } from "../domain/hud/Nameplate";
 import { DAY_LENGTH_MAX_SECONDS, DAY_LENGTH_MIN_SECONDS } from "../domain/time/WorldClock";
@@ -198,6 +200,43 @@ export function SettingsView(
     apply({ reducedMotion: motion.checked }),
   );
   field(doc, root, "laas-motion", loc.t("settings.reducedMotion"), motion);
+
+  // ---- E8.8: colorblind-safe rarity palette + E8.6: tooltip verbosity/reduce
+  // flair (self-contained block, additive) ----
+  const colorblind = doc.createElement("input");
+  colorblind.type = "checkbox";
+  colorblind.checked = s.colorblindRarity;
+  colorblind.addEventListener("change", () =>
+    apply({ colorblindRarity: colorblind.checked }),
+  );
+  field(doc, root, "laas-colorblind", loc.t("settings.colorblindRarity"), colorblind);
+
+  const tooltipVerbosity = doc.createElement("select");
+  for (const verbosity of TOOLTIP_VERBOSITIES) {
+    const opt = doc.createElement("option");
+    opt.value = verbosity;
+    opt.textContent = loc.t(`settings.tooltipVerbosity.${verbosity}`);
+    if (verbosity === s.tooltipVerbosity) opt.selected = true;
+    tooltipVerbosity.appendChild(opt);
+  }
+  tooltipVerbosity.addEventListener("change", () =>
+    apply({ tooltipVerbosity: tooltipVerbosity.value as TooltipVerbosity }),
+  );
+  field(
+    doc,
+    root,
+    "laas-tooltip-verbosity",
+    loc.t("settings.tooltipVerbosity"),
+    tooltipVerbosity,
+  );
+
+  const reduceFlair = doc.createElement("input");
+  reduceFlair.type = "checkbox";
+  reduceFlair.checked = s.reduceFlair;
+  reduceFlair.addEventListener("change", () =>
+    apply({ reduceFlair: reduceFlair.checked }),
+  );
+  field(doc, root, "laas-reduce-flair", loc.t("settings.reduceFlair"), reduceFlair);
 
   // Audio buses (Workstream 1.4)
   const volumeField = (

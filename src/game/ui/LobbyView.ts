@@ -17,6 +17,7 @@ import { isValidRoomCode } from "../domain/net/RoomCode";
 import type { WorldSummary } from "../domain/world/WorldSaveData";
 import type { SeedEntry } from "../domain/seedvault/SeedVault";
 import { wireButtonSound } from "./audioUi";
+import { createPanelEmblemEl } from "./icons/PanelEmblem";
 import { injectStyles } from "./styles";
 
 export function LobbyView(
@@ -34,9 +35,19 @@ export function LobbyView(
   root.className = "laas-ui laas-lobby";
   root.setAttribute("aria-label", loc.t("lobby.title"));
 
+  // E8.6: "play together" surface — the same emblem/heading treatment as
+  // Settings, so the two E8.1-surface screens read as one cohesive family.
+  const headingWrap = doc.createElement("div");
+  headingWrap.className = "lw-panel-title-wrap";
   const heading = doc.createElement("h1");
   heading.textContent = loc.t("lobby.title");
-  root.appendChild(heading);
+  headingWrap.append(createPanelEmblemEl(doc, "party"), heading);
+  root.appendChild(headingWrap);
+
+  const subtitle = doc.createElement("p");
+  subtitle.className = "laas-lobby-subtitle";
+  subtitle.textContent = loc.t("lobby.subtitle");
+  root.appendChild(subtitle);
 
   // M7 join-by-code (ADR 0002 §4): a friend's invite code beats any list.
   // Only rendered when the host app wires the real net path in.
