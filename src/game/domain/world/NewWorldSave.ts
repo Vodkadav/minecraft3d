@@ -15,6 +15,21 @@ export interface NewWorldParams {
   readonly now: number;
 }
 
+/**
+ * Structure/POI worldgen version stamp (E6.2) — carried in the generic
+ * `entities` bag (not a typed `WorldSaveData` field) precisely because that
+ * bag already exists for exactly this "sibling subsystem writes a key,
+ * VoxelTerrain persists it" purpose (see `treasure.discovered`,
+ * `placement.pieces`). A save with no `worldgen.version` entity predates this
+ * slice and never streams structures — `StructureField` only attaches for
+ * worlds stamped `>= 2` (see the TerrainScene wiring comment). Number chosen
+ * to line up with the plan's "version 2 = new worldgen features" intent;
+ * reconcile with E6.1 caves' own stamp (if it lands as a typed field instead)
+ * when the two branches merge.
+ */
+export const WORLDGEN_VERSION = 2;
+export const WORLDGEN_VERSION_KEY = "worldgen.version";
+
 export function createNewWorldSave(params: NewWorldParams): WorldSaveData {
   return {
     worldId: params.worldId,
@@ -23,7 +38,7 @@ export function createNewWorldSave(params: NewWorldParams): WorldSaveData {
     createdAt: params.now,
     modifiedAt: params.now,
     modifiedChunks: [],
-    entities: {},
+    entities: { [WORLDGEN_VERSION_KEY]: WORLDGEN_VERSION },
     inventories: {},
     progression: {},
     playerState: { position: [0, 0, 0], yaw: 0, pitch: 0 },

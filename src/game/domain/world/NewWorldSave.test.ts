@@ -11,7 +11,7 @@ describe("createNewWorldSave", () => {
       createdAt: 1000,
       modifiedAt: 1000,
       modifiedChunks: [],
-      entities: {},
+      entities: { "worldgen.version": 2 },
       inventories: {},
       progression: {},
       playerState: { position: [0, 0, 0], yaw: 0, pitch: 0 },
