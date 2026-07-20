@@ -530,6 +530,16 @@ export const UI_STRINGS: Catalog = {
     "chat.input.placeholder": "Say something nice…",
     "chat.host.name": "Host",
 
+    // ===== E8.5 inputs & chat polish =====
+    "chat.unread.aria": "{count} new messages",
+    "chat.emotes.aria": "Quick phrases",
+    "chat.emote.wave": "👋 Hi!",
+    "chat.emote.thanks": "🙏 Thanks!",
+    "chat.emote.help": "🆘 Need help!",
+    "chat.emote.follow": "➡️ Follow me!",
+    "chat.emote.nice": "👍 Nice!",
+    "chat.emote.laugh": "😄 Haha!",
+
     // ===== E8.3 rich tooltip =====
     "tooltip.row.category": "Category",
     "tooltip.row.tier": "Tier",
@@ -1084,6 +1094,16 @@ export const UI_STRINGS: Catalog = {
     "chat.input.placeholder": "Di algo amable…",
     "chat.host.name": "Anfitrión",
 
+    // ===== E8.5 inputs & chat polish =====
+    "chat.unread.aria": "{count} mensajes nuevos",
+    "chat.emotes.aria": "Frases rápidas",
+    "chat.emote.wave": "👋 ¡Hola!",
+    "chat.emote.thanks": "🙏 ¡Gracias!",
+    "chat.emote.help": "🆘 ¡Necesito ayuda!",
+    "chat.emote.follow": "➡️ ¡Sígueme!",
+    "chat.emote.nice": "👍 ¡Genial!",
+    "chat.emote.laugh": "😄 ¡Jaja!",
+
     // ===== E8.3 rich tooltip =====
     "tooltip.row.category": "Categoría",
     "tooltip.row.tier": "Nivel",
@@ -1637,6 +1657,16 @@ export const UI_STRINGS: Catalog = {
     "chat.input.aria": "Chatbesked",
     "chat.input.placeholder": "Sig noget rart…",
     "chat.host.name": "Vært",
+
+    // ===== E8.5 inputs & chat polish =====
+    "chat.unread.aria": "{count} nye beskeder",
+    "chat.emotes.aria": "Hurtige sætninger",
+    "chat.emote.wave": "👋 Hej!",
+    "chat.emote.thanks": "🙏 Tak!",
+    "chat.emote.help": "🆘 Brug for hjælp!",
+    "chat.emote.follow": "➡️ Følg mig!",
+    "chat.emote.nice": "👍 Flot!",
+    "chat.emote.laugh": "😄 Haha!",
 
     // ===== E8.3 rich tooltip =====
     "tooltip.row.category": "Kategori",

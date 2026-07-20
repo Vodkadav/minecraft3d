@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ChatMessage } from "../domain/social/Chat";
+import { ItemRegistry } from "../domain/items/ItemRegistry";
 import { createLocalizer } from "./i18n/strings";
 import { mountChatBox } from "./ChatBox";
 
@@ -13,6 +14,20 @@ function message(overrides: Partial<ChatMessage> = {}): ChatMessage {
     timestamp: 1000,
     ...overrides,
   };
+}
+
+function testRegistry(): ItemRegistry {
+  const result = ItemRegistry.create([
+    { id: "wood", displayName: "Wood", maxStackSize: 64, tags: ["natural"], tier: 0 },
+    { id: "iron_sword", displayName: "Iron Sword", maxStackSize: 1, tags: ["weapon"], tier: 3 },
+  ]);
+  if (!result.ok) throw new Error("bad fixture registry");
+  return result.value;
+}
+
+function clickChannelPill(channel: "say" | "party"): void {
+  const btn = document.querySelector<HTMLButtonElement>(`.lw-chat-channel-pill[data-channel="${channel}"]`);
+  btn?.click();
 }
 
 describe("mountChatBox", () => {
@@ -67,19 +82,17 @@ describe("mountChatBox", () => {
     box.dispose();
   });
 
-  it("submitting the form calls onSubmit with the typed text and selected channel, then closes", () => {
+  it("submitting the form calls onSubmit with the typed text and default (say) channel, then closes", () => {
     const onSubmit = vi.fn();
     const box = mountChatBox({ loc: createLocalizer("en"), onSubmit });
     box.open();
     const input = document.querySelector<HTMLInputElement>(".lw-chat-input");
-    const select = document.querySelector<HTMLSelectElement>(".lw-chat-channel");
     if (input) input.value = "hi there";
-    if (select) select.value = "party";
     const form = document.querySelector<HTMLFormElement>(".lw-chat-form");
 
     form?.dispatchEvent(new Event("submit", { cancelable: true, bubbles: true }));
 
-    expect(onSubmit).toHaveBeenCalledExactlyOnceWith("hi there", "party");
+    expect(onSubmit).toHaveBeenCalledExactlyOnceWith("hi there", "say");
     expect(box.isOpen).toBe(false);
     box.dispose();
   });
@@ -138,5 +151,163 @@ describe("mountChatBox", () => {
     const box = mountChatBox({ loc: createLocalizer("en"), onSubmit: vi.fn() });
     box.dispose();
     expect(document.querySelector(".lw-chat")).toBeNull();
+  });
+
+  // ---- E8.5: channel pills ----
+  describe("channel pills", () => {
+    it("renders a say/party radiogroup with say active by default", () => {
+      const box = mountChatBox({ loc: createLocalizer("en"), onSubmit: vi.fn() });
+      const group = document.querySelector('[role="radiogroup"]');
+      expect(group).not.toBeNull();
+      const say = document.querySelector('.lw-chat-channel-pill[data-channel="say"]');
+      const party = document.querySelector('.lw-chat-channel-pill[data-channel="party"]');
+      expect(say?.getAttribute("aria-checked")).toBe("true");
+      expect(party?.getAttribute("aria-checked")).toBe("false");
+      box.dispose();
+    });
+
+    it("clicking the party pill switches the active channel used on submit", () => {
+      const onSubmit = vi.fn();
+      const box = mountChatBox({ loc: createLocalizer("en"), onSubmit });
+      box.open();
+      clickChannelPill("party");
+      const input = document.querySelector<HTMLInputElement>(".lw-chat-input");
+      if (input) input.value = "for the group";
+      document.querySelector<HTMLFormElement>(".lw-chat-form")?.dispatchEvent(
+        new Event("submit", { cancelable: true, bubbles: true }),
+      );
+
+      expect(onSubmit).toHaveBeenCalledExactlyOnceWith("for the group", "party");
+      box.dispose();
+    });
+
+    it("ArrowRight/ArrowLeft toggles between the two channels", () => {
+      const box = mountChatBox({ loc: createLocalizer("en"), onSubmit: vi.fn() });
+      const group = document.querySelector<HTMLElement>(".lw-chat-channels");
+      group?.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
+
+      const party = document.querySelector('.lw-chat-channel-pill[data-channel="party"]');
+      expect(party?.getAttribute("aria-checked")).toBe("true");
+      box.dispose();
+    });
+  });
+
+  // ---- E8.5: unread badge ----
+  describe("unread badge", () => {
+    it("stays hidden while no messages have arrived", () => {
+      const box = mountChatBox({ loc: createLocalizer("en"), onSubmit: vi.fn() });
+      const badge = document.querySelector<HTMLElement>(".lw-chat-unread-badge");
+      expect(badge?.hidden).toBe(true);
+      box.dispose();
+    });
+
+    it("shows a count when a message arrives while the composer is collapsed", () => {
+      const box = mountChatBox({ loc: createLocalizer("en"), onSubmit: vi.fn() });
+      box.receiveMessage(message());
+      box.receiveMessage(message());
+
+      const badge = document.querySelector<HTMLElement>(".lw-chat-unread-badge");
+      expect(badge?.hidden).toBe(false);
+      expect(badge?.textContent).toBe("2");
+      box.dispose();
+    });
+
+    it("does not accumulate unread while the composer is already open", () => {
+      const box = mountChatBox({ loc: createLocalizer("en"), onSubmit: vi.fn() });
+      box.open();
+      box.receiveMessage(message());
+
+      const badge = document.querySelector<HTMLElement>(".lw-chat-unread-badge");
+      expect(badge?.hidden).toBe(true);
+      box.dispose();
+    });
+
+    it("clears when the composer is opened", () => {
+      const box = mountChatBox({ loc: createLocalizer("en"), onSubmit: vi.fn() });
+      box.receiveMessage(message());
+      box.open();
+
+      const badge = document.querySelector<HTMLElement>(".lw-chat-unread-badge");
+      expect(badge?.hidden).toBe(true);
+      box.dispose();
+    });
+  });
+
+  // ---- E8.5: kid-safe canned emote palette ----
+  describe("emote palette", () => {
+    it("renders a fixed set of localized emote buttons in a labelled group", () => {
+      const box = mountChatBox({ loc: createLocalizer("en"), onSubmit: vi.fn() });
+      const group = document.querySelector('[role="group"].lw-chat-emotes');
+      const buttons = document.querySelectorAll(".lw-chat-emote-btn");
+      expect(group).not.toBeNull();
+      expect(buttons.length).toBeGreaterThanOrEqual(4);
+      box.dispose();
+    });
+
+    it("clicking an emote inserts its canned phrase into the draft and opens the composer", () => {
+      const setInputEnabled = vi.fn();
+      const box = mountChatBox({ loc: createLocalizer("en"), onSubmit: vi.fn(), setInputEnabled });
+      const btn = document.querySelector<HTMLButtonElement>(".lw-chat-emote-btn");
+      const phrase = btn?.textContent ?? "";
+      btn?.click();
+
+      expect(box.isOpen).toBe(true);
+      const input = document.querySelector<HTMLInputElement>(".lw-chat-input");
+      expect(input?.value).toBe(phrase);
+      box.dispose();
+    });
+  });
+
+  // ---- E8.5: item-link chips (the one wire-touching surface) ----
+  describe("item-link chips", () => {
+    it("renders a resolved [[item:id]] token as a rarity-colored chip when itemRegistry is wired", () => {
+      const box = mountChatBox({ loc: createLocalizer("en"), onSubmit: vi.fn(), itemRegistry: testRegistry() });
+      box.receiveMessage(message({ text: "check out my [[item:iron_sword]] !" }));
+
+      const chip = document.querySelector<HTMLButtonElement>(".lw-chat-item-link");
+      expect(chip).not.toBeNull();
+      expect(chip?.dataset.rarity).toBe("epic"); // tier 3 -> epic on the E8.0 scale
+      expect(chip?.textContent).toContain("Iron Sword");
+      box.dispose();
+    });
+
+    it("never renders a chip for an id that doesn't resolve in the registry", () => {
+      const box = mountChatBox({ loc: createLocalizer("en"), onSubmit: vi.fn(), itemRegistry: testRegistry() });
+      box.receiveMessage(message({ text: "got a [[item:does_not_exist]] today" }));
+
+      expect(document.querySelector(".lw-chat-item-link")).toBeNull();
+      const line = document.querySelector(".lw-chat-line");
+      expect(line?.textContent).toBe("Alice: got a [[item:does_not_exist]] today");
+      box.dispose();
+    });
+
+    it("never renders a chip when no itemRegistry is wired, even for a well-formed token", () => {
+      const box = mountChatBox({ loc: createLocalizer("en"), onSubmit: vi.fn() });
+      box.receiveMessage(message({ text: "[[item:iron_sword]]" }));
+
+      expect(document.querySelector(".lw-chat-item-link")).toBeNull();
+      expect(document.querySelector(".lw-chat-line")?.textContent).toBe("Alice: [[item:iron_sword]]");
+      box.dispose();
+    });
+
+    it("insertItemLink opens the composer and inserts a formatted token for a real id", () => {
+      const box = mountChatBox({ loc: createLocalizer("en"), onSubmit: vi.fn(), itemRegistry: testRegistry() });
+      const inserted = box.insertItemLink("iron_sword");
+
+      expect(inserted).toBe(true);
+      expect(box.isOpen).toBe(true);
+      const input = document.querySelector<HTMLInputElement>(".lw-chat-input");
+      expect(input?.value).toBe("[[item:iron_sword]]");
+      box.dispose();
+    });
+
+    it("insertItemLink rejects an id outside the safe token charset and does nothing", () => {
+      const box = mountChatBox({ loc: createLocalizer("en"), onSubmit: vi.fn() });
+      const inserted = box.insertItemLink("bad id; drop");
+
+      expect(inserted).toBe(false);
+      expect(box.isOpen).toBe(false);
+      box.dispose();
+    });
   });
 });
