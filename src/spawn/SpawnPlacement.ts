@@ -78,6 +78,10 @@ const NODE_VISUAL: Readonly<Record<string, SpeciesVisual>> = {
   "carrot-patch": { shape: "sphere", color: 0xe07a2a, size: 0.45, lift: 0.22 },
   "potato-patch": { shape: "sphere", color: 0xc9a86a, size: 0.5, lift: 0.25 },
   "fishing-spot": { shape: "sphere", color: 0x3a7ca5, size: 0.6, lift: 0.1 },
+
+  // E6.5 asset-library expansion
+  "beehive": { shape: "sphere", color: 0xe8b23a, size: 0.55, lift: 0.3 },
+  "silver-vein": { shape: "box", color: 0xc7c9cc, size: 0.7, lift: 0.3 },
 };
 
 /** Fallback primitives for creatures (used until/unless a rigged model is

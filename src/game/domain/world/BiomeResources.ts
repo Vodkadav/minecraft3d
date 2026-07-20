@@ -37,18 +37,29 @@ export interface BiomeResourceTable {
 
 export const BIOME_RESOURCES: Readonly<Record<BiomeId, BiomeResourceTable>> = {
   lowland: {
-    gatherables: ["wood", "fiber", "clay", "sand", "berries", "fish"],
-    nodes: ["berry-bush", "reed-patch", "clay-deposit", "sand-dune", "fishing-spot", "wheat-patch", "carrot-patch"],
-    creatures: ["deer", "rabbit", "fox"],
+    gatherables: ["wood", "fiber", "clay", "sand", "berries", "fish", "beeswax", "honey"],
+    nodes: [
+      "berry-bush",
+      "reed-patch",
+      "clay-deposit",
+      "sand-dune",
+      "fishing-spot",
+      "wheat-patch",
+      "carrot-patch",
+      "beehive",
+    ],
+    // E6.5: sheep/squirrel/owl added conservatively (additive, no rebalance).
+    creatures: ["deer", "rabbit", "fox", "sheep", "squirrel", "owl"],
   },
   highland: {
     gatherables: ["stone", "flint", "coal", "ore"],
     nodes: ["stone-node", "flint-node", "coal-node", "potato-patch"],
-    creatures: ["wolf", "boar", "elk"],
+    // E6.5: bear/badger added conservatively (additive, no rebalance).
+    creatures: ["wolf", "boar", "elk", "bear", "badger"],
   },
   alpine: {
-    gatherables: ["gold-ore", "copper-ore"],
-    nodes: ["gold-vein", "copper-vein"],
+    gatherables: ["gold-ore", "copper-ore", "silver-ore"],
+    nodes: ["gold-vein", "copper-vein", "silver-vein"],
     creatures: ["elk", "wolf"],
   },
 };

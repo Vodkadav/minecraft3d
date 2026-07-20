@@ -31,6 +31,13 @@ export const PLACEMENT_PIECES: readonly PieceDef[] = [
 
   // ---- Workstream 8.3 farming (S7b) ----
   { id: "plot", footprint: { w: 1, d: 1, h: 1 }, sockets: [], requiresSupport: true },
+
+  // ---- E6.5 asset-library expansion ----
+  { id: "ladder", footprint: { w: 1, d: 1, h: 2 }, sockets: [], requiresSupport: true },
+  { id: "bridge", footprint: { w: 2, d: 1, h: 1 }, sockets: [], requiresSupport: true },
+  { id: "planter-box", footprint: { w: 1, d: 1, h: 1 }, sockets: [], requiresSupport: true },
+  { id: "lamp-post", footprint: { w: 1, d: 1, h: 2 }, sockets: [], requiresSupport: false },
+  { id: "bench", footprint: { w: 2, d: 1, h: 1 }, sockets: [], requiresSupport: true },
 ];
 
 /** Piece ids that carry Workstream 8.1 domain state (door/chest/campfire/

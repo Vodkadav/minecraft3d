@@ -42,12 +42,40 @@ E0.5 GroundLoot ┘                       E4 Inv/Storage ─► E5 Social ┘
 
 ## How to add content
 
-- **A creature:** one entry in `src/game/domain/creatures/starterCreatures.ts` (+ an optional
-  model spec in `CreatureModels.ts`). Registry completeness invariants are tested — CI fails on a
-  half-registered creature. Biome affinity slot arrives with E6.3.
-- **An item/recipe:** extend `starterItems.ts` / the recipe tables; `RecipeGraph.test.ts`-style
-  reachability tests must stay green (no orphan/unreachable content).
-- *(E6.5 will expand this section with the full recipe as the asset library grows.)*
+The E6.5 asset-library expansion (5 creatures, 17 items incl. the coin/gem/relic fix, 9 recipes,
+5 build parts) exercised every seam below; this is the concrete recipe, not aspirational.
+
+- **A creature:** one entry appended (not inserted — SpawnField's per-species hash salt is the
+  array index, so inserting mid-array would silently reshuffle existing spawns) to
+  `src/game/domain/creatures/starterCreatures.ts`. That's it for `CREATURE_STATS`
+  (`domain/combat/Combat.ts`), `TEMPERAMENT` (`domain/ai/CreatureBrain.ts`), `TAMING_RULES`
+  (`domain/taming/Taming.ts`) and `SPAWN_SPECIES`/`SPECIES_VISUAL` — all five are thin
+  `CREATURE_REGISTRY`-derived projections (E0.2). A species with no rigged model just uses its
+  `visual` primitive (`CreatureModelLibrary.has()` gates automatically) — only add a
+  `src/spawn/CreatureModels.ts` `MODEL_SPECS` entry if reusing an *already-bundled* CC0 rig as a
+  scale variant (do not add new downloaded assets). Add the species to any biome(s) it should favor
+  in `domain/world/BiomeResources.ts` `creatures` list (additive; conservative — don't touch
+  existing entries). Add `creature.<id>.name` to EN/ES/DA in `ui/i18n/strings.ts`.
+  Guarding tests: `CreatureRegistry.test.ts` (completeness across all five derived tables),
+  `strings.test.ts` (locale parity).
+- **An item:** one entry in `domain/items/starterItems.ts`. It must be *reachable*: either tag it
+  `"natural"` (a found/gathered root — treasure rewards like `coin`/`gem`/`relic` and creature
+  drops like `bear-claw` use this even though nothing "grows" them, matching the existing
+  `sand`/`clay`/`flint` convention) or make it a recipe output whose ingredients are themselves
+  reachable. If it's meant to be gathered in the world, wire a `SpawnField.ts` node
+  (`LATE_NODE_SPECIES` + `NODE_YIELD`) and a `src/spawn/SpawnPlacement.ts` `NODE_VISUAL` entry, one
+  node per new gatherable (existing convention). Add `item.<id>.name` to EN/ES/DA in
+  `ui/i18n/strings.ts`. Guarding tests: `RecipeGraph.test.ts` (reachability walk + no-orphan-unlock
+  + the `>= 40 items` gate), `strings.test.ts`.
+- **A recipe:** one entry in `domain/crafting/starterRecipes.ts`; every ingredient must already be
+  reachable (a natural root or another recipe's output) or `RecipeGraph.test.ts` fails the chain.
+  Guarding test: `RecipeGraph.test.ts` (`>= 25 recipes` gate + graph checks above).
+- **A build part:** one entry in `src/voxel/placement/PlacementPieces.ts` `PLACEMENT_PIECES`
+  (footprint + `requiresSupport`); only add it to `PLACEABLE_PIECE_IDS` if it carries domain state
+  (like `chest`/`door`/`campfire`) rather than being pure structural geometry. Add
+  `placeable.<id>.name` to EN/ES/DA in `ui/i18n/strings.ts` for consistency with the other
+  structural pieces (not read by any UI yet — reserved for a future piece picker). Guarding test:
+  `PlacementPieces.test.ts` (`>= 15 pieces` gate, unique ids, functional-set presence).
 
 ## Standing deferrals (recorded, not skipped)
 

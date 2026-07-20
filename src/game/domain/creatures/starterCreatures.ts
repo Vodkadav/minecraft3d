@@ -117,4 +117,99 @@ export const STARTER_CREATURES: readonly CreatureDefinition[] = [
     disposition: "neutral",
     visual: { shape: "sphere", color: 0xcfc6b8, size: 0.4, lift: 0.2 },
   },
+
+  // ---- E6.5 asset-library expansion — primitive-only visuals, no rigged
+  // models (no new downloaded assets); CreatureModelLibrary.has() gates
+  // these to their CreatureVisual primitive automatically, same as boar and
+  // rabbit above. Appended (not inserted) so existing species keep their
+  // SpawnField salt index. ----
+  {
+    id: "sheep",
+    kind: "creature",
+    spawnWeight: 0.25,
+    maxPerCell: 2,
+    stats: {
+      maxHealth: 18,
+      damage: 0,
+      loot: [
+        { itemId: "wool", min: 1, max: 2 },
+        { itemId: "meat", min: 1, max: 2 },
+      ],
+    },
+    temperament: { reactRange: 16, aggressive: false, fleeBelowHealth: 1 },
+    taming: { foodItemId: "wheat", feedsRequired: 3, cooldownMs: 5000 },
+    disposition: "friendly",
+    visual: { shape: "sphere", color: 0xe8e2d0, size: 0.9, lift: 0.4 },
+  },
+  {
+    id: "bear",
+    kind: "creature",
+    spawnWeight: 0.08,
+    maxPerCell: 1,
+    stats: {
+      maxHealth: 60,
+      damage: 10,
+      loot: [
+        { itemId: "meat", min: 2, max: 4 },
+        { itemId: "hide", min: 1, max: 2 },
+        { itemId: "bear-claw", min: 0, max: 1 },
+      ],
+    },
+    temperament: { reactRange: 12, aggressive: true, fleeBelowHealth: 0.15 },
+    // untameable — big and dangerous, not a mount.
+    disposition: "hostile",
+    visual: { shape: "cone", color: 0x3b2a1d, size: 1.6, lift: 0.8 },
+  },
+  {
+    id: "owl",
+    kind: "creature",
+    spawnWeight: 0.12,
+    maxPerCell: 1,
+    stats: {
+      maxHealth: 8,
+      damage: 0,
+      loot: [{ itemId: "feather", min: 1, max: 2 }],
+    },
+    temperament: { reactRange: 20, aggressive: false, fleeBelowHealth: 1 },
+    // untameable — a small forest bird. Suggested E6.3 nocturnal candidate:
+    // owls read as a "comes out at night" species once biome/time gating lands.
+    disposition: "neutral",
+    visual: { shape: "sphere", color: 0x8a6f4e, size: 0.5, lift: 0.4 },
+  },
+  {
+    id: "badger",
+    kind: "creature",
+    spawnWeight: 0.12,
+    maxPerCell: 1,
+    stats: {
+      maxHealth: 22,
+      damage: 4,
+      loot: [
+        { itemId: "hide", min: 1, max: 1 },
+        { itemId: "meat", min: 1, max: 1 },
+      ],
+    },
+    temperament: { reactRange: 10, aggressive: true, fleeBelowHealth: 0.25 },
+    // untameable — a grumpy little digger.
+    disposition: "hostile",
+    visual: { shape: "cone", color: 0x2e2e2e, size: 0.6, lift: 0.3 },
+  },
+  {
+    id: "squirrel",
+    kind: "creature",
+    spawnWeight: 0.3,
+    maxPerCell: 2,
+    stats: {
+      maxHealth: 5,
+      damage: 0,
+      loot: [
+        { itemId: "acorn", min: 1, max: 2 },
+        { itemId: "fiber", min: 0, max: 1 },
+      ],
+    },
+    temperament: { reactRange: 22, aggressive: false, fleeBelowHealth: 1 },
+    // untameable — tiny and skittish.
+    disposition: "neutral",
+    visual: { shape: "sphere", color: 0xa9682f, size: 0.35, lift: 0.2 },
+  },
 ];
