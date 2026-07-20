@@ -99,4 +99,12 @@ describe("FeelEvents registry", () => {
     expect(FEEL_EVENTS.playerDown.shakeTrauma).toBe(0);
     expect(FEEL_EVENTS.playerDown.numberKind).toBeNull();
   });
+
+  it("E7.7: respawnShimmer is declared, legal to trigger, and reads as relief not impact", () => {
+    expect(FEEL_EVENT_IDS).toContain("respawnShimmer");
+    expect(() => resolveFeedback("respawnShimmer")).not.toThrow();
+    expect(FEEL_EVENTS.respawnShimmer.shakeTrauma).toBe(0);
+    expect(FEEL_EVENTS.respawnShimmer.hitStopMs).toBe(0);
+    expect(FEEL_EVENTS.respawnShimmer.vignette?.kind).toBe("heal");
+  });
 });

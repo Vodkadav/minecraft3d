@@ -30,6 +30,12 @@ const BURST_COLOR: Record<string, readonly [number, number, number]> = {
   // addition to "hit" (SpawnFieldView.applyMeleeHit), for a swing-specific
   // flourish distinct from the plain damage-impact burst.
   meleeSwing: [0.85, 0.85, 0.95], // silvery-white swoosh
+  // E7.7: the "defeatPoof" FeelEventId (declared E7.0, wired E7.7) had no
+  // entry — without it every creature death's small burst would silently
+  // fall back to BURST_COLOR.hit's danger red, reading as a wound at the
+  // exact moment the cozy charter cares most (a defeat). Cream/white instead,
+  // matching feel/DefeatEffects' poof-smoke palette.
+  defeatPoof: [0.95, 0.93, 0.86],
 };
 
 interface Slot {

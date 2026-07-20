@@ -35,7 +35,11 @@ export type FeelEventId =
   | "monsterCast"
   | "monsterTelegraph"
   | "defeatPoof"
-  | "playerDown";
+  | "playerDown"
+  // ---- E7.7 death & defeat VFX — new ids beyond the E7.0-declared pair
+  // above (defeatPoof/playerDown existed but were never wired to a call
+  // site until this stream; this one is genuinely new). ----
+  | "respawnShimmer";
 
 /** Which floating-number theme (E2.4) a triggered event spawns, or `null` for
  *  none — a sibling kind to the pre-existing damage-only number so the same
@@ -264,6 +268,19 @@ export const FEEL_EVENTS = {
     numberKind: null,
     particleBurst: null,
     rumble: { intensity: 0.5, durationMs: 200 },
+  },
+  // ---- E7.7 death & defeat VFX ----
+  // Fires once the respawn pose has landed — a small "welcome back" pulse
+  // pairing with feel/DefeatEffects' golden shimmer overlay + desaturate
+  // lift. Heal-flavored vignette (not hurt) and a gentle rumble only; no
+  // shake/hit-stop/number — this is a relief beat, not an impact.
+  respawnShimmer: {
+    shakeTrauma: 0,
+    hitStopMs: 0,
+    vignette: { kind: "heal", intensity: 0.3 },
+    numberKind: null,
+    particleBurst: null,
+    rumble: { intensity: 0.25, durationMs: 100 },
   },
 } as const satisfies Record<FeelEventId, FeedbackBundle>;
 

@@ -49,6 +49,7 @@ import type { Bank } from '../game/domain/storage/Bank';
 import { mountNameplateView } from '../spawn/NameplateView';
 import { stepCameraShake } from '../feel/CameraShake';
 import { mountDamageNumbers } from '../feel/DamageNumbers';
+import { mountDefeatEffects, type DefeatEffectsHandle } from '../feel/DefeatEffects';
 import { FeelDirector } from '../feel/FeelDirector';
 import { attachGamepadRumble } from '../feel/GamepadRumble';
 import { mountImpactParticles } from '../feel/ImpactParticles';
@@ -672,6 +673,28 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
     // camera-look input through the same `flyCamEnabled` seam the flythrough
     // uses (main.ts) — it already releases pointer lock itself.
     const loc = createLocalizer(settings.settings.locale);
+    // E7.7: defeat/player-down VFX — same real-game-boot gate `feel`/
+    // `particles` use (ctx.audio present) AND the same mobile-preset skip as
+    // `particles` above (heavy bursts + a canvas filter are exactly the
+    // "skip on mobile" cost ImpactParticles already established).
+    const defeatEffects: DefeatEffectsHandle | undefined =
+      feel && params.preset !== 'mobile' && reducedMotionRef
+        ? mountDefeatEffects(
+            engine.scene,
+            document,
+            engine.camera,
+            engine.renderer.domElement,
+            loc,
+            reducedMotionRef,
+          )
+        : undefined;
+    if (defeatEffects) {
+      const de = defeatEffects;
+      // Registered here (strictly after main.ts's fly.update, same ordering
+      // rule stepCameraShake documents) so the gentle player-down camera dip
+      // composes as an additive offset FlyCamera implicitly clears next frame.
+      engine.onUpdate((dt) => de.step(dt));
+    }
     const itemsReg = ItemRegistry.create(STARTER_ITEMS);
     if (!isOk(itemsReg)) throw new Error(`bad starter item table: ${itemsReg.error.kind}`);
     if (ctx.world) ctx.world.registry = itemsReg.value; // E0.4: host net glue reaches it here
@@ -1000,6 +1023,13 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
       survivalBar.flashDamage();
       feel?.setLowHealth(frac > 0 && frac <= LOW_HEALTH_FRACTION);
       if (r.died) {
+        // E7.7: gentle, NO-ITEM-LOSS player-down polish — screen desaturate
+        // + a brief camera dip start here; lifted by the respawn shimmer
+        // below once the respawn pose has landed. Never a punishing death
+        // screen (cozy charter) — the `playerDown` FeelEvent bundle stays a
+        // hurt vignette + rumble only (no shake/number, see FeelEvents.test).
+        feel?.trigger('playerDown');
+        defeatEffects?.playerDown();
         vitals = respawnPlayer(vitals, maxHealthEff);
         survival = spawnSurvival(maxEnergyEff);
         if (respawnPose) ctx.hooks.setPose?.(respawnPose);
@@ -1007,6 +1037,8 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
         survivalBar.setStamina(survival.stamina);
         survivalBar.setHunger(survival.hunger);
         feel?.setLowHealth(false);
+        feel?.trigger('respawnShimmer');
+        defeatEffects?.respawnShimmer();
         hud.applyDeathPenalty(difficultyRules(settings.settings.difficulty).deathPenalty);
       }
     }
@@ -1023,6 +1055,7 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
       dom: engine.renderer.domElement,
       ...(ctx.audio ? { audio: ctx.audio } : {}),
       ...(feel ? { feel } : {}),
+      ...(defeatEffects ? { defeatEffects } : {}),
       onPlayerHit: (amount) => applyPlayerDamage(amount),
       setMoveSpeedScale: (s) => ctx.hooks.setMoveSpeedScale?.(s),
       onLoot: (stacks) => hud.addLoot(stacks),

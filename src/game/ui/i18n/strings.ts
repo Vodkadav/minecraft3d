@@ -333,6 +333,7 @@ export const UI_STRINGS: Catalog = {
     "combatLog.stat.kills": "Kills: {n}",
 
     "combat.attackMeter.aria": "Attack strength",
+    "combat.defeated": "Defeated!",
 
     "party.title": "Party",
     "party.close": "Close",
@@ -841,6 +842,7 @@ export const UI_STRINGS: Catalog = {
     "combatLog.stat.kills": "Derrotas: {n}",
 
     "combat.attackMeter.aria": "Fuerza de ataque",
+    "combat.defeated": "¡Derrotado!",
 
     "party.title": "Grupo",
     "party.close": "Cerrar",
@@ -1349,6 +1351,7 @@ export const UI_STRINGS: Catalog = {
     "combatLog.stat.kills": "Nedkæmpet: {n}",
 
     "combat.attackMeter.aria": "Angrebsstyrke",
+    "combat.defeated": "Besejret!",
 
     "party.title": "Gruppe",
     "party.close": "Luk",
