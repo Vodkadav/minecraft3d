@@ -30,6 +30,11 @@ const BURST_COLOR: Record<string, readonly [number, number, number]> = {
   // addition to "hit" (SpawnFieldView.applyMeleeHit), for a swing-specific
   // flourish distinct from the plain damage-impact burst.
   meleeSwing: [0.85, 0.85, 0.95], // silvery-white swoosh
+  // E7.6: a monster's windup/cast cue — the same bright, friendly amber-gold
+  // as the telegraph ring itself (SpawnFieldView.stepCreatures), never a
+  // danger red (cozy tone, ADR 0004 §4 — a fair warning, not a threat).
+  monsterTelegraph: [0.95, 0.83, 0.55],
+  monsterCast: [0.95, 0.83, 0.55],
 };
 
 interface Slot {

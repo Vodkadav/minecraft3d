@@ -61,6 +61,10 @@ export const STARTER_AOES: readonly AoeSpec[] = [
   // ---- E7.3 Spellcasting (Healing Bloom) ----
   // ---- E7.5 Deployables (traps/mines/grenades) ----
   // ---- E7.6 Monster abilities (AoE stomp) ----
+  // A bear's ground pound — a gentle-radius shockwave, block-safe like every
+  // AoE default (cozy stance, plan §9), falls off so only a close player
+  // takes the full hit.
+  { id: "bear-stomp", radius: 3.5, falloff: "linear", blockSafe: true, vfx: "vfx.stomp.bear" },
 ];
 
 export const AOE_REGISTRY: AoeRegistry = unwrap(AoeRegistry.create(STARTER_AOES));

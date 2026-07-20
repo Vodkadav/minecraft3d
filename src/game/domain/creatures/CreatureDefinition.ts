@@ -10,6 +10,7 @@
  */
 
 import type { BiomeId } from "../world/BiomeId";
+import type { CreatureAbility } from "../ai/CreatureAbilities";
 
 export interface CreatureLootRule {
   readonly itemId: string;
@@ -95,4 +96,13 @@ export interface CreatureDefinition {
   readonly biomeAffinity?: readonly BiomeId[];
   /** E6.3: time-of-day gate — defaults to "always" (no gating) when omitted. */
   readonly activityWindow?: CreatureActivityWindow;
+  /**
+   * E7.6: telegraphed monster abilities (ranged spit / cozy spell / AoE
+   * stomp) this species can cast at an aggressive player, resolved
+   * HOST-side by `SpawnFieldView.stepCreatures` (reusing E7.2's
+   * `Projectile`/E7.4's `Aoe` pure resolvers). Absent/empty = today's
+   * plain-bite behaviour, unchanged — every creature shipped before E7.6
+   * has no entry here.
+   */
+  readonly abilities?: readonly CreatureAbility[];
 }

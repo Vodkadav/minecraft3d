@@ -46,6 +46,36 @@ describe("decideBehavior", () => {
   });
 });
 
+describe("decideBehavior — E7.6 ability overlay", () => {
+  const standAndCast = { castStyle: "standAndCast" as const, range: 6 };
+  const retreatAndFire = { castStyle: "retreatAndFire" as const, range: 12, minRange: 5 };
+
+  it("a stand-and-cast creature holds ('cast') once inside ability range", () => {
+    expect(decideBehavior("wolf", 5, 1, false, 1, standAndCast)).toBe("cast");
+  });
+
+  it("an in-reactRange but out-of-ability-range creature still just chases", () => {
+    // wolf reactRange=14; ability.range=6 — 10m reacts but isn't in ability range yet.
+    expect(decideBehavior("wolf", 10, 1, false, 1, standAndCast)).toBe("aggro");
+  });
+
+  it("a retreat-and-fire creature kites when the player is inside minRange", () => {
+    expect(decideBehavior("wolf", 3, 1, false, 1, retreatAndFire)).toBe("kite");
+  });
+
+  it("a retreat-and-fire creature holds ('cast') in its comfortable band", () => {
+    expect(decideBehavior("wolf", 8, 1, false, 1, retreatAndFire)).toBe("cast");
+  });
+
+  it("a wounded creature still flees even with an ability in range", () => {
+    expect(decideBehavior("wolf", 5, 0.1, false, 1, standAndCast)).toBe("flee");
+  });
+
+  it("omitting the ability hint behaves exactly as before (plain aggro)", () => {
+    expect(decideBehavior("wolf", 5, 1)).toBe("aggro");
+  });
+});
+
 describe("steer", () => {
   it("flee points away from the player", () => {
     const v = steer("flee", [0, 0], [10, 0], [0, 0]);
@@ -72,6 +102,17 @@ describe("steer", () => {
     const flee = steer("flee", [0, 0], [10, 0], [0, 0]);
     const roam = steer("roam", [0, 0], [100, 100], [10, 0]);
     expect(Math.hypot(...flee)).toBeGreaterThan(Math.hypot(...roam));
+  });
+
+  it("cast is stationary (stand-and-cast holds position)", () => {
+    expect(steer("cast", [0, 0], [10, 0], [5, 5])).toEqual([0, 0]);
+  });
+
+  it("kite points away from the player, slower than a panicked flee", () => {
+    const kite = steer("kite", [0, 0], [10, 0], [0, 0]);
+    expect(kite[0]).toBeLessThan(0);
+    const flee = steer("flee", [0, 0], [10, 0], [0, 0]);
+    expect(Math.hypot(...kite)).toBeLessThan(Math.hypot(...flee));
   });
 });
 
