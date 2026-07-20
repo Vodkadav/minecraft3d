@@ -216,8 +216,9 @@ slice (E7.0 protocol growth, E7.2–E7.6).
   (weapon/projectile/ability/aoe/deployable, completeness-tested), wire intents
   equipItem/aimedAttack/castSpell/deployItem + host streams projectiles/deployables/effect,
   FeelEvents combat ids — security-reviewed, merged 9b746a5
-- [ ] E7.1 Melee variety: per-weapon damage/speed/reach/cone, attack-strength cooldown meter,
-  forward-cone soft-lock assist, heavy-weapon sweep
+- [x] E7.1 Melee variety: per-weapon damage/speed/reach/cone, attack-strength cooldown meter,
+  forward-cone soft-lock assist, heavy-weapon sweep (MeleeResolve.ts, AttackMeter HUD, 4 weapons)
+  — host-only, no wire growth; joiner attack stays bare-hands until equip-sync (E7.2 follow-up)
 - [ ] E7.2 Ranged + ammo: draw-to-charge, host-simulated arcing projectiles, ammo consumption,
   cosmetic client tracers, quiver HUD
 - [ ] E7.3 Spellcasting: Sparkle Bolt / Frost Puff / Healing Bloom / Vine Snare, regenerating

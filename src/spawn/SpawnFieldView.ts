@@ -70,15 +70,38 @@ import type { FeelPort } from "../game/application/ports/FeelPort";
 import type { ProgressionEventId } from "../game/domain/progression/ProgressionEvents";
 import type { MapMarker } from "../game/domain/map/MinimapModel";
 import { SPECIES_VISUAL, validGround, type SpawnGround } from "./SpawnPlacement";
+import { isOk } from "../game/domain/Result";
+import type { WeaponMetadata } from "../game/domain/items/ItemDefinition";
+import type { FeelEventId } from "../game/domain/feel/FeelEvents";
+import { WEAPON_REGISTRY } from "../game/domain/combat/WeaponRegistry";
+import {
+  chargeFraction as meleeChargeFraction,
+  resolveMelee,
+  type MeleeTarget,
+} from "../game/domain/combat/MeleeResolve";
 
 /** Seconds between proximity re-steps when no cell is crossed. */
 const STEP_INTERVAL_S = 1.0;
-/** Interaction reach (m) for attack/harvest. */
+/** Interaction reach (m) for harvest/feed/mount (E/T/G) — melee attack (F)
+ *  reads its reach from the weapon instead, see BARE_HANDS_WEAPON/WEAPON_REGISTRY. */
 const REACH_M = 3.5;
-/** Player hit damage per attack press (tools/weapons arrive later). */
-const ATTACK_DAMAGE = 10;
 /** Deterministic crit chance on a player attack — feel-only (Workstream 2). */
 const CRIT_CHANCE = 0.15;
+/** E7.1: unarmed attack-speed (hits/s ceiling) — bare hands didn't have a
+ *  cooldown meter before E7.1, so this is a new, reasonable default rather
+ *  than a preserved constant. */
+const BARE_HANDS_ATTACK_SPEED = 1.5;
+/** E7.1: the "nothing equipped" fallback WeaponMetadata — replaces the old
+ *  flat `ATTACK_DAMAGE = 10` constant this module used to hardcode. Reach/
+ *  cone are omitted so MeleeResolve's own defaults apply (DEFAULT_REACH_M
+ *  matches the pre-E7.1 REACH_M exactly). */
+const BARE_HANDS_WEAPON: WeaponMetadata = {
+  kind: "melee",
+  damage: 10,
+  attackSpeed: BARE_HANDS_ATTACK_SPEED,
+  damageType: "physical",
+  feelEvent: "meleeSwing",
+};
 /** How close an aggressive creature must get to bite the player (m). */
 const CONTACT_RANGE_M = 2.2;
 /** Minimum gap between a creature's bites on the player (s). */
@@ -160,8 +183,18 @@ export interface SpawnFieldDeps {
   creatureDamageMult?: number;
   /** E1.4b: character `effectiveAttackPowerMultiplier` — scales the
    *  player's own attack damage. A getter so a mid-session stat spend takes
-   *  effect immediately. Defaults to 1 (today's flat ATTACK_DAMAGE). */
+   *  effect immediately. Defaults to 1 (today's flat BARE_HANDS_WEAPON.damage). */
   attackPowerMult?(): number;
+  /** E7.1: the item id currently equipped in the weapon slot (e.g. the
+   *  selected hotbar item), or null/omitted for bare hands — looked up in
+   *  `WEAPON_REGISTRY` for the LOCAL player's own melee swings only. Omitted
+   *  entirely = always bare hands (matches the pre-E7.1 boot exactly). */
+  equippedWeaponId?(): string | null;
+  /** E7.1: the player's forward aim direction on the XZ ground plane
+   *  (need not be normalized) — drives the melee forward-cone soft-lock
+   *  assist. Omitted = no facing requirement (falls back to the pre-E7.1
+   *  reach-only targeting). */
+  getAimDir?(): readonly [number, number];
   /** E1.4b: character `effectiveGatherPowerMultiplier` — scales harvested
    *  node yield counts. Defaults to 1 (today's flat NODE_YIELD). */
   gatherPowerMult?(): number;
@@ -243,6 +276,12 @@ export interface SpawnFieldHandle {
    *  pluggable `MapMarker` shape `MinimapModel` consumes. Pull-based (no
    *  new per-frame cost of its own — the caller decides how often to ask). */
   liveMarkers(): readonly MapMarker[];
+  /** E7.1: 0..1 attack-strength charge for the currently equipped weapon (or
+   *  bare hands) — 1 = fully recharged/full damage, drops to 0 right after a
+   *  swing and ramps back up over the weapon's `1/attackSpeed` seconds.
+   *  Client-side presentation only (feeds the cooldown-meter HUD); the host
+   *  still independently re-derives the real charge when it resolves a hit. */
+  attackChargeFraction(): number;
 }
 
 interface CreatureEntry {
@@ -367,6 +406,10 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
   let clockMs = 0;
   // E2.2: last time the player attacked or was bitten — feeds inCombat.
   let lastCombatMs = -Infinity;
+  // E7.1: last time the LOCAL player threw a melee swing — feeds the
+  // attack-strength cooldown meter (attackChargeFraction). Starts at
+  // -Infinity so a fresh session begins fully charged, like Minecraft 1.9.
+  let lastAttackClockMs = -Infinity;
   // M6.5 ride: the walk controller stays the mover; the mount is glued under
   // the camera and animated by player speed. ponytail: no controller surgery,
   // no speed boost yet - add when riding should outrun running.
@@ -554,17 +597,52 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
     return best;
   }
 
-  // Interaction resolution — reused by the local keydown (host/solo) AND by the
-  // host's applyInteract when a joiner's intent arrives (ADR 0003). Each
+  /** E7.1: the LOCAL player's currently equipped weapon, looked up from this
+   *  host's own WEAPON_REGISTRY (never trusts a wire value — melee stays off
+   *  the trust boundary entirely, see the deps doc comment). Falls back to
+   *  BARE_HANDS_WEAPON for an empty slot or a non-weapon item. */
+  function currentWeapon(): WeaponMetadata {
+    const id = deps.equippedWeaponId?.() ?? null;
+    if (id !== null) {
+      const found = WEAPON_REGISTRY.get(id);
+      if (isOk(found)) return found.value;
+    }
+    return BARE_HANDS_WEAPON;
+  }
+
+  /** Live (non-dying) creatures as MeleeResolve candidates, in the pure
+   *  module's 2D ground-plane shape. */
+  function liveCreatureTargets(): readonly MeleeTarget[] {
+    const out: MeleeTarget[] = [];
+    for (const c of creatures.values()) {
+      if (c.dying !== null) continue;
+      out.push({ id: c.entity.id, position: [c.obj.position.x, c.obj.position.z] });
+    }
+    return out;
+  }
+
+  // Interaction resolution — reused by the local keydown (host/solo) AND by
+  // the host's applyInteract when a joiner's intent arrives (ADR 0003). Each
   // returns whether its "counts as progress" outcome happened (a kill, a
   // tame) so the *local-only* call sites below can fire `onProgress` —
   // progression is local-player state (Workstream 6): the host resolving a
   // joiner's remote intent here must never advance the host's own tracker.
-  function resolveAttack(target: CreatureEntry): boolean {
+
+  /** Applies one resolved melee hit (weapon-driven damage from `resolveMelee`
+   *  for the local player, or the flat bare-hands hit below for a joiner's
+   *  intent) to `target`: health, audio/feel, loot + death animation on a
+   *  kill. `saltIndex` keeps a sweep's several simultaneous crit rolls
+   *  independent of each other (index 0 reproduces the pre-E7.1 single-hit
+   *  roll exactly). Returns true iff this hit killed the target. */
+  function applyMeleeHit(
+    target: CreatureEntry,
+    damage: number,
+    weapon: WeaponMetadata,
+    saltIndex = 0,
+  ): boolean {
     if (target.dying !== null) return false;
     lastCombatMs = clockMs;
-    const attackDamage = ATTACK_DAMAGE * (deps.attackPowerMult?.() ?? 1);
-    const r = applyDamage(target.combat, attackDamage);
+    const r = applyDamage(target.combat, damage);
     target.combat = r.state;
     const pos: [number, number, number] = [
       target.obj.position.x,
@@ -574,11 +652,14 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
     deps.audio?.play("hit", { position: pos });
     // deterministic crit roll (same shape as the loot roll below) — a
     // presentation flourish only, never affects the damage actually dealt
-    const crit = hashUnitFloat(deps.seed, clockMs | 0, 0x6f10) < CRIT_CHANCE;
-    deps.feel?.trigger("attackHit", { worldPos: pos, numberValue: attackDamage, crit });
+    const crit = hashUnitFloat(deps.seed, clockMs | 0, 0x6f10 + saltIndex) < CRIT_CHANCE;
+    deps.feel?.trigger("attackHit", { worldPos: pos, numberValue: damage, crit });
+    // E7.1: the weapon's own themed swing flourish (meleeSwing for every
+    // physical melee weapon today), alongside the generic damage-number hit.
+    deps.feel?.trigger(weapon.feelEvent as FeelEventId, { worldPos: pos, crit });
     if (!r.died) return false;
-    deps.feel?.trigger("kill", { worldPos: pos, numberValue: attackDamage, crit });
-    const roll = hashUnitFloat(deps.seed, clockMs | 0, 0x6f00);
+    deps.feel?.trigger("kill", { worldPos: pos, numberValue: damage, crit });
+    const roll = hashUnitFloat(deps.seed, clockMs | 0, 0x6f00 + saltIndex);
     const drop = scaleStacks(lootFor(target.entity.species, roll), deps.lootMult?.() ?? 1);
     if (drop.length > 0) deps.onDropLoot?.(drop, pos);
     persistRemoved(target.entity.id);
@@ -590,6 +671,21 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
     if (duration > 0) target.dying = duration;
     else remove(target.entity.id);
     return true;
+  }
+
+  /** Joiner-intent path (`applyInteract`, called by the net glue). The host
+   *  has no synced record of a JOINER's equipped weapon yet — E7.0's
+   *  `equipItem` intent exists but is deliberately left unwired (activating
+   *  it here would touch the net glue / trust boundary, which this additive
+   *  slice stays off, see COMBAT_PLAN.md's melee entry). A joiner's F-press
+   *  always resolves at the bare-hands rate, full charge, for now — same
+   *  numeric outcome as before E7.1. The LOCAL player's own attacks (below,
+   *  in the keydown handler) get the real weapon+cooldown+cone treatment;
+   *  closing this gap for joiners too is natural E7.2 (equip-state sync)
+   *  follow-up work. */
+  function resolveAttack(target: CreatureEntry): boolean {
+    const damage = BARE_HANDS_WEAPON.damage * (deps.attackPowerMult?.() ?? 1);
+    return applyMeleeHit(target, damage, BARE_HANDS_WEAPON);
   }
 
   function resolveFeed(target: CreatureEntry): boolean {
@@ -651,17 +747,41 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
     // 0003 addendum).
     if (ev.code === "KeyF") {
       if (deps.canAttack && !deps.canAttack()) return; // stamina-gated (Workstream 5.1)
-      const target = pickTarget(creatures);
-      if (!target || target.dying !== null) return;
+      // E7.1: the forward-cone soft-lock assist replaces the old flat
+      // nearest-in-reach pickTarget() for attacks specifically — E/T/G keep
+      // the omnidirectional pick unchanged. A weapon with a wide-enough cone
+      // (heavy sweep) resolves to several simultaneous hits.
+      const weapon = currentWeapon();
+      const [px, pz] = deps.getPlayerXZ();
+      const resolved = resolveMelee({
+        weapon,
+        charge: meleeChargeFraction((clockMs - lastAttackClockMs) / 1000, weapon.attackSpeed),
+        origin: [px, pz],
+        dir: deps.getAimDir?.() ?? [0, 0],
+        targets: liveCreatureTargets(),
+      });
+      if (!isOk(resolved)) return;
       deps.onAttack?.();
+      lastAttackClockMs = clockMs;
       if (remote) {
-        onInteractIntent?.("attack", target.entity.id);
+        // Joiner: the cone-assist above only picks WHICH target(s) to swing
+        // at (client-side presentation) — the legacy single-target `attack`
+        // intent only ever names one, so a sweep's extra targets are a
+        // joiner-side visual-only preview until E7.2's equip-state sync
+        // closes this gap (see resolveAttack()'s doc comment).
+        onInteractIntent?.("attack", resolved.value[0]!.targetId);
       } else {
-        const died = resolveAttack(target);
-        deps.onCombatEvent?.("hitDealt", ATTACK_DAMAGE);
-        if (died) {
-          deps.onCombatEvent?.("kill", ATTACK_DAMAGE);
-          deps.onProgress?.("kill");
+        const mult = deps.attackPowerMult?.() ?? 1;
+        for (let i = 0; i < resolved.value.length; i++) {
+          const hit = resolved.value[i]!;
+          const target = creatures.get(hit.targetId);
+          if (!target) continue;
+          const died = applyMeleeHit(target, hit.damage * mult, weapon, i);
+          deps.onCombatEvent?.("hitDealt", hit.damage * mult);
+          if (died) {
+            deps.onCombatEvent?.("kill", hit.damage * mult);
+            deps.onProgress?.("kill");
+          }
         }
       }
     } else if (ev.code === "KeyG") {
@@ -1061,10 +1181,19 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
       return [...creatures.entries()].filter(([, c]) => c.riddenBy !== null).map(([id]) => id);
     },
 
-    /** A live creature is within F-attack reach (crosshair state seam). */
+    /** A live creature is within the current weapon's F-attack reach+cone
+     *  (crosshair state seam) — mirrors exactly what a KeyF press right now
+     *  would resolve, including the E7.1 forward-cone soft-lock assist. */
     hasAttackTarget(): boolean {
-      const target = pickTarget(creatures);
-      return target !== null && target.dying === null;
+      const [px, pz] = deps.getPlayerXZ();
+      const resolved = resolveMelee({
+        weapon: currentWeapon(),
+        charge: 1, // target presence only — charge doesn't affect who's hittable
+        origin: [px, pz],
+        dir: deps.getAimDir?.() ?? [0, 0],
+        targets: liveCreatureTargets(),
+      });
+      return isOk(resolved);
     },
 
     /** A harvestable node OR a feedable/mountable creature is in reach
@@ -1114,6 +1243,11 @@ export function attachSpawnField(deps: SpawnFieldDeps): SpawnFieldHandle {
         out.push({ id: n.entity.id, kind: "resourceNode", x: n.obj.position.x, z: n.obj.position.z });
       }
       return out;
+    },
+
+    attackChargeFraction(): number {
+      const weapon = currentWeapon();
+      return meleeChargeFraction((clockMs - lastAttackClockMs) / 1000, weapon.attackSpeed);
     },
   };
 }

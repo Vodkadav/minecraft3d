@@ -177,6 +177,11 @@ export const UI_STRINGS: Catalog = {
     "item.sparkle-gem.name": "Sparkle Gem",
     "item.golden-acorn.name": "Golden Acorn",
 
+    "item.wooden-club.name": "Wooden Club",
+    "item.flint-dagger.name": "Flint Dagger",
+    "item.iron-spear.name": "Iron Spear",
+    "item.battle-hammer.name": "Battle Hammer",
+
     "creature.deer.name": "Deer",
     "creature.wolf.name": "Wolf",
     "creature.elk.name": "Elk",
@@ -318,6 +323,8 @@ export const UI_STRINGS: Catalog = {
     "combatLog.stat.dps": "DPS: {n}",
     "combatLog.stat.healed": "Healed: {n}",
     "combatLog.stat.kills": "Kills: {n}",
+
+    "combat.attackMeter.aria": "Attack strength",
 
     "party.title": "Party",
     "party.close": "Close",
@@ -670,6 +677,11 @@ export const UI_STRINGS: Catalog = {
     "item.sparkle-gem.name": "Gema centelleante",
     "item.golden-acorn.name": "Bellota dorada",
 
+    "item.wooden-club.name": "Garrote de madera",
+    "item.flint-dagger.name": "Daga de pedernal",
+    "item.iron-spear.name": "Lanza de hierro",
+    "item.battle-hammer.name": "Martillo de guerra",
+
     "creature.deer.name": "Ciervo",
     "creature.wolf.name": "Lobo",
     "creature.elk.name": "Alce",
@@ -811,6 +823,8 @@ export const UI_STRINGS: Catalog = {
     "combatLog.stat.dps": "DPS: {n}",
     "combatLog.stat.healed": "Curado: {n}",
     "combatLog.stat.kills": "Derrotas: {n}",
+
+    "combat.attackMeter.aria": "Fuerza de ataque",
 
     "party.title": "Grupo",
     "party.close": "Cerrar",
@@ -1163,6 +1177,11 @@ export const UI_STRINGS: Catalog = {
     "item.sparkle-gem.name": "Glimmersten",
     "item.golden-acorn.name": "Gyldent agern",
 
+    "item.wooden-club.name": "Trækølle",
+    "item.flint-dagger.name": "Flintdolk",
+    "item.iron-spear.name": "Jernspyd",
+    "item.battle-hammer.name": "Kamphammer",
+
     "creature.deer.name": "Hjort",
     "creature.wolf.name": "Ulv",
     "creature.elk.name": "Elg",
@@ -1304,6 +1323,8 @@ export const UI_STRINGS: Catalog = {
     "combatLog.stat.dps": "DPS: {n}",
     "combatLog.stat.healed": "Helbredt: {n}",
     "combatLog.stat.kills": "Nedkæmpet: {n}",
+
+    "combat.attackMeter.aria": "Angrebsstyrke",
 
     "party.title": "Gruppe",
     "party.close": "Luk",

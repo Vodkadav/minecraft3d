@@ -183,6 +183,31 @@ ${THEME_CSS_VARS}
   pointer-events: none;
 }
 
+/* E7.1: attack-strength cooldown meter — a slim bar above the vitals
+   cluster, hidden at full charge (see AttackMeter.ts). */
+.lw-attack-meter {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--lw-space-4) + 68px);
+  transform: translateX(-50%);
+  width: 140px;
+  height: 8px;
+  border-radius: var(--lw-radius-pill);
+  background: var(--lw-bg-track);
+  border: 1px solid var(--lw-border);
+  overflow: hidden;
+  z-index: 20;
+  pointer-events: none;
+}
+.lw-attack-meter-fill {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  transform-origin: left;
+  background: var(--lw-success);
+  transition: transform var(--lw-motion-fast) linear;
+}
+
 /* E2.1: Diablo-style corner orbs + level portrait. Procedural CSS only (no
    binary assets) — circles via border-radius, vertical fill via scaleY on
    the same .lw-bar-fill element the bar layout already uses. Health orb at
