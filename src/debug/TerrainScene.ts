@@ -585,7 +585,9 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
         if (!pose) return;
         const groundOffset = localBody.lift - localBodyEyeHeight;
         localBody.root.position.set(pose.p[0], pose.p[1] + groundOffset, pose.p[2]);
-        localBody.root.rotation.y = pose.yaw;
+        // FlyCamera yaw=0 faces -Z; the glTF avatar is authored facing +Z —
+        // without the π flip the body looks back at the camera
+        localBody.root.rotation.y = pose.yaw + Math.PI;
         localBody.setSpeed(ctx.hooks.getWalkSpeed?.() ?? 0);
         localBody.update(dt);
       });
@@ -602,8 +604,14 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
     const surfaceProbe = ctx.hooks.groundProbe;
     ctx.hooks.groundProbe = (x, z) => {
       const base = surfaceProbe(x, z);
+      // march from the LOGICAL eye, never the render camera: the render y
+      // carries bob/dip — and in OTS the whole boom offset plus its terrain
+      // clamp, which itself calls this probe. Reading camera.y here fed that
+      // clamp back into ground-stick and oscillated the player up/down at
+      // dig-hole edges (playtest: "screen shaking when digging").
+      const eyeY = ctx.hooks.getPose?.().p[1] ?? engine.camera.position.y;
       return {
-        ground: voxels.groundBelow(x, z, engine.camera.position.y, base.ground),
+        ground: voxels.groundBelow(x, z, eyeY, base.ground),
         water: base.water,
       };
     };

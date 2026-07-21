@@ -16,6 +16,9 @@ import { PlayerAvatarInstance, PlayerModelLibrary } from "./PlayerModel";
 
 /** Networked position is the eye; ground = eye - eye height (matches FlyCamera). */
 const EYE_HEIGHT_M = 1.7;
+/** FlyCamera yaw=0 faces -Z; the glTF avatar is authored facing +Z — without
+ *  this π flip every avatar walks backwards (faces the viewer at yaw=0). */
+export const MODEL_YAW_OFFSET = Math.PI;
 const CAPSULE_EYE_TO_CENTER_M = 0.8;
 const CAPSULE_RADIUS_M = 0.35;
 const CAPSULE_LENGTH_M = 1.0;
@@ -58,7 +61,7 @@ export class RemotePlayers {
     if (root instanceof Mesh) root.castShadow = true;
     root.name = peerId;
     this.placeAt(root, state, instance);
-    root.rotation.y = state.yaw;
+    root.rotation.y = state.yaw + MODEL_YAW_OFFSET;
     this.group.add(root);
     this.avatars.set(peerId, { root, material, instance, target: state });
   }
@@ -85,7 +88,7 @@ export class RemotePlayers {
       const y = lerpToward(root.position.y, target.position[1] + groundOffset, k);
       const z = lerpToward(root.position.z, target.position[2], k);
       root.position.set(x, y, z);
-      root.rotation.y = stepYaw(root.rotation.y, target.yaw, k);
+      root.rotation.y = stepYaw(root.rotation.y, target.yaw + MODEL_YAW_OFFSET, k);
       if (instance) {
         const speed = dt > 0 ? Math.hypot(x - oldX, z - oldZ) / dt : 0;
         instance.setSpeed(speed);
