@@ -150,17 +150,17 @@ describe("SettingsView", () => {
     if (isOk(reloaded)) expect(reloaded.value.nameplateHostile).toBe(false);
   });
 
-  it("defaults the HUD style select to bars and flows a change through the controller and store", async () => {
+  it("defaults the HUD style select to orbs and flows a change through the controller and store", async () => {
     const { el, controller, store } = await build();
     const select = control<HTMLSelectElement>(el, "laas-hudstyle");
     expect([...select.options].map((o) => o.value)).toEqual(["bars", "orbs"]);
-    expect(select.value).toBe("bars");
-    select.value = "orbs";
+    expect(select.value).toBe("orbs");
+    select.value = "bars";
     select.dispatchEvent(new Event("change"));
     await flush();
-    expect(controller.settings.hudStyle).toBe("orbs");
+    expect(controller.settings.hudStyle).toBe("bars");
     const reloaded = await store.load();
-    if (isOk(reloaded)) expect(reloaded.value.hudStyle).toBe("orbs");
+    if (isOk(reloaded)) expect(reloaded.value.hudStyle).toBe("bars");
   });
 
   it("flows autoloot toggle + radius changes through the controller and store (E4.3)", async () => {

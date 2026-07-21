@@ -30,7 +30,7 @@ function validInput(overrides: Partial<SettingsInput> = {}): SettingsInput {
     nameplateHostile: true,
     nameplateTamed: true,
     nameplatePlayers: true,
-    hudStyle: "bars",
+    hudStyle: "orbs",
     autolootEnabled: true,
     autolootRadiusM: 3,
     creatureSpawnRate: 1,
@@ -223,8 +223,8 @@ describe("Settings", () => {
     if (isErr(r)) expect(r.error.kind).toBe("UnknownHudStyle");
   });
 
-  it("defaults to the bars hud style (no-flags boot stays pixel-identical)", () => {
-    expect(defaultSettings().hudStyle).toBe("bars");
+  it("defaults to the orbs hud style (corner-anchored, clear of the hotbar column)", () => {
+    expect(defaultSettings().hudStyle).toBe("orbs");
   });
 
   it("updates hudStyle while keeping the rest", () => {

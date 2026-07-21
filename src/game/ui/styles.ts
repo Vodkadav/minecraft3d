@@ -813,6 +813,19 @@ ${THEME_CSS_VARS}
 .lw-bank-open-button {
   top: calc(var(--lw-space-4) + 44px);
 }
+/* Character + Research mouse-open buttons had no position rule, so they fell
+   into top-left document flow directly under the fixed top-left minimap and
+   were buried by it. Stack them in the same top-right column as inventory
+   (row 0) and bank (row 1): character row 2, research row 3. */
+.lw-character-open-button {
+  position: fixed;
+  top: calc(var(--lw-space-4) + 88px);
+  right: var(--lw-space-4);
+  z-index: 25;
+}
+.lw-research-open-button {
+  top: calc(var(--lw-space-4) + 132px);
+}
 
 /* Inventory/crafting overlay */
 .lw-inv-overlay {

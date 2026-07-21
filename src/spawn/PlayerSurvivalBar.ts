@@ -36,7 +36,7 @@ export function createPlayerSurvivalBar(
   doc: Document = document,
   maxHealthMult = 1,
   maxEnergyMult = 1,
-  hudStyle: "bars" | "orbs" = "bars",
+  hudStyle: "bars" | "orbs" = "orbs",
   level = 1,
 ): PlayerSurvivalBarHandle {
   const reduceMotion = doc.defaultView?.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;

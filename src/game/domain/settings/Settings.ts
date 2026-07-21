@@ -297,7 +297,9 @@ export function defaultSettings(): Settings {
     nameplateHostile: true,
     nameplateTamed: true,
     nameplatePlayers: true,
-    hudStyle: "bars",
+    // Owner playtest 2026-07-21: bars sat behind the central hotbar/action-bar
+    // column. Orbs anchor health/energy to the screen corners, clear of it.
+    hudStyle: "orbs",
     // Cozy default: autoloot ON with a comfortable walk-up radius — kids
     // shouldn't need to discover a toggle to get the "walk over it" feel.
     autolootEnabled: true,

@@ -32,7 +32,7 @@ export interface PlayerHealthBar {
 export function createPlayerHealthBar(
   doc: Document = document,
   maxHealthMult = 1,
-  hudStyle: "bars" | "orbs" = "bars",
+  hudStyle: "bars" | "orbs" = "orbs",
   level = 1,
 ): PlayerHealthBar {
   const reduceMotion = doc.defaultView?.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
