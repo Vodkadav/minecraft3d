@@ -96,6 +96,7 @@ import { mountPerfHud } from '../game/ui/components/PerfHud';
 import { mountCombatMeterPanel } from '../game/ui/components/CombatMeterPanel';
 import { mountAttackMeter } from '../game/ui/components/AttackMeter';
 import { mountHandViewmodel } from '../game/ui/components/HandViewmodel';
+import { mountHandViewmodel3D } from '../game/ui/components/HandViewmodel3D';
 import {
   LOCAL_PLAYER_SOURCE_ID,
   dpsFor,
@@ -530,10 +531,22 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
     // First-person hand/tool viewmodel: swings on every dig (LMB) / place (RMB)
     // click so the player gets immediate confirmation the action fired. Self-
     // wires its own pointer-locked mousedown on the canvas.
-    mountHandViewmodel({
-      dom: engine.renderer.domElement,
-      reducedMotion: () => reducedMotionRef?.() ?? false,
-    });
+    // ?hand3d=1 — real 3D arm/tool viewmodel (after-post overlay, see
+    // HandViewmodel3D's header) instead of the default 2D SVG. Flag-gated so
+    // the default boot is byte-identical to before this option existed; the
+    // one-line swap to make 3D the default is deleting this `if`/`else` and
+    // keeping only the `mountHandViewmodel3D(...)` branch.
+    if (new URLSearchParams(window.location.search).get('hand3d') === '1') {
+      mountHandViewmodel3D(engine, {
+        dom: engine.renderer.domElement,
+        reducedMotion: () => reducedMotionRef?.() ?? false,
+      });
+    } else {
+      mountHandViewmodel({
+        dom: engine.renderer.domElement,
+        reducedMotion: () => reducedMotionRef?.() ?? false,
+      });
+    }
     window.addEventListener('pagehide', () => voxels.flushSave());
     // tooling probe handle (tools/voxel-shot.ts) — programmatic digs in CI-less runs
     (
