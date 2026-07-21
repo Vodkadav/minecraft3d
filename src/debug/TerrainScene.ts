@@ -97,6 +97,7 @@ import { mountCombatMeterPanel } from '../game/ui/components/CombatMeterPanel';
 import { mountAttackMeter } from '../game/ui/components/AttackMeter';
 import { mountHandViewmodel } from '../game/ui/components/HandViewmodel';
 import { mountHandViewmodel3D } from '../game/ui/components/HandViewmodel3D';
+import { PlayerAvatarInstance, PlayerModelLibrary } from '../net/PlayerModel';
 import {
   LOCAL_PLAYER_SOURCE_ID,
   dpsFor,
@@ -528,23 +529,65 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
       (event) => progressHook?.(event),
     );
     crosshairRef = Crosshair();
+    // ?camera=ots MVP: over-the-shoulder camera — additive + flag-gated, see
+    // FlyCamera.thirdPerson/Hooks.thirdPerson for the offset math. false (no
+    // flag) never sets ctx.hooks.thirdPerson, so main.ts's default is kept
+    // and none of the block below runs.
+    const thirdPersonOn = new URLSearchParams(window.location.search).get('camera') === 'ots';
     // First-person hand/tool viewmodel: swings on every dig (LMB) / place (RMB)
     // click so the player gets immediate confirmation the action fired. Self-
-    // wires its own pointer-locked mousedown on the canvas.
+    // wires its own pointer-locked mousedown on the canvas. Skipped in OTS —
+    // it's a 1st-person overlay, wrong once the camera is over the shoulder.
     // ?hand3d=1 — real 3D arm/tool viewmodel (after-post overlay, see
     // HandViewmodel3D's header) instead of the default 2D SVG. Flag-gated so
     // the default boot is byte-identical to before this option existed; the
     // one-line swap to make 3D the default is deleting this `if`/`else` and
     // keeping only the `mountHandViewmodel3D(...)` branch.
-    if (new URLSearchParams(window.location.search).get('hand3d') === '1') {
-      mountHandViewmodel3D(engine, {
-        dom: engine.renderer.domElement,
-        reducedMotion: () => reducedMotionRef?.() ?? false,
-      });
-    } else {
-      mountHandViewmodel({
-        dom: engine.renderer.domElement,
-        reducedMotion: () => reducedMotionRef?.() ?? false,
+    if (!thirdPersonOn) {
+      if (new URLSearchParams(window.location.search).get('hand3d') === '1') {
+        mountHandViewmodel3D(engine, {
+          dom: engine.renderer.domElement,
+          reducedMotion: () => reducedMotionRef?.() ?? false,
+        });
+      } else {
+        mountHandViewmodel({
+          dom: engine.renderer.domElement,
+          reducedMotion: () => reducedMotionRef?.() ?? false,
+        });
+      }
+    }
+    if (thirdPersonOn) {
+      // Pull the fly camera behind + above the walk eye (FlyCamera does the
+      // actual math; this only flips the flag via the scene-sets/main-applies
+      // seam) and mount a local body — same rigged CC0 KayKit Knight + clip
+      // API remote players use (src/net/PlayerModel.ts) — so there's
+      // something to see over the shoulder of. Positioned every frame from
+      // the camera rig's own logical pose (ctx.hooks.getPose, stripped of
+      // bob/dip/OTS offsets), feet grounded at eye - eye-height exactly like
+      // a remote avatar. Never added to `voxels.group`/anything DigTool's
+      // raycastSolid (a pure math raycast against the voxel SDF, not a scene
+      // Raycaster) tests — engine.scene is the same parent tiles/water use.
+      ctx.hooks.thirdPerson = true;
+      const localBodyEyeHeight = 1.7; // matches FlyCamera's EYE_HEIGHT
+      const localModels = new PlayerModelLibrary();
+      let localBody: PlayerAvatarInstance | null = null;
+      const mountLocalBody = (): void => {
+        if (localBody) return;
+        const instance = localModels.instantiate();
+        if (!instance) return; // model still loading — load()'s callback below IS this fn
+        engine.scene.add(instance.root);
+        localBody = instance;
+      };
+      localModels.load(mountLocalBody);
+      engine.onUpdate((dt) => {
+        if (!localBody) return;
+        const pose = ctx.hooks.getPose?.();
+        if (!pose) return;
+        const groundOffset = localBody.lift - localBodyEyeHeight;
+        localBody.root.position.set(pose.p[0], pose.p[1] + groundOffset, pose.p[2]);
+        localBody.root.rotation.y = pose.yaw;
+        localBody.setSpeed(ctx.hooks.getWalkSpeed?.() ?? 0);
+        localBody.update(dt);
       });
     }
     window.addEventListener('pagehide', () => voxels.flushSave());

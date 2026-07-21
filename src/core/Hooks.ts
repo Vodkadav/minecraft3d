@@ -65,6 +65,14 @@ export interface LaasHooks {
   flyCamEnabled: ((on: boolean) => void) | null;
   /** scale the walk speed — 1 on foot, >1 while mounted (M6.5 ride boost) */
   setMoveSpeedScale: ((scale: number) => void) | null;
+  /** ?camera=ots MVP: scene-requested third-person offset — main.ts applies
+   *  it to the fly camera once it exists (same "scene sets, main.ts applies"
+   *  seam as initialPose/groundProbe, since scenes build BEFORE the camera
+   *  rig). false (the default) leaves walk-mode positioning unchanged. */
+  thirdPerson: boolean;
+  /** walk-mode horizontal speed (m/s) — read once the fly camera exists;
+   *  null before then (?camera=ots local-body clip driving). */
+  getWalkSpeed: (() => number) | null;
 }
 
 declare global {
@@ -90,6 +98,8 @@ export function initHooks(): LaasHooks {
     settle: null,
     flyCamEnabled: null,
     setMoveSpeedScale: null,
+    thirdPerson: false,
+    getWalkSpeed: null,
   };
   window.__laas = hooks;
   return hooks;

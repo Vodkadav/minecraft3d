@@ -367,6 +367,8 @@ async function bootEngine(hooks: LaasHooks, launch: MenuLaunch | null): Promise<
 
   // terrain probe first — walk mode + fly soft-collision depend on it
   if (hooks.groundProbe) fly.groundProbe = hooks.groundProbe;
+  // ?camera=ots MVP — same "scene sets, main.ts applies once fly exists" seam
+  fly.thirdPerson = hooks.thirdPerson;
   if (params.cam !== null) {
     const pose = parseCamString(params.cam);
     if (pose) fly.setPose(pose); // explicit pose ⇒ fly semantics
@@ -387,6 +389,7 @@ async function bootEngine(hooks: LaasHooks, launch: MenuLaunch | null): Promise<
   hooks.setMoveSpeedScale = (s) => {
     fly.speedScale = s;
   };
+  hooks.getWalkSpeed = () => fly.walkSpeed;
   hooks.settle = (frames?: number) => engine.settle(frames ?? 8);
   hooks.flyCamEnabled = (on) => {
     fly.enabled = on;

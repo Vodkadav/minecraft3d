@@ -58,6 +58,12 @@ const LOCK_COOLDOWN_MS = 1300;
 // a deferred/retried request is only honored while the authorizing click is
 // recent (transient user activation lasts ~5 s — stay well inside it)
 const LOCK_INTENT_MS = 3500;
+// ?camera=ots MVP (additive, off by default) — pulls the walk camera behind
+// + above the logical eye along the facing direction so the local body mesh
+// (mounted by the scene) is visible over-the-shoulder. Walk mode only; fly
+// mode never reads FlyCamera.thirdPerson.
+export const THIRD_PERSON_BACK_M = 3.0; // m behind the eye
+export const THIRD_PERSON_UP_M = 1.0; // m above the eye
 
 export class FlyCamera {
   readonly camera: PerspectiveCamera;
@@ -67,6 +73,9 @@ export class FlyCamera {
   speed = 24;
   /** walk-speed multiplier — 1 on foot, raised while mounted (M6.5 ride). */
   speedScale = 1;
+  /** ?camera=ots MVP — set by the scene via Hooks.thirdPerson. false keeps
+   *  walk-mode positioning exactly as before this existed. */
+  thirdPerson = false;
   enabled = true;
   /** terrain probe — walk mode is unavailable until the scene installs it */
   groundProbe: GroundProbe | null = null;
@@ -191,6 +200,13 @@ export class FlyCamera {
 
   get mode(): CamMode {
     return this.modeV;
+  }
+
+  /** Walk-mode horizontal ground speed (m/s) — 0 outside walk mode. Drives
+   *  the local-body PlayerModel's idle/walk/run clip the same way remote
+   *  avatars derive theirs from network pose deltas (?camera=ots MVP). */
+  get walkSpeed(): number {
+    return this.modeV === 'walk' ? Math.hypot(this.vel.x, this.vel.z) : 0;
   }
 
   /**
@@ -462,6 +478,14 @@ export class FlyCamera {
       .copy(this.basePos)
       .addScaledVector(RIGHT, bobX)
       .add(MOVE.set(0, bobY + this.dipY, 0));
+    if (this.thirdPerson) {
+      // FORWARD is still this frame's yaw-facing unit vector (set above,
+      // never mutated after) — pull the camera behind + above the eye
+      // without touching look orientation; getPose()/`P` still report the
+      // clean logical pose via basePos, untouched by this offset.
+      this.camera.position.addScaledVector(FORWARD, -THIRD_PERSON_BACK_M);
+      this.camera.position.y += THIRD_PERSON_UP_M;
+    }
     this.camera.updateMatrixWorld();
   }
 }

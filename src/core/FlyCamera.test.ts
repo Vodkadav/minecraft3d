@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { PerspectiveCamera } from "three";
 import { beforeEach, describe, expect, it } from "vitest";
-import { FlyCamera, type GroundProbe } from "./FlyCamera";
+import { FlyCamera, THIRD_PERSON_BACK_M, THIRD_PERSON_UP_M, type GroundProbe } from "./FlyCamera";
 
 // exposes the private fields the vertical/grounded resolution actually
 // mutates — walk-mode collision is what this file verifies, not the public
@@ -100,5 +100,49 @@ describe("FlyCamera walk-mode ground collision", () => {
     walkForward(fly, BIG_DT, 60);
 
     expect(internals(fly).basePos.z).toBeLessThan(-3); // walked past/up the step
+  });
+});
+
+describe("FlyCamera third-person offset (?camera=ots MVP)", () => {
+  const FLAT: GroundProbe = () => ({ ground: 0, water: -1000 });
+
+  it("thirdPerson=false (default) keeps the camera at the logical eye — unchanged from before this existed", () => {
+    const fly = makeFly(FLAT);
+    fly.update(0.016);
+    const pose = fly.getPose();
+    expect(fly.camera.position.x).toBeCloseTo(pose.p[0], 5);
+    expect(fly.camera.position.y).toBeCloseTo(pose.p[1], 5);
+    expect(fly.camera.position.z).toBeCloseTo(pose.p[2], 5);
+  });
+
+  it("thirdPerson=true offsets the camera back + up from the logical eye at yaw=0", () => {
+    const fly = makeFly(FLAT);
+    fly.thirdPerson = true;
+    fly.update(0.016);
+    const pose = fly.getPose(); // logical pose — strips the offset (unaffected by thirdPerson)
+    // yaw=0 ⇒ facing -Z, so "back" is +Z
+    expect(fly.camera.position.x).toBeCloseTo(pose.p[0], 5);
+    expect(fly.camera.position.z).toBeCloseTo(pose.p[2] + THIRD_PERSON_BACK_M, 5);
+    expect(fly.camera.position.y).toBeCloseTo(pose.p[1] + THIRD_PERSON_UP_M, 5);
+  });
+
+  it("thirdPerson=true offsets along the current facing direction at a non-zero yaw", () => {
+    const fly = makeFly(FLAT);
+    fly.yaw = Math.PI / 2; // facing -X
+    fly.thirdPerson = true;
+    fly.update(0.016);
+    const pose = fly.getPose();
+    expect(fly.camera.position.x).toBeCloseTo(pose.p[0] + THIRD_PERSON_BACK_M, 4);
+    expect(fly.camera.position.z).toBeCloseTo(pose.p[2], 4);
+    expect(fly.camera.position.y).toBeCloseTo(pose.p[1] + THIRD_PERSON_UP_M, 5);
+  });
+
+  it("fly mode never applies the offset even when thirdPerson is true", () => {
+    const camera = new PerspectiveCamera(75, 1, 0.1, 1000);
+    const dom = document.createElement("canvas");
+    const fly = new FlyCamera(camera, dom); // stays in default 'fly' mode
+    fly.thirdPerson = true;
+    fly.update(0.016);
+    expect(fly.camera.position.y).toBeCloseTo(0, 5); // no walk-mode ground clamp pushed it up either
   });
 });
