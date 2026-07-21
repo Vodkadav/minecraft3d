@@ -30,7 +30,12 @@ const WALK_SPEED = 4.6; // m/s
 const SPRINT_MULT = 2.0;
 const GRAVITY = 22; // m/s² — game-feel gravity, not 9.81
 const JUMP_V0 = 7.0; // → ~1.1 m apex
-const STEP_DOWN = 0.55; // downhill ground-stick range (m)
+// generous vs. Engine.ts's 0.1s dt cap: even a sprint step (~0.9m) on a steep
+// slope stays inside this, so grounded-and-moving never pops airborne then
+// falls back (the reported slope-walk flicker) — only a real ledge/cliff
+// (much bigger drop) still triggers an actual fall
+const STEP_DOWN = 1.5; // downhill ground-stick range (m)
+const MAX_STEP_UP = 0.6; // m — a candidate rise taller than this blocks horizontal advance (cliff/voxel wall)
 const GROUND_ACCEL = 10; // exp-damp rate toward wish velocity
 const AIR_ACCEL = 2.5; // reduced air control
 // effects
@@ -355,8 +360,29 @@ export class FlyCamera {
     MOVE.multiplyScalar(target);
     this.vel.x += (MOVE.x - this.vel.x) * damp;
     this.vel.z += (MOVE.z - this.vel.z) * damp;
-    this.basePos.x += this.vel.x * dt;
-    this.basePos.z += this.vel.z * dt;
+
+    // ---- horizontal wall collision: a candidate step whose ground rises
+    // more than MAX_STEP_UP over the CURRENT ground is a cliff/voxel wall,
+    // not a walkable step — cancel that axis (tested independently so
+    // sliding along the wall still works) instead of clipping through it.
+    let dx = this.vel.x * dt;
+    let dz = this.vel.z * dt;
+    if (dx !== 0 || dz !== 0) {
+      const curGround = probe(this.basePos.x, this.basePos.z).ground;
+      if (dx !== 0 && probe(this.basePos.x + dx, this.basePos.z).ground - curGround > MAX_STEP_UP) {
+        dx = 0;
+        this.vel.x = 0;
+      }
+      if (
+        dz !== 0 &&
+        probe(this.basePos.x + dx, this.basePos.z + dz).ground - curGround > MAX_STEP_UP
+      ) {
+        dz = 0;
+        this.vel.z = 0;
+      }
+    }
+    this.basePos.x += dx;
+    this.basePos.z += dz;
 
     // ---- vertical: gravity, jump (held OR buffered tap), ground clamp
     const jumpBuffered = this.jumpAt >= 0 && performance.now() - this.jumpAt < 150;
@@ -373,20 +399,25 @@ export class FlyCamera {
 
     const g = probe(this.basePos.x, this.basePos.z);
     const eyeFloor = g.ground + EYE_HEIGHT;
-    if (this.basePos.y <= eyeFloor) {
-      // landing dip ∝ impact speed (skip the trivial walk-downhill touches)
+    const drop = this.basePos.y - eyeFloor; // >0: eye above ground; <0: ground reaches past the eye
+    if (this.grounded && this.velY <= 0 && drop < STEP_DOWN) {
+      // grounded & not actively jumping: re-snap to the sampled floor every
+      // frame — uphill rise of any size, or a downhill drop within the
+      // generous stick range — so ordinary slopes never pop micro-airborne
+      this.basePos.y = eyeFloor;
+      this.velY = 0;
+      this.grounded = true;
+    } else if (this.basePos.y <= eyeFloor) {
+      // landing: jump apex fall-through, or a real ledge drop that fell
+      // past the stick range and is now touching down
       if (!this.grounded && this.velY < -3) {
         this.dipV -= Math.min(Math.abs(this.velY) * 0.035, 0.2) * 9;
       }
       this.basePos.y = eyeFloor;
       this.velY = 0;
       this.grounded = true;
-    } else if (this.grounded && this.velY <= 0 && this.basePos.y - eyeFloor < STEP_DOWN) {
-      // stick to ground walking downhill (no micro-airborne flicker)
-      this.basePos.y = eyeFloor;
-      this.velY = 0;
-    } else if (this.basePos.y - eyeFloor > 0.02) {
-      this.grounded = false;
+    } else {
+      this.grounded = false; // jump ascent, or a real ledge drop — fall
     }
     // wade: eye stays above the water surface
     const wadeFloor = g.water + WADE_CLEAR;
