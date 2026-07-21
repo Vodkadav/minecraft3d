@@ -405,3 +405,19 @@ wire-touching slice).
   default DOM) — themed via CSS on their existing root classes; `src/main.ts`'s host-offline
   overlay + room-code badge moved off hardcoded hex onto theme tokens. `npm run ci` green:
   129 files/1032 tests (was 124/1010), lint/typecheck/arch/build all pass.
+- **Playtest fixes — DONE (2026-07-21), orchestrated via /delegate, each slice G2-verified
+  (diff + full `npm run ci`):** (bd4972c) craft/research mouse-open buttons had no CSS position
+  rule → fell under the top-left minimap; given top-right column slots. Default vitals HUD
+  bars→**orbs** (bars sat behind the central hotbar/action-bar column; orbs corner-anchor,
+  settings toggle still switches back). (a473cf8) real **3D hand/tool viewmodel** behind
+  `?hand3d=1` — `HandViewmodel3D` after-post overlay wrapping `engine.post` (world renders first,
+  one extra `renderer.render` on top with autoClearColor=false/autoClearDepth=true; zero
+  src/core|render edits, default byte-identical). (1f391f9) FlyCamera walk mode: **horizontal
+  wall collision** (MAX_STEP_UP=0.6, per-axis so sliding works) + **slope-walk vertical flicker
+  fixed** (0.55→1.5m ground re-snap that beats Engine's 0.1s dt cap). (239cb66) **over-the-shoulder
+  camera MVP** behind `?camera=ots` — FlyCamera offset + local Knight body + hand hidden; MVP
+  limits recorded (no camera-terrain collision / 1st↔3rd transition / aim rework). `npm run ci`
+  green: 217 files/2343 tests. **Perf (owner report 13→30fps):** render loop is uncapped
+  `setAnimationLoop`; RTX 5070 confirmed — a flat p50 33.3ms = display delivering **30 Hz**, not
+  GPU-bound. Owner-side fix (Windows refresh rate / Chrome Energy Saver), not code. The two gated
+  features (`?hand3d=1`, `?camera=ots`) and the collision feel await owner visual QA.
