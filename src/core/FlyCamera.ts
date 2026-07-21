@@ -64,6 +64,13 @@ const LOCK_INTENT_MS = 3500;
 // mode never reads FlyCamera.thirdPerson.
 export const THIRD_PERSON_BACK_M = 3.0; // m behind the eye
 export const THIRD_PERSON_UP_M = 1.0; // m above the eye
+// boom collision: the fixed offset buried the camera inside hillsides/canopy
+// at forested spawns (playtest: "can't see anything with ?camera=ots"), so
+// the boom marches back in steps and stops before the terrain would swallow
+// it; the camera also never dips below ground + clearance at its final spot.
+export const THIRD_PERSON_MIN_BACK_M = 0.6; // never glued to the head
+export const THIRD_PERSON_CLEAR_M = 0.4; // camera clearance above terrain
+const THIRD_PERSON_STEP_M = 0.25; // boom march resolution
 
 export class FlyCamera {
   readonly camera: PerspectiveCamera;
@@ -483,8 +490,34 @@ export class FlyCamera {
       // never mutated after) — pull the camera behind + above the eye
       // without touching look orientation; getPose()/`P` still report the
       // clean logical pose via basePos, untouched by this offset.
-      this.camera.position.addScaledVector(FORWARD, -THIRD_PERSON_BACK_M);
-      this.camera.position.y += THIRD_PERSON_UP_M;
+      // Boom collision: march backward along the boom, sampling the terrain
+      // probe; stop at the last step whose interpolated boom height clears
+      // the ground, so a hillside behind the player shortens the boom
+      // instead of swallowing the camera.
+      const eyeX = this.camera.position.x;
+      const eyeY = this.camera.position.y;
+      const eyeZ = this.camera.position.z;
+      let back = THIRD_PERSON_BACK_M;
+      if (this.groundProbe) {
+        back = THIRD_PERSON_MIN_BACK_M;
+        const steps = Math.ceil((THIRD_PERSON_BACK_M - THIRD_PERSON_MIN_BACK_M) / THIRD_PERSON_STEP_M);
+        for (let i = 0; i <= steps; i++) {
+          const d = Math.min(THIRD_PERSON_MIN_BACK_M + i * THIRD_PERSON_STEP_M, THIRD_PERSON_BACK_M);
+          const bx = eyeX - FORWARD.x * d;
+          const bz = eyeZ - FORWARD.z * d;
+          const by = eyeY + THIRD_PERSON_UP_M * (d / THIRD_PERSON_BACK_M);
+          if (by < this.groundProbe(bx, bz).ground + THIRD_PERSON_CLEAR_M) break;
+          back = d;
+        }
+      }
+      this.camera.position.addScaledVector(FORWARD, -back);
+      this.camera.position.y += THIRD_PERSON_UP_M * (back / THIRD_PERSON_BACK_M);
+      if (this.groundProbe) {
+        // final safety clamp — step resolution can still leave the camera a
+        // hair under a steep slope's surface
+        const floor = this.groundProbe(this.camera.position.x, this.camera.position.z).ground + THIRD_PERSON_CLEAR_M;
+        if (this.camera.position.y < floor) this.camera.position.y = floor;
+      }
     }
     this.camera.updateMatrixWorld();
   }

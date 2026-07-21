@@ -137,6 +137,22 @@ describe("FlyCamera third-person offset (?camera=ots MVP)", () => {
     expect(fly.camera.position.y).toBeCloseTo(pose.p[1] + THIRD_PERSON_UP_M, 5);
   });
 
+  it("a hill behind the player shortens the boom instead of burying the camera", () => {
+    // yaw=0 ⇒ facing -Z, boom extends toward +Z. Terrain: flat at the player,
+    // a steep wall rising to 10 m starting 1 m behind (z > 1).
+    const wall: GroundProbe = (_x, z) => ({ ground: z > 1 ? 10 : 0, water: -1000 });
+    const fly = makeFly(wall);
+    fly.thirdPerson = true;
+    fly.update(0.016);
+    const pose = fly.getPose();
+    const back = fly.camera.position.z - pose.p[2];
+    expect(back).toBeGreaterThanOrEqual(0.5); // still meaningfully behind the eye
+    expect(back).toBeLessThan(1.1); // stopped before the wall at z=1, not 3 m in
+    // and the camera cleared the terrain at its final spot
+    const ground = wall(fly.camera.position.x, fly.camera.position.z).ground;
+    expect(fly.camera.position.y).toBeGreaterThanOrEqual(ground + 0.4 - 1e-6);
+  });
+
   it("fly mode never applies the offset even when thirdPerson is true", () => {
     const camera = new PerspectiveCamera(75, 1, 0.1, 1000);
     const dom = document.createElement("canvas");
